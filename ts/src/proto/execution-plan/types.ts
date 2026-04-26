@@ -65,11 +65,11 @@ export interface ExecutionNode {
   readonly id: NodeId;
   readonly task: Task;
   /** Optional gate. If predicate returns false, node is skipped. */
-  readonly when?: Predicate;
+  readonly when?: Predicate | undefined;
   /** Same semantics as engine/types.ts InputMapping. */
-  readonly inputMapping?: InputMapping;
+  readonly inputMapping?: InputMapping | undefined;
   /** Slot id under which this node's task.writes lands in PhaseState. */
-  readonly outputId?: string;
+  readonly outputId?: string | undefined;
 }
 
 export interface ExecutionPlan {
