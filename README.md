@@ -1,5 +1,5 @@
-> [!IMPORTANT]
-> **Superseded.** Standalone extraction of pumice's `tools/prd-harness`. The Dark Factory concept continues as the target architecture of [`sksizer/dev`](https://github.com/sksizer/dev) (decision D-0015 and the df-docs site); pumice itself is now vendored there as `apps/pumice/`. This repo is archived history.
+> [!NOTE]
+> **Reactivated.** This repo was the standalone extraction of pumice's `tools/prd-harness`. Development continued privately in `sksizer/dev`; that work is now being pushed out here incrementally. Expect churn while it lands.
 
 # darkfactory
 
