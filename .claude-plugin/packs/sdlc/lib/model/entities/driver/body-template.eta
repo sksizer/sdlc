@@ -1,0 +1,28 @@
+<!--
+  Driver body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances. The Statement ends
+  with the ^summary block-id; Drivers carry no separate Summary section.
+-->
+
+# <%= it.title ?? "<Title>" %>
+
+## Statement
+
+<The driver in one or two paragraphs — what hurts, what's wanted, or
+what's possible. State it as an observation about the world, not a
+solution.>
+
+^summary
+
+## Who/what it affects
+
+<The people and project state the driver touches.>
+
+## Evidence
+
+- <cited observation — incident, epic, measurement>
+
+## Toward resolution
+
+<The capabilities, goals, or milestones that address the driver.>

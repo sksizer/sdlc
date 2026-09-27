@@ -1,0 +1,17 @@
+<%
+  /* Validated TaskLifecycleCommit (see schema.ts). Subject shapes below are
+     the historical corpus shapes byte-for-byte — invariants in task-work
+     and task-close-out pin several of them; change here moves them all. */
+  const SUBJECTS = {
+    "start":                 `chore(tasks): start ${it.basename}`,
+    "verify-ready":          `docs(tasks): verify ${it.basename} implementation-ready`,
+    "promote-ready":         `docs(tasks): promote ${it.basename} to open/ready`,
+    "flag-needs-definition": `docs(tasks): flag ${it.basename} as needs-definition`,
+    "record-pr":             `docs(tasks): record PR for ${it.basename}`,
+    "close-done":            `docs(tasks): mark ${it.basename} closed/done`,
+    "close-obsoleted":       `docs(tasks): mark ${it.basename} closed/obsoleted`,
+    "post-mortem":           `docs(tasks): post-mortem for ${it.basename}`,
+  };
+%><%~ SUBJECTS[it.action] %><% if (it.detail !== undefined && it.detail !== "") { %>
+
+<%~ it.detail %><% } %>

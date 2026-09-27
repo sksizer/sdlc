@@ -1,0 +1,13 @@
+{
+  "state": "OPEN",
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "headRefName": "task/example-no-checks",
+  "baseRefName": "main",
+  "statusCheckRollup": [],
+  "mergedAt": null,
+  "comments": [],
+  "reviews": [],
+  "author": { "login": "example-author" }
+}

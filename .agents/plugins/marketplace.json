@@ -1,0 +1,20 @@
+{
+  "name": "sdlc",
+  "interface": {
+    "displayName": "sdlc"
+  },
+  "plugins": [
+    {
+      "name": "sdlc",
+      "source": {
+        "source": "local",
+        "path": "./.agents/packs/sdlc"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

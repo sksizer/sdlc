@@ -1,0 +1,18 @@
+{
+  "state": "OPEN",
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "headRefName": "task/example-behind",
+  "baseRefName": "main",
+  "statusCheckRollup": [
+    {
+      "name": "ci/build",
+      "conclusion": "SUCCESS"
+    }
+  ],
+  "mergedAt": null,
+  "comments": [],
+  "reviews": [],
+  "behind": 12
+}

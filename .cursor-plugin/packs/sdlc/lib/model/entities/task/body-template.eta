@@ -1,0 +1,88 @@
+<!--
+  Task body template (Eta). Body-only — frontmatter is synthesized from
+  the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances.
+
+  All `<...>` placeholders must be replaced before the task is workable.
+-->
+
+# <%= it.headline ?? "<One-line headline — what shipping this looks like>" %>
+
+## Goal
+
+<Why this task exists. The problem it solves, the work it unblocks, or the
+risk it mitigates. Two or three sentences — the elevator pitch.>
+
+## Today
+
+<Free-form prose describing the current state of the relevant area — what's
+there, what's wrong, or what's missing. No required shape and no path
+resolution: this is narrative context for the implementer, not a
+machine-verified inventory.>
+
+## Proposed
+
+<Target state after this task ships. Concrete enough that an implementer
+can tell when they're done. Not the steps — the destination.>
+
+## Approach
+
+<Numbered, ordered steps to get from Today to Proposed. Each step should
+be small enough to commit on its own if useful. Call out any decisions
+still open inside the step.>
+
+1. <step>
+2. <step>
+3. <step>
+
+## Areas
+
+<The packages, directories, or modules this task expects to touch.
+Advisory, not a resolution gate: an area does not have to name an exact
+existing path. When written as a table, use two columns — Area (a
+package/directory/module) and Note (a one-line gloss on why it's in
+play). Prose or a bulleted list is equally fine.>
+
+| Area | Note |
+|---|---|
+| `path/to/dir/` | <why this area is in play> |
+
+## Acceptance criteria
+
+<Each AC must be observable from outside the change — a test that passes,
+a user-visible behavior, a removed wart. Avoid "the code is cleaner" style
+ACs; pick something verifiable.>
+
+- [ ] AC-1: <criterion>
+- [ ] AC-2: <criterion>
+- [ ] AC-3: <criterion>
+
+## Out of scope
+
+<Things adjacent to this task that are deliberately NOT being addressed
+here. Useful for keeping PR review focused and for future tasks to point
+back to. Always required: if scope is obvious and nothing is excluded,
+leave a single "- none" bullet so the explicit signal is "scope
+considered, nothing to exclude.">
+
+- none
+
+## Dependencies
+
+<Other tasks, branches, infra changes, or external decisions this task
+waits on. For hard "B cannot start until A closes" dependencies on
+other tasks or epics, also record them in the frontmatter
+`depends_on:` array (strict wikilink shape, e.g. `[[T-0010]]`) — the
+audit walks that graph for cycle detection. This prose section is the
+human-readable narrative; `depends_on:` is the machine-readable
+canonical list. Leave a single "- none" bullet if there are none.>
+
+- <dependency or "none">
+
+## Discovery context
+
+<Optional. How this task got onto the list: linked incident, design doc,
+upstream conversation, prior PR review comment. Helps future-you remember
+why this was worth doing. Delete this section if there's nothing to add.>
+
+-

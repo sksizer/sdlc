@@ -1,0 +1,45 @@
+<%
+/*
+ * Eta template for docs/glossary.md — owns ALL table layout for the SDLC
+ * glossary ([[D-B4CA-term-entity-and-generated-glossary]] §3).
+ *
+ * Fed one plain data structure by generate.ts (it.glossary: a Section with
+ * `active` rows and `followup` rows). Cells arrive pre-rendered in order
+ * Term / Definition / Source; the Definition cell transcludes the term's
+ * `^summary` block, so the table never drifts from the entity.
+ */
+function pipeRow(cells) {
+  return "| " + cells.map((c) => String(c ?? "")).join(" | ") + " |";
+}
+function table(headers, rows) {
+  const lines = [pipeRow(headers), pipeRow(headers.map(() => "---"))];
+  for (const r of rows) lines.push(pipeRow(r));
+  return lines.join("\n");
+}
+function activeTable(headers, section) {
+  return table(headers, section.active.map((r) => r.cells));
+}
+function followupTable(headers, section) {
+  const withStatus = headers.concat(["Status"]);
+  return table(withStatus, section.followup.map((r) => r.cells.concat([r.status])));
+}
+%>
+# Glossary
+
+> SDLC architecture vocabulary, defined once. **Generated** from the
+> term entities under [`./planning/terms/`](./planning/terms/) by the
+> `docs` skill (`sdlc docs generate glossary`). **Do not hand-edit** —
+> edit the term entity (or `sdlc term create` a new one) and
+> regenerate. Definition cells transclude each term's `^summary` block.
+
+The term that most needs care: an **adapter** is *not* a **harness** —
+see each term's Contrast section.
+
+<% if (it.glossary.active.length) { %>
+<%~ activeTable(["Term", "Definition", "Source"], it.glossary) %>
+<% } %>
+<% if (it.glossary.followup.length) { %>
+**Emerging / retired:**
+
+<%~ followupTable(["Term", "Definition", "Source"], it.glossary) %>
+<% } %>

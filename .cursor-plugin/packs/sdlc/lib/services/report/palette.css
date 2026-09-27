@@ -1,0 +1,34 @@
+/*
+ * GENERATED FILE — do not edit by hand.
+ * Regenerate with: bun scripts/seed-projection.ts
+ *
+ * The default seed palette, in the review reports' vocabulary.
+ *
+ * Projected from the un-attributed default blocks of the design system's
+ * tokens.css — whichever theme currently holds the default — so the reports
+ * follow the default rather than pinning a named theme.
+ *
+ * Inlined into every generated report's own <style> block, so the --r-*
+ * names below resolve inside a standalone HTML file that never loads the
+ * token layer. Light only: a report has one appearance.
+ */
+:root {
+  --r-font:        -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif; /* body type */
+  --r-font-mono:   ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace; /* code and identifiers */
+  --r-radius:      6px; /* callout panels */
+  --r-radius-chip: 4px; /* inline code chips */
+  --r-bg:          #f8f8fa; /* the page */
+  --r-surface:     #ebebed; /* faint surface: table header rows */
+  --r-chip:        #f1f1f5; /* inline code chips */
+  --r-heading:     #1a1a1c; /* headings and code */
+  --r-text:        #45454b; /* body copy */
+  --r-muted:       #606066; /* metadata lines and de-emphasised rows, pulled far enough to read */
+  --r-border:      #e0e0e6; /* table and panel rules */
+  --r-accent-wash: #e6ebf7; /* the accent washed into the page — the emphasis panel */
+  --r-accent-line: #abc0ee; /* the rule around that panel */
+  --r-success:     #196b3a; /* the success hue as INK — the raw seed fails AA at body size */
+  --r-warning:     #865408; /* the warning hue as INK */
+  --r-error:       #a20717; /* the error hue as INK */
+  --r-error-wash:  #f5e4e8; /* the error hue washed into the page — the top-issues panel */
+  --r-error-line:  #eca1aa; /* the rule around that panel */
+}

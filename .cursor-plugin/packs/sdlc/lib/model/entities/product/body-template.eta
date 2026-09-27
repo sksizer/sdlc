@@ -1,0 +1,39 @@
+<!--
+  Product body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances. Only the framing
+  sections are pinned (the `contract(...)` in `schema.ts` sets `allowUnknown: true`); add
+  free-form sections between Boundary and Drivers & goals as the
+  product's exposition needs.
+-->
+
+# <%= it.title ?? "<Title>" %>
+
+## Summary
+
+- <First bullet — the product's essence in one line. Tag with ^summary> ^summary
+- <Second bullet — major architectural or positioning claim>
+
+## What it is
+
+<The product in a paragraph or two — what ships, who operates it,
+where the why lives.>
+
+## Boundary
+
+<What is inside this product vs sibling products; where pieces spin
+out and earn their own Product entity.>
+
+## Drivers & goals
+
+<The Drivers scoped to this product. Delete this section until the
+first driver lands.>
+
+## Status
+
+<Where the product stands today. Delete this section if redundant
+with frontmatter status.>
+
+## References
+
+- <pointer to a narrative doc or entity>

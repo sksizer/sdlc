@@ -1,0 +1,108 @@
+<%
+  /* Validated StandardReviewReport (see schema.ts). Severity tallies
+     and per-standard grouping are derived from the findings rows. */
+  const bySeverity = { "clear-violation": 0, "tension": 0, "drift": 0 };
+  it.findings.forEach(f => { bySeverity[f.severity] += 1; });
+  const standardOrder = [];
+  const byStandard = new Map();
+  it.findings.forEach(f => {
+    if (!byStandard.has(f.standardId)) {
+      byStandard.set(f.standardId, { slug: f.standardSlug, rows: [] });
+      standardOrder.push(f.standardId);
+    }
+    byStandard.get(f.standardId).rows.push(f);
+  });
+%><!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title><%= it.meta.title %> — <%= it.meta.date %></title>
+<style>
+<%~ it.palette %>
+  body { font: 15px/1.5 var(--r-font); margin: 0; padding: 2rem 1rem; color: var(--r-text); background: var(--r-bg); }
+  body > * { max-width: 76rem; margin-left: auto; margin-right: auto; }
+  h1, h2, h3 { color: var(--r-heading); }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; } h3 { font-size: 1rem; margin-top: 1.5rem; }
+  .meta { color: var(--r-muted); font-size: .85rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--r-border); padding: .4rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--r-surface); color: var(--r-heading); }
+  code { font-family: var(--r-font-mono); background: var(--r-chip); color: var(--r-heading); padding: .1rem .3rem; border-radius: var(--r-radius-chip); font-size: .85em; }
+  .sev { font-weight: 600; white-space: nowrap; }
+  .clear-violation { color: var(--r-error); } .tension { color: var(--r-warning); } .drift { color: var(--r-muted); }
+  .top { background: var(--r-error-wash); border: 1px solid var(--r-error-line); border-radius: var(--r-radius); padding: .75rem 1rem; margin: .5rem 0; }
+  .untracked { color: var(--r-muted); }
+  .under-described { color: var(--r-warning); } .over-long { color: var(--r-muted); }
+</style>
+</head>
+<body>
+<h1><%= it.meta.title %></h1>
+<p class="meta"><%= it.meta.date %> · branch <code><%= it.meta.branch %></code> · <%= it.meta.generator %> · <%= it.standardsReviewed %> standards reviewed · <strong><%= it.findings.length %> findings</strong> (<%= bySeverity["clear-violation"] %> clear-violation, <%= bySeverity["tension"] %> tension, <%= bySeverity["drift"] %> drift)</p>
+<p class="meta"><%= it.meta.summary %></p>
+<% if (it.proposal) { %>
+<p class="meta">Proposed edits on <code><%= it.proposal.branch %></code><% if (it.proposal.prUrl) { %> — <a href="<%= it.proposal.prUrl %>"><%= it.proposal.prUrl %></a><% } %> touching <%= it.proposal.files.length %> file(s)<% if (it.proposal.notProposed.length > 0) { %>; <%= it.proposal.notProposed.length %> finding(s) left for a code change<% } %>.</p>
+<% } %>
+
+<h2>Top issues</h2>
+<% it.topIssues.forEach((issue, i) => { %>
+<div class="top"><strong><%= i + 1 %>.</strong> <% issue.standardIds.forEach((id, j) => { %><% if (j > 0) { %> × <% } %><code><%= id %></code><% }) %> — <%= issue.summary %></div>
+<% }) %>
+
+<% it.extraSections.forEach(section => { %>
+<h2><%= section.heading %></h2>
+<% section.paragraphs.forEach(p => { %>
+<p><%= p %></p>
+<% }) %>
+<% }) %>
+
+<h2>Cross-standard</h2>
+<% if (it.crossStandard.length === 0) { %>
+<p class="meta">No contradicting or materially overlapping pairs found.</p>
+<% } else { %>
+<table>
+  <tr><th>Pair</th><th>Issue</th></tr>
+<% it.crossStandard.forEach(c => { %>
+  <tr>
+    <td><code><%= c.pair[0] %></code> × <code><%= c.pair[1] %></code></td>
+    <td><%= c.issue %></td>
+  </tr>
+<% }) %>
+</table>
+<% } %>
+
+<h2>Descriptive yet succinct</h2>
+<% if (it.proseIssues.length === 0) { %>
+<p class="meta">Every standard read as fully descriptive and succinct.</p>
+<% } else { %>
+<table>
+  <tr><th>Standard</th><th>Section</th><th>Direction</th><th>Evidence</th><th>Fix</th></tr>
+<% it.proseIssues.forEach(p => { %>
+  <tr>
+    <td><code><%= p.standardId %></code> <%= p.standardSlug %></td>
+    <td><%= p.section %></td>
+    <td class="sev <%= p.direction %>"><%= p.direction %></td>
+    <td><%= p.evidence %></td>
+    <td><%= p.fix %></td>
+  </tr>
+<% }) %>
+</table>
+<% } %>
+
+<h2>Findings by standard</h2>
+<table>
+  <tr><th>Standard</th><th>Where</th><th>Evidence</th><th>Why it contradicts</th><th>Severity</th><th>Tracked by</th></tr>
+<% standardOrder.forEach(id => { const group = byStandard.get(id); %>
+<% group.rows.forEach(f => { %>
+  <tr>
+    <td><code><%= f.standardId %></code> <%= f.standardSlug %></td>
+    <td><code><%= f.where %></code></td>
+    <td><%= f.evidence %></td>
+    <td><%= f.why %></td>
+    <td class="sev <%= f.severity %>"><%= f.severity %></td>
+    <td><% if (f.trackedBy.length === 0) { %><span class="untracked">— untracked</span><% } else { %><% f.trackedBy.forEach((id, j) => { %><% if (j > 0) { %>, <% } %><code><%= id %></code><% }) %><% } %></td>
+  </tr>
+<% }) %>
+<% }) %>
+</table>
+</body>
+</html>

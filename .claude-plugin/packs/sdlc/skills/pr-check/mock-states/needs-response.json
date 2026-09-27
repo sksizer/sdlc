@@ -1,0 +1,29 @@
+{
+  "state": "OPEN",
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "headRefName": "task/example-needs-response",
+  "baseRefName": "main",
+  "statusCheckRollup": [
+    {
+      "name": "ci/build",
+      "conclusion": "SUCCESS"
+    }
+  ],
+  "mergedAt": null,
+  "comments": [
+    {
+      "author": { "login": "reviewer-one" },
+      "createdAt": "2026-05-21T10:00:00Z",
+      "body": "Please address the concerns in the review."
+    }
+  ],
+  "reviews": [
+    {
+      "author": { "login": "reviewer-one" },
+      "submittedAt": "2026-05-21T10:00:00Z",
+      "state": "CHANGES_REQUESTED"
+    }
+  ]
+}

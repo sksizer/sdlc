@@ -1,0 +1,44 @@
+<%
+/*
+ * Eta template for docs/references.md — owns ALL table layout for the SDLC
+ * references roster ([[D-0009-reference-entity-and-docs-appendix]] §3).
+ *
+ * Fed one plain data structure by generate.ts (it.references: a Section with
+ * `active` rows and `followup` rows). Cells arrive pre-rendered in order
+ * Reference / Summary / Link / Cited by; the Summary cell transcludes the
+ * reference's `^summary` block, so the table never drifts from the entity.
+ */
+function pipeRow(cells) {
+  return "| " + cells.map((c) => String(c ?? "")).join(" | ") + " |";
+}
+function table(headers, rows) {
+  const lines = [pipeRow(headers), pipeRow(headers.map(() => "---"))];
+  for (const r of rows) lines.push(pipeRow(r));
+  return lines.join("\n");
+}
+function activeTable(headers, section) {
+  return table(headers, section.active.map((r) => r.cells));
+}
+function followupTable(headers, section) {
+  const withStatus = headers.concat(["Status"]);
+  return table(withStatus, section.followup.map((r) => r.cells.concat([r.status])));
+}
+%>
+# References
+
+> External documentation, research, and artifacts SDLC leans on,
+> catalogued once. **Generated** from the reference entities under
+> [`./planning/references/`](./planning/references/) by the `docs`
+> skill (`sdlc docs generate references`). **Do not hand-edit** — edit
+> the reference entity (or `sdlc reference create` a new one) and
+> regenerate. Summary cells transclude each reference's `^summary`
+> block.
+
+<% if (it.references.active.length) { %>
+<%~ activeTable(["Reference", "Summary", "Link", "Cited by"], it.references) %>
+<% } %>
+<% if (it.references.followup.length) { %>
+**Emerging / retired:**
+
+<%~ followupTable(["Reference", "Summary", "Link", "Cited by"], it.references) %>
+<% } %>

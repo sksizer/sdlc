@@ -1,0 +1,128 @@
+<%
+  /* Validated TaskReviewReport (see schema.ts). All counts below are
+     derived from the rows — the payload carries no totals to contradict. */
+  const tasks = it.tasks;
+  const gaps = tasks.filter(t => t.definitionGap !== null);
+  const closedDone = it.newlyClosed.filter(c => c.status === "closed/done");
+  const closedObsoleted = it.newlyClosed.filter(c => c.status === "closed/obsoleted");
+  const tiers = [
+    { n: 1, title: "Tier 1 — high-impact, do soon" },
+    { n: 2, title: "Tier 2 — quick wins to bundle" },
+    { n: 3, title: "Tier 3 — defer" },
+    { n: 4, title: "Tier 4 — rewrite or drop" },
+  ].map(t => ({ ...t, rows: tasks.filter(r => r.tier === t.n) }));
+  const filterBits = [];
+  if (it.filters.since !== undefined) filterBits.push(`--since ${it.filters.since}`);
+  if (it.filters.tag !== undefined) filterBits.push(`--tag ${it.filters.tag}`);
+  if (it.filters.readOnly) filterBits.push("--read-only");
+%><!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title><%= it.meta.title %> — <%= it.meta.date %></title>
+<style>
+<%~ it.palette %>
+  body { font: 15px/1.5 var(--r-font); margin: 0; padding: 2rem 1rem; color: var(--r-text); background: var(--r-bg); }
+  body > * { max-width: 76rem; margin-left: auto; margin-right: auto; }
+  h1, h2 { color: var(--r-heading); }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
+  .meta { color: var(--r-muted); font-size: .85rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--r-border); padding: .4rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--r-surface); color: var(--r-heading); }
+  code { font-family: var(--r-font-mono); background: var(--r-chip); color: var(--r-heading); padding: .1rem .3rem; border-radius: var(--r-radius-chip); font-size: .85em; }
+  .top { background: var(--r-accent-wash); border: 1px solid var(--r-accent-line); border-radius: var(--r-radius); padding: .75rem 1rem; margin: .5rem 0; }
+  .tag { font-weight: 600; white-space: nowrap; }
+  .high { color: var(--r-error); } .medium { color: var(--r-warning); } .low { color: var(--r-muted); }
+  .small { color: var(--r-success); } .large { color: var(--r-error); }
+  .shipped, .obsoleted { color: var(--r-muted); }
+  .relevant-accurate { color: var(--r-success); } .relevant-drifted { color: var(--r-warning); } .incomplete { color: var(--r-error); }
+  details { margin: .35rem 0; } summary { cursor: pointer; color: var(--r-heading); }
+  .empty { color: var(--r-muted); font-style: italic; }
+</style>
+</head>
+<body>
+<h1><%= it.meta.title %></h1>
+<p class="meta"><%= it.meta.date %> · branch <code><%= it.meta.branch %></code> · <%= it.meta.generator %><% if (filterBits.length > 0) { %> · <code><%= filterBits.join(" ") %></code><% } %> · <strong><%= tasks.length %> unfinished tasks reviewed</strong> · <%= it.newlyClosed.length %> closed this run (<%= closedDone.length %> done, <%= closedObsoleted.length %> obsoleted) · <%= gaps.length %> definition gaps · <%= it.schemaViolations.length %> schema violations</p>
+<p class="meta"><%= it.meta.summary %></p>
+
+<h2>Recommended next</h2>
+<% it.recommendation.picks.forEach((pick, i) => { %>
+<div class="top"><strong><%= i + 1 %>.</strong> <code><%= pick.file %></code> — <%= pick.why %></div>
+<% }) %>
+<% if (it.recommendation.picks.length === 0) { %>
+<p class="empty">No good Tier-1 pick this run.</p>
+<% } %>
+<p><%= it.recommendation.narrative %></p>
+
+<% tiers.forEach(tier => { %>
+<h2><%= tier.title %></h2>
+<% if (tier.rows.length === 0) { %>
+<p class="empty">None.</p>
+<% } else { %>
+<table>
+  <tr><th>Task</th><th>Headline</th><th>Impact</th><th>Complexity</th><th>Decision</th><th>Confidence</th><th>Why this tier</th></tr>
+<% tier.rows.forEach(t => { %>
+  <tr>
+    <td><code><%= t.file %></code></td>
+    <td><%= t.headline %></td>
+    <td class="tag <%= t.impact %>"><%= t.impact %></td>
+    <td class="tag <%= t.complexity %>"><%= t.complexity %></td>
+    <td class="tag <%= t.decision %>"><%= t.decision %></td>
+    <td><%= t.confidence %></td>
+    <td><%= t.tierReason ?? "" %></td>
+  </tr>
+<% }) %>
+</table>
+<% } %>
+<% }) %>
+
+<h2>Newly closed during this run</h2>
+<% if (it.newlyClosed.length === 0) { %>
+<p class="empty">None.</p>
+<% } else { %>
+<table>
+  <tr><th>Task</th><th>Status</th><th>Completion note</th></tr>
+<% it.newlyClosed.forEach(c => { %>
+  <tr><td><code><%= c.file %></code></td><td><code><%= c.status %></code></td><td><%= c.completionNote %></td></tr>
+<% }) %>
+</table>
+<% } %>
+
+<h2>Definition gaps</h2>
+<% if (gaps.length === 0) { %>
+<p class="empty">None — every unfinished task passes the implementation-ready contract.</p>
+<% } else { %>
+<table>
+  <tr><th>Task</th><th>Gap</th></tr>
+<% gaps.forEach(t => { %>
+  <tr><td><code><%= t.file %></code></td><td><%= t.definitionGap %></td></tr>
+<% }) %>
+</table>
+<p class="meta">Resolve interactively via <code>/sdlc:task-define &lt;basename&gt;</code>.</p>
+<% } %>
+
+<% if (it.schemaViolations.length > 0) { %>
+<h2>Schema violations</h2>
+<table>
+  <tr><th>Task</th><th>Problem</th></tr>
+<% it.schemaViolations.forEach(v => { %>
+  <tr><td><code><%= v.file %></code></td><td><%= v.problem %></td></tr>
+<% }) %>
+</table>
+<% } %>
+
+<h2>Per-task findings</h2>
+<% tasks.forEach(t => { %>
+<details>
+  <summary><code><%= t.file %></code> — <span class="tag <%= t.decision %>"><%= t.decision %></span> · <%= t.headline %></summary>
+  <ul>
+<% t.keyFindings.forEach(f => { %>
+    <li><%= f %></li>
+<% }) %>
+  </ul>
+  <p class="meta">Spec: <%= t.specCompleteness %><% if (t.dependencies.length > 0) { %> · Dependencies: <%= t.dependencies.join("; ") %><% } %></p>
+</details>
+<% }) %>
+</body>
+</html>

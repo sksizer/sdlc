@@ -1,0 +1,54 @@
+<!--
+  Principle body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances. The required
+  `principle/<category>` tag (product | technical | project | llm-ai)
+  defaults from the Zod schema.
+-->
+
+# <%= it.title ?? "<Title>" %>
+
+## Statement
+
+<The principle itself in one paragraph. What is true; what posture
+the project takes. Plus any immediately necessary context.>
+
+## Why
+
+<Rationale. What failure mode does this prevent, what outcome does
+it enable. Specific concerns this principle answers.>
+
+## How it applies
+
+<Where the principle drives design judgment. Operational shape —
+the concrete way this principle shows up in decisions.>
+
+- <how-it-applies bullet>
+
+## Examples
+
+<Concrete instances of the principle in action — named files,
+skills, ADRs, conventions. Delete this section if no examples
+yet exist.>
+
+- <named example>
+
+## Implications
+
+<Downstream effects. What standards spawn from this; what other
+principles it interacts with; what it explicitly does NOT say.>
+
+- <implication>
+
+## Notes
+
+<Caveats, open questions, anticipated future evolution. Delete
+this section if there's nothing to flag.>
+
+- <note>
+
+## Summary
+
+- <First bullet — the principle's essence in one line. Tag with ^summary> ^summary
+- <Second bullet — major implication or supporting claim>
+- <Third bullet — connection to other principles or downstream artifacts>
