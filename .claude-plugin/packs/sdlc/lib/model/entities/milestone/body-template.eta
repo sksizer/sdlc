@@ -1,0 +1,58 @@
+<!--
+  Milestone body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances.
+-->
+
+# <%= it.title ?? "<Title>" %>
+
+## Goal
+
+<What this milestone delivers in one paragraph. The outcome it
+pursues — the user-visible or system-visible change it represents
+once shipped.>
+
+## Success criteria
+
+<3–6 high-level bullets capturing verifiable end states. Outcomes,
+not implementation steps. Use markdown todos `- [ ]` for each.>
+
+- [ ] <criterion>
+- [ ] <criterion>
+
+## Deliverables
+
+<Everything the milestone produces, grouped by category. Each entry
+is a checkbox; once a Task entity exists, replace the placeholder
+with `[[YYYY-MM-DD-task-slug]]`. Encouraged categories below; mix
+and match as the milestone calls for.>
+
+### Decisions
+
+- [ ] <decision/ADR title>
+
+### Standards
+
+- [ ] <standard title>
+
+### Entity specifications
+
+- [ ] <entity name>
+
+### Reviews
+
+- [ ] <what gets reviewed and accepted>
+
+## Out of scope
+
+<What this milestone explicitly does NOT cover. Delete this section
+if scope is obvious from the Goal.>
+
+- <item>
+
+## Risks / open questions
+
+<Known concerns, unresolved decisions, dependencies. Delete this
+section if there's nothing to flag.>
+
+- <risk>

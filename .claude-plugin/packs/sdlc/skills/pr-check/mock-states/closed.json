@@ -1,0 +1,12 @@
+{
+  "state": "CLOSED",
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "headRefName": "task/example-closed",
+  "baseRefName": "main",
+  "statusCheckRollup": [],
+  "mergedAt": null,
+  "comments": [],
+  "reviews": []
+}

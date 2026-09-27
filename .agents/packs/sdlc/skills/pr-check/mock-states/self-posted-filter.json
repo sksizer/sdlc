@@ -1,0 +1,24 @@
+{
+  "state": "OPEN",
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "headRefName": "task/example-self-posted",
+  "baseRefName": "main",
+  "statusCheckRollup": [
+    {
+      "name": "ci/build",
+      "conclusion": "SUCCESS"
+    }
+  ],
+  "mergedAt": null,
+  "author": { "login": "pr-author" },
+  "comments": [
+    {
+      "author": { "login": "pr-author" },
+      "createdAt": "2026-05-21T18:00:00Z",
+      "body": "Orchestrator-authored reply posted via post_self_comment.sh; must be filtered when the cursor's self_posted_at carries this timestamp."
+    }
+  ],
+  "reviews": []
+}

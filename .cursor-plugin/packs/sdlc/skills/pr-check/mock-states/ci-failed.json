@@ -1,0 +1,21 @@
+{
+  "state": "OPEN",
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "BLOCKED",
+  "reviewDecision": "",
+  "headRefName": "task/example-ci-failed",
+  "baseRefName": "main",
+  "statusCheckRollup": [
+    {
+      "name": "ci/test",
+      "conclusion": "FAILURE"
+    },
+    {
+      "name": "ci/build",
+      "conclusion": "SUCCESS"
+    }
+  ],
+  "mergedAt": null,
+  "comments": [],
+  "reviews": []
+}

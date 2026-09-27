@@ -1,5 +1,0 @@
-[tools]
-bun = "latest"
-gh = "latest"
-python = "3.12"
-uv = "latest"

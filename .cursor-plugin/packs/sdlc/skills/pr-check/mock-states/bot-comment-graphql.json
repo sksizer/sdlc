@@ -1,0 +1,29 @@
+{
+  "state": "OPEN",
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "",
+  "headRefName": "task/example-bot",
+  "baseRefName": "main",
+  "statusCheckRollup": [
+    {
+      "name": "ci/build",
+      "conclusion": "SUCCESS"
+    }
+  ],
+  "mergedAt": null,
+  "comments": [
+    {
+      "author": { "login": "github-actions" },
+      "createdAt": "2026-05-21T11:00:00Z",
+      "body": "Deploy preview ready! https://example-preview.pages.dev"
+    }
+  ],
+  "reviews": [
+    {
+      "author": { "login": "cloudflare-workers-and-pages" },
+      "submittedAt": "2026-05-21T11:05:00Z",
+      "state": "COMMENTED"
+    }
+  ]
+}

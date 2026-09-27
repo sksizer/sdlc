@@ -1,0 +1,24 @@
+<!--
+  Reference body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances.
+-->
+
+# <%= it.title ?? "<Reference>" %>
+
+## Summary
+
+<One to three sentences: what the source is and why SDLC leans on it —
+one paragraph, no lists. The generated roster transcludes this block
+as the Summary cell.> ^summary
+
+## Material
+
+<The substance, in whichever form fits: a prose summary, copied
+excerpts (quoted, with attribution), or transcluded artifacts
+(`![[...]]` embeds). Delete if the Summary says it all.>
+
+## Notes
+
+<SDLC's own commentary — how the source is applied here, caveats,
+version pinning. Delete if there's nothing to add.>

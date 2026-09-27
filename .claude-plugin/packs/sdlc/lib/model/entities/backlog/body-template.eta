@@ -1,0 +1,27 @@
+<!--
+  Backlog body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances.
+
+  A backlog is a freeform dump for ideas, half-formed tasks, and things
+  to triage later. Two usage patterns coexist:
+
+    (a) Multi-item dump: one file holds many ideas; `status:` is never
+        set; you delete or strike through promoted items inside the body.
+
+    (b) Single candidate: the whole file represents one idea. When
+        promoted, the file gets `status: promoted/task` (or
+        `promoted/milestone`) and `result:` pointing at the new
+        artifact. The file becomes an archive pointer; the body stays
+        as the origin story.
+
+  Field semantics live in the Zod schema (schema.ts) — the frontmatter contract.
+-->
+
+# <%= it.title ?? "<Backlog name>" %>
+
+<Dump whatever — ideas, half-formed tasks, things you want to remember
+but aren't worth a real task yet. Promote items to real tasks via
+`/sdlc:backlog-triage` or `/sdlc:task-new` when they firm up; delete or
+strike-through them here once they've moved on. For single-candidate
+files, the whole body is the origin story for the idea.>

@@ -1,0 +1,28 @@
+<!--
+  Roadmap body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances.
+-->
+
+# <%= it.title ?? "<Title>" %>
+
+## Overview
+
+<What this roadmap tracks and how it relates to the rationale doc in
+`plan_doc`. One or two paragraphs.>
+
+## v0.1.0
+
+<One free-form H2 per tracked version, named after the target semver
+(optionally `v`-prefixed, e.g. `## v0.4.0`). List every milestone
+shipping in that version as a wikilink, one per bullet. `sdlc roadmap
+check` resolves each link against the milestone corpus and flags:
+a link that doesn't resolve to an existing milestone; the same
+milestone linked from two different top-level sections (version
+sections, or a non-version one like `## Pre-release`); a linked
+milestone whose own `tasks:` reference a task that doesn't exist; and
+a `closed/abandoned` or `closed/superseded` milestone still linked
+here with no note explaining why. Delete this placeholder section and
+add one real section per version once versions are known.>
+
+- [[M-0001-milestone-slug]]

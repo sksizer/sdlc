@@ -1,0 +1,22 @@
+<!--
+  Term body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances.
+-->
+
+# <%= it.title ?? "<Term>" %>
+
+## Definition
+
+<One to three sentences defining the term — one paragraph, no lists.
+The generated glossary transcludes this block as the Definition cell.> ^summary
+
+## Contrast
+
+<What this term is NOT — disambiguate against the concept it is most
+often confused with. Delete if nothing is commonly confused.>
+
+## Notes
+
+<Elaboration that doesn't fit one table cell. Delete if there's
+nothing to add.>

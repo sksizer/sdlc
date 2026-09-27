@@ -1,0 +1,17 @@
+{
+  "state": "MERGED",
+  "mergeable": "MERGEABLE",
+  "mergeStateStatus": "CLEAN",
+  "reviewDecision": "APPROVED",
+  "headRefName": "task/example-merged",
+  "baseRefName": "main",
+  "statusCheckRollup": [
+    {
+      "name": "ci/build",
+      "conclusion": "SUCCESS"
+    }
+  ],
+  "mergedAt": "2026-05-21T12:00:00Z",
+  "comments": [],
+  "reviews": []
+}

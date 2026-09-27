@@ -1,0 +1,122 @@
+<%
+  /* Validated VerifyChangesReport (see schema.ts). Tallies, per-source
+     grouping, and the judged/failed split are derived from the rows. */
+  const bySeverity = { violation: 0, tension: 0, drift: 0 };
+  it.findings.forEach(f => { bySeverity[f.severity] += 1; });
+
+  const order = ["violation", "tension", "drift"];
+  const floorRank = order.indexOf(it.severityFloor);
+  const atOrAboveFloor = it.findings.filter(f => order.indexOf(f.severity) <= floorRank).length;
+
+  const sourceOrder = [];
+  const bySource = new Map();
+  it.findings.forEach(f => {
+    if (!bySource.has(f.sourceId)) {
+      bySource.set(f.sourceId, { path: f.sourcePath, rows: [] });
+      sourceOrder.push(f.sourceId);
+    }
+    bySource.get(f.sourceId).rows.push(f);
+  });
+
+  // Mirrors formatTokens() in @sksizer/agent-dev. The counts themselves come
+  // in on the payload, so the bytes-per-token constant stays over there.
+  const tok = n => n < 1000 ? String(n) : (n / 1000 < 9.95 ? (n / 1000).toFixed(1) + "k" : Math.round(n / 1000) + "k");
+  const failed = it.judged.filter(s => s.error);
+  const oversized = it.judged.filter(s => s.oversize);
+  const clean = it.judged.filter(s => !s.error && !bySource.has(s.sourceId));
+%><!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title><%= it.meta.title %> — <%= it.meta.date %></title>
+<style>
+<%~ it.palette %>
+  body { font: 15px/1.5 var(--r-font); margin: 0; padding: 2rem 1rem; color: var(--r-text); background: var(--r-bg); }
+  body > * { max-width: 76rem; margin-left: auto; margin-right: auto; }
+  h1, h2, h3 { color: var(--r-heading); }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; } h3 { font-size: 1rem; margin-top: 1.5rem; }
+  .meta { color: var(--r-muted); font-size: .85rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--r-border); padding: .4rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--r-surface); color: var(--r-heading); }
+  code { background: var(--r-chip); padding: .1rem .3rem; border-radius: var(--r-radius-chip); font-family: var(--r-font-mono); font-size: .85em; }
+  .sev { font-weight: 600; white-space: nowrap; }
+  .violation { color: var(--r-error); } .tension { color: var(--r-warning); } .drift { color: var(--r-muted); }
+  .banner { border-radius: var(--r-radius); padding: .75rem 1rem; margin: .75rem 0; }
+  .bad { background: var(--r-error-wash); border: 1px solid var(--r-error-line); }
+  .ok { background: var(--r-accent-wash); border: 1px solid var(--r-accent-line); }
+  .warn { background: var(--r-surface); border: 1px solid var(--r-border); }
+  .muted { color: var(--r-muted); font-size: .85rem; }
+  ul.compact { margin: .25rem 0; padding-left: 1.2rem; }
+</style>
+</head>
+<body>
+<h1><%= it.meta.title %></h1>
+<p class="meta"><%= it.meta.date %> · branch <code><%= it.meta.branch %></code> · <%= it.meta.generator %> · <%= it.changedFiles.length %> changed file<%= it.changedFiles.length === 1 ? "" : "s" %> vs <code><%= it.base %></code> · <%= it.judged.length %> rule source<%= it.judged.length === 1 ? "" : "s" %> judged · <strong><%= it.findings.length %> finding<%= it.findings.length === 1 ? "" : "s" %></strong> (<%= bySeverity.violation %> violation, <%= bySeverity.tension %> tension, <%= bySeverity.drift %> drift)</p>
+<p class="meta"><%= it.meta.summary %></p>
+
+<% if (oversized.length > 0) { %>
+<div class="banner warn"><strong>Oversized prompt<%= oversized.length === 1 ? "" : "s" %>.</strong> <%= oversized.map(s => s.label).join(", ") %> judged more at once than fits comfortably in one prompt. Nothing was dropped, but findings from <%= oversized.length === 1 ? "this source" : "these sources" %> are less reliable than from a narrow one — narrow the changeset with <code>verify.exclude</code>, or lower <code>verify.max_files_per_job</code> so the source is split across more judgements.</div>
+<% } %>
+
+<% if (it.degraded) { %>
+<div class="banner warn"><strong>Incomplete run.</strong> <%= failed.length %> judgement<%= failed.length === 1 ? "" : "s" %> did not complete, so the rules below were not fully applied. An absent finding is not evidence of compliance.</div>
+<% } %>
+
+<% if (it.findings.length === 0) { %>
+<div class="banner ok"><strong>No findings.</strong> Every rule source that governs a changed file judged it clean.</div>
+<% } else if (it.blocking) { %>
+<div class="banner bad"><strong><%= atOrAboveFloor %> finding<%= atOrAboveFloor === 1 ? "" : "s" %> at or above <code><%= it.severityFloor %></code></strong> — this run is blocking, so it fails.</div>
+<% } else { %>
+<div class="banner warn"><strong>Advisory run.</strong> Nothing here fails the build; set <code>verify.blocking</code> in <code>sdlc.yaml</code> to gate on these.</div>
+<% } %>
+
+<% sourceOrder.forEach(id => { const group = bySource.get(id); %>
+<h2><%= id %></h2>
+<p class="meta">Rules from <code><%= group.path %></code></p>
+<table>
+<thead><tr><th>Severity</th><th>Where</th><th>Why</th><th>Evidence</th></tr></thead>
+<tbody>
+<% group.rows.forEach(f => { %>
+<tr>
+  <td class="sev <%= f.severity %>"><%= f.severity %></td>
+  <td><code><%= f.file %><%= f.line ? ":" + f.line : "" %></code></td>
+  <td><%= f.why %></td>
+  <td><code><%= f.evidence %></code></td>
+</tr>
+<% }) %>
+</tbody>
+</table>
+<% }) %>
+
+<h2>Coverage</h2>
+<table>
+<thead><tr><th>Rule source</th><th>Kind</th><th>Files judged</th><th>~Tokens</th><th>Result</th></tr></thead>
+<tbody>
+<% it.judged.forEach(s => { %>
+<tr>
+  <td><%= s.label %></td>
+  <td><%= s.kind %></td>
+  <td><%= s.files.length %><% if (s.shards) { %> <span class="muted">in <%= s.shards %> shards</span><% } %></td>
+  <td><%= tok(s.estimatedTokens) %></td>
+  <td><% if (s.error) { %><span class="violation">failed — <%= s.error %></span><% } else if (bySource.has(s.sourceId)) { %><%= bySource.get(s.sourceId).rows.length %> finding<%= bySource.get(s.sourceId).rows.length === 1 ? "" : "s" %><% } else { %>clean<% } %><% if (s.oversize) { %><br><span class="tension">oversized prompt</span><% } %></td>
+</tr>
+<% }) %>
+</tbody>
+</table>
+<p class="muted"><%= clean.length %> source<%= clean.length === 1 ? "" : "s" %> judged clean.</p>
+
+<% if (it.skipped.length > 0) { %>
+<h2>Not in scope</h2>
+<p class="meta">Discovered, then proven not to govern any changed file. These cost nothing — no judgement was dispatched.</p>
+<ul class="compact">
+<% it.skipped.forEach(s => { %><li><%= s.label %></li><% }) %>
+</ul>
+<% } %>
+
+<h2>Changed files</h2>
+<ul class="compact">
+<% it.changedFiles.forEach(f => { %><li><code><%= f %></code></li><% }) %>
+</ul>
+</body>
+</html>
