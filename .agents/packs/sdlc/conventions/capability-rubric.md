@@ -2,7 +2,7 @@
 
 One rubric for the two skills that judge capabilities: `/sdlc:capability-map` (authoring: gaps
 become entities) and `/sdlc:capability-review` (verification: existing entities against the
-code). Both point their sub-agents here, so a grain, audience or status decided by one skill is
+code). Both point their sub-agents here, so a grain, audience or state decided by one skill is
 the decision the other would make.
 
 The grain table, the audience rubric, the locations grammar and the body shape live in
@@ -30,9 +30,9 @@ including:
 
 A `user` capability whose locations name no such surface is mis-audienced; fix the field.
 
-## Status
+## State
 
-| Status | Holds when |
+| State | Holds when |
 |---|---|
 | `open/planned` | no realizing code; `locations` empty or planning docs only |
 | `open/building` | code exists but delivers part of the Statement, or a scaffold |
@@ -86,7 +86,7 @@ either skill reads the same:
 |---|---|
 | `kind`, `kind_confidence` | grain per the Grain section; `high` or `low` |
 | `audience` | per the Audience section |
-| `status` | per the Status section |
+| `state` | per the State section |
 | `locations` | verified entries only |
 | `related` | resolving wikilinks, parent excluded |
 | `reason` | one sentence naming the evidence |

@@ -305,6 +305,9 @@ export default defineOp({
   summary: 'Parse the `## Areas` table out of a task doc.',
   // Hidden plumbing ([[D-H7FS-op-substrate-surface]] §2: `parse-touchpoints*`).
   hidden: true,
+  // Read-only: parses the task doc's `## Areas` table and reports its shape;
+  // writes nothing.
+  mutating: false,
   input,
   output,
   cli: {

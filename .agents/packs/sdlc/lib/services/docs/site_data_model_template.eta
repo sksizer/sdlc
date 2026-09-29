@@ -56,9 +56,9 @@ solutions/ontological/lib/model/entities/
 
 Every per-type schema extends the shared `CommonFrontmatter` base
 (`_common.ts`) via `CommonFrontmatter.extend({ … })` for the fields every
-entity carries — `type`, `schema_version`, `id`, `status`, `related`,
+entity carries — `type`, `schema_version`, `id`, `state`, `related`,
 `tags`. The per-type schema specializes where it must (the `id` pattern, the
-`status` enum, its `type` literal) and adds type-specific fields, then
+`state` enum, its `type` literal) and adds type-specific fields, then
 `.strict()` rejects unknown keys. Instance frontmatter is validated by
 `.safeParse` against the schema resolved from the registry by `type`
 (`solutions/ontological/lib/model/entities/_validate.ts`).
@@ -93,9 +93,9 @@ and why they exist.
 
 <%~ table(["Type", "Role", "Key fields beyond `_common`"], it.rosterRows) %>
 
-### The task status field
+### The task state field
 
-A task's `status` walks four majors: `planning/<stage>` (spec being
+A task's `state` walks four majors: `planning/<stage>` (spec being
 shaped, not pickable), `open/<stage>` (available now), `in-progress[/blocked]`
 (someone has it), `closed/<reason>` (terminal). Under the
 [Git ref leases](/architecture/github-ref-leases/) protocol this field is

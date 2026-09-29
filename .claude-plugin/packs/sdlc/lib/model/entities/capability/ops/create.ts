@@ -17,7 +17,7 @@ export default defineCreateOp({
   fields: {
     title: { cli: { short: 't' } },
     created: { birthDefault: () => todayUtc() },
-    status: {},
+    state: {},
     kind: {},
     audience: {},
     parentKey: { fmKey: 'parent_key', cli: { valueName: 'WIKILINK' } },

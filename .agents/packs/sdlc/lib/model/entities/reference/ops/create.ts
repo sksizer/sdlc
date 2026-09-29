@@ -21,7 +21,7 @@ export default defineCreateOp({
     title: { cli: { short: 't' } },
     url: {},
     created: { birthDefault: () => todayUtc() },
-    status: {},
+    state: {},
     related: {},
   },
 })

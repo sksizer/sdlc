@@ -6,7 +6,7 @@
  * `doc.frontmatter` typed as `Task` (the `TaskSchema` inference, defaults
  * applied). The fail arm is unchanged: best-effort hydrated `fm` + raw body +
  * findings — a schema-drifted task at an old rev still yields its raw
- * `status` there.
+ * `state` there.
  */
 
 import type { Contract } from 'markdown-contract'

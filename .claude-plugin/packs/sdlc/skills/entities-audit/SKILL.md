@@ -22,7 +22,7 @@ Usage:
 - `/sdlc:entities-audit --json` — JSON output (for piping into other tooling).
 - `/sdlc:entities-audit --include-archive` — also audit files under
   `docs/planning/<plural>/archive/`.
-- `/sdlc:entities-audit --include-closed` — also drift-check entities whose status is closed.
+- `/sdlc:entities-audit --include-closed` — also drift-check entities whose state is closed.
   Default skips them.
 - `/sdlc:entities-audit --strict` — zero-tolerance mode: promotes the normally-informational
   `prose` and `anchor_rot` drift kinds to the exit-1 cue too. Used by `verbs.check`'s release

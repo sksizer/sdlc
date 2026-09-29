@@ -172,7 +172,7 @@ export default defineOp({
             path: wtTaskPath,
             text: readFileSync(wtTaskPath, 'utf-8'),
             updates: {
-              status: 'closed/done',
+              state: 'closed/done',
               last_reviewed: args.today,
               completion_note: args.completionNote,
               relevance_note: null,

@@ -23,7 +23,7 @@ Usage:
 ## Steps
 
 1. **Enumerate.** List `docs/planning/standards/*.md`; skip `closed/*`
-   ones. Read each file's `applies_to.paths`, `related`, and `status`.
+   ones. Read each file's `applies_to.paths`, `related`, and `state`.
 
 2. **Fan out — one subagent per standard** via the Workflow tool. Each
    agent reads its standard, expands `applies_to.paths` to the files it
@@ -50,7 +50,7 @@ Usage:
 
 6. **Match against outstanding work.** For each open finding, fan out
    (grouped by standard) to search the non-closed tasks
-   (`docs/planning/tasks/`, status not `closed/*`) for ones whose
+   (`docs/planning/tasks/`, state not `closed/*`) for ones whose
    completion would resolve the violation — confirm by reading the
    candidate task, never by title alone. Record them in a **Tracked by**
    column (task ids; empty = untracked gap).

@@ -131,13 +131,13 @@ function resolveProjectRoot(override: string): string {
 }
 
 interface FilterOptions {
-  statuses: readonly string[]
+  states: readonly string[]
   excludeAutonomy: readonly string[]
 }
 
 function passesFilters(fm: Record<string, unknown>, opts: FilterOptions): boolean {
-  const status = fm['status']
-  if (typeof status !== 'string' || !opts.statuses.includes(status)) return false
+  const state = fm['state']
+  if (typeof state !== 'string' || !opts.states.includes(state)) return false
   const autonomy = fm['autonomy']
   if (typeof autonomy === 'string' && opts.excludeAutonomy.includes(autonomy)) {
     return false
@@ -243,7 +243,7 @@ function unsatisfiedTargets(
       continue
     }
     const entry = corpus.get(target)
-    if (!entry || !isSatisfied(entry.type, entry.status)) out.push(target)
+    if (!entry || !isSatisfied(entry.type, entry.state)) out.push(target)
   }
   return out
 }
@@ -290,7 +290,7 @@ function liftSortKeys(
 
 const input = z.object({
   projectRoot: z.string().default(''),
-  status: z.array(z.string()).default([]),
+  state: z.array(z.string()).default([]),
   kind: z.array(z.string()).default([]),
   excludeAutonomy: z.array(z.string()).default([]),
   includeBlocked: z.boolean().default(false),
@@ -360,14 +360,17 @@ export default defineOp({
   path: ['task', 'next'],
   summary:
     'Select the next dispatchable tasks: pickup-order sort (priority > impact > complexity > created > basename, with dependency lift), keeping only leaves (a task with children is a rollup) of kind implementation (absent kind counts as implementation), and filtering out tasks whose depends_on is unsatisfied (use --include-blocked to keep them).',
+  // Read-only: scans task/corpus frontmatter and reports a sort order; never
+  // writes.
+  mutating: false,
   input,
   output,
   cli: {
     flags: {
-      status: {
+      state: {
         repeatable: true,
-        valueName: 'status',
-        help: 'Status to include (repeatable). Default: open/ready.',
+        valueName: 'state',
+        help: 'State to include (repeatable). Default: open/ready.',
       },
       kind: {
         repeatable: true,
@@ -420,7 +423,7 @@ export default defineOp({
     },
   },
   handler: (args, ctx) => {
-    const statuses = args.status.length > 0 ? args.status : ['open/ready']
+    const states = args.state.length > 0 ? args.state : ['open/ready']
     const kinds = args.kind.length > 0 ? args.kind : [DEFAULT_KIND]
     const excludeAutonomy = args.excludeAutonomy
 
@@ -442,11 +445,11 @@ export default defineOp({
       taskFm.set(row.basename, row.fm ?? {})
     }
 
-    // Cross-entity corpus: every entity's {type, status} for resolving and
+    // Cross-entity corpus: every entity's {type, state} for resolving and
     // satisfaction-checking depends_on targets across entity types.
     const corpus = loadCorpus(planningDir)
     const corpusBasenames = new Set(corpus.keys())
-    const corpusStatus = new Map<string, string>([...corpus].map(([b, e]) => [b, e.status]))
+    const corpusState = new Map<string, string>([...corpus].map(([b, e]) => [b, e.state]))
 
     // Leaf facts come from the FULL task corpus, before any candidate
     // filtering: a parent whose only child is closed/done is still a parent.
@@ -454,7 +457,7 @@ export default defineOp({
 
     const candidates = new Set<string>()
     for (const [b, fm] of taskFm.entries()) {
-      if (passesFilters(fm, { statuses, excludeAutonomy })) candidates.add(b)
+      if (passesFilters(fm, { states, excludeAutonomy })) candidates.add(b)
     }
 
     if (candidates.size === 0) {
@@ -472,7 +475,7 @@ export default defineOp({
       nodes: candidates,
       targetsOf: (b) => dependsOnTargets(taskFm.get(b) ?? {}),
       resolve: (raw) => resolveTarget(raw, corpusBasenames),
-      skip: (target) => (corpusStatus.get(target) ?? '').startsWith(CLOSED_PREFIX),
+      skip: (target) => (corpusState.get(target) ?? '').startsWith(CLOSED_PREFIX),
     })
     for (const u of unresolved) {
       ctx.io.stderr(`warning: depends_on target does not resolve: ${u.source}:${u.raw}\n`)

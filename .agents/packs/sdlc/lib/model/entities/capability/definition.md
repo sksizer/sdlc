@@ -39,7 +39,7 @@ A Capability is *not*:
 | `type` | required | `capability` |  | Validator-dispatch tag |
 | `schema_version` | optional | numeric string | `"2"` |  |
 | `id` | required | `C-NNNN` |  | Immutable; matches filename prefix |
-| `status` | required | `open/planned \| open/building \| open/verified \| closed/retired` | `open/planned` | See Lifecycle |
+| `state` | required | `open/planned \| open/building \| open/verified \| closed/retired` | `open/planned` | See Lifecycle |
 | `title` | required | string |  | Human-readable name |
 | `kind` | optional | 11-grain structural enum | unset | Structural grain; absent = ungraded. See Structural grains |
 | `audience` | optional | `user \| system` | `system` | Index section routing. See Audience rubric |
@@ -159,7 +159,7 @@ Required and optional H2 sections, in order:
 
 ## Lifecycle
 
-| Status | Meaning |
+| State | Meaning |
 |---|---|
 | `open/planned` | Described but not yet built; the spec of an ability the system should grow. |
 | `open/building` | Implementation in flight (one or more delivering Tasks in progress). |

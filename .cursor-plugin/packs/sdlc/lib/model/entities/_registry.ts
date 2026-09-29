@@ -111,7 +111,7 @@ const HISTORICAL_KEY_ORDER: Record<string, string[]> = {
     'type',
     'schema_version',
     'id',
-    'status',
+    'state',
     'title',
     // The two capability axes sit adjacent: structural grain, then audience
     // (schema v2, [[T-2KK8-capability-kind-grains-and-locations]]).
@@ -133,7 +133,7 @@ const HISTORICAL_KEY_ORDER: Record<string, string[]> = {
     'type',
     'schema_version',
     'id',
-    'status',
+    'state',
     'title',
     'kind',
     'product',
@@ -149,7 +149,7 @@ const HISTORICAL_KEY_ORDER: Record<string, string[]> = {
     'type',
     'schema_version',
     'id',
-    'status',
+    'state',
     'title',
     'created',
     'last_reviewed',
@@ -228,22 +228,22 @@ export function entityTypeNames(): string[] {
 }
 
 /**
- * The `status` field's enum values for a type, read off the Zod schema — the
- * Zod-side equivalent of reading `properties.status.enum` off the JSON.
+ * The `state` field's enum values for a type, read off the Zod schema — the
+ * Zod-side equivalent of reading `properties.state.enum` off the JSON.
  * Scaffolder choice-lists derive from this so they can never offer a value the
  * validator rejects. Peels the `ZodDefault`/`ZodOptional` wrappers around the
- * status field to reach the underlying `ZodEnum`. Throws if the type is
- * unregistered or its `status` field is not an enum (a programmer error).
+ * state field to reach the underlying `ZodEnum`. Throws if the type is
+ * unregistered or its `state` field is not an enum (a programmer error).
  */
-export function statusEnumFor(type: string): string[] {
+export function stateEnumFor(type: string): string[] {
   const obj = unwrapToObject(schemaForType(type) ?? (undefined as never))
   if (obj === null) {
     throw new Error(`no Zod schema registered for entity type '${type}'`)
   }
-  const status = obj.shape['status'] as z.ZodTypeAny | undefined
-  const inner = status === undefined ? undefined : unwrapToInner(status)
+  const state = obj.shape['state'] as z.ZodTypeAny | undefined
+  const inner = state === undefined ? undefined : unwrapToInner(state)
   if (inner instanceof z.ZodEnum) {
     return [...(inner.options as readonly string[])]
   }
-  throw new Error(`status field for entity type '${type}' is not a Zod enum`)
+  throw new Error(`state field for entity type '${type}' is not a Zod enum`)
 }

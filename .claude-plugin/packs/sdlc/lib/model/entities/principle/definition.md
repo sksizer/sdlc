@@ -37,7 +37,7 @@ A Principle is *not*:
 | `schema_version` | optional | numeric string | `"1"` |  |
 | `id` | required | `P<NNNN>` |  | Immutable; matches filename prefix |
 | `title` | required | string |  | One-line headline restating the principle |
-| `status` | required | `open/draft \| open/published \| closed/retired` | `open/draft` | See Lifecycle |
+| `state` | required | `open/draft \| open/published \| closed/retired` | `open/draft` | See Lifecycle |
 | `created` | required | ISO date |  | First-authored date |
 | `last_reviewed` | optional | ISO date |  |  |
 | `related` | optional | list of wikilinks | `[]` | Other principles or standards |
@@ -75,11 +75,11 @@ Required and optional H2 sections, in order:
 
 `order: strict`. `allow_unknown: false`. Authoritative spec is the
 `contract(...)` in `schema.ts`. Sections may be marked `*To be expanded.*` while
-`status: open/draft`.
+`state: open/draft`.
 
 ## Lifecycle
 
-| Status | Meaning |
+| State | Meaning |
 |---|---|
 | `open/draft` | Actively being authored or revised. Cross-references permitted but the reader should expect movement. Stub markers (`*To be expanded.*`) and `> **Draft.**` banners are permitted. |
 | `open/published` | Core claim is stable for downstream artifacts (Standards, ADRs, README copy) to reference without expecting movement. Summary is canonical. Statement and Summary MUST be filled; other sections MAY still carry `*To be expanded.*` markers if the missing content elaborates rather than defines. |
@@ -116,7 +116,7 @@ Not schematized today.
 
 | Operation | CLI | What it does |
 |---|---|---|
-| Create | `sdlc principle new --category <category>` | Scaffold a new instance; status starts `open/draft` |
+| Create | `sdlc principle new --category <category>` | Scaffold a new instance; state starts `open/draft` |
 | Publish | `sdlc principle publish <id>` | Transition `open/draft → open/published`; checks Statement and Summary are filled |
 | Validate | `sdlc principle validate <path>` | Frontmatter + body manifest check |
 | List | `sdlc principle list [--category <category>]` | Roster, optionally filtered by category |
@@ -130,8 +130,8 @@ also live under `solutions/ontological/lib/model/ops/`.
 
 ## Workflow invariants
 
-- A Principle MUST declare `status: open/draft`, `status: open/published`, or
-  `status: closed/retired`.
+- A Principle MUST declare `state: open/draft`, `state: open/published`, or
+  `state: closed/retired`.
 - A Principle MUST carry exactly one `principle/<category>` tag.
 - An `open/published` Principle's Statement and Summary MUST be filled.
   Other sections MAY carry `*To be expanded.*` markers if the

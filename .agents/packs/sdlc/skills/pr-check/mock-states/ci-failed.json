@@ -1,21 +1,18 @@
 {
-  "state": "OPEN",
-  "mergeable": "MERGEABLE",
-  "mergeStateStatus": "BLOCKED",
-  "reviewDecision": "",
-  "headRefName": "task/example-ci-failed",
-  "baseRefName": "main",
-  "statusCheckRollup": [
-    {
-      "name": "ci/test",
-      "conclusion": "FAILURE"
-    },
-    {
-      "name": "ci/build",
-      "conclusion": "SUCCESS"
-    }
-  ],
+  "number": 1,
+  "url": "https://github.com/example/example/pull/1",
+  "title": "example",
+  "isDraft": false,
+  "state": "open",
+  "author": null,
+  "baseRef": "main",
+  "headRef": "task/example-ci-failed",
+  "headSha": null,
   "mergedAt": null,
-  "comments": [],
-  "reviews": []
+  "mergeable": "mergeable",
+  "checks": { "rollup": "failure", "failing": ["ci/test"], "failingUrls": [] },
+  "reviewDecision": null,
+  "activity": [],
+  "behind": null,
+  "ahead": null
 }

@@ -5,9 +5,9 @@ description: |
   (solutions/ontological/lib/model/entities/task/implementation-ready.md). Writes frontmatter
   only, leaving body content to /sdlc:task-define. On pass, stamps
   readiness_verified_at on frontmatter. On fail, clears that stamp,
-  records a definition_gap, and downshifts status to
+  records a definition_gap, and downshifts state to
   planning/needs-definition — except when the input is already
-  in-progress or in-progress/blocked, in which case status is preserved
+  in-progress or in-progress/blocked, in which case state is preserved
   (the task is mid-flight and a downshift would corrupt task-work state).
   When the task is autonomy: autonomous/pr and the deterministic verify
   finds a gap, it dispatches /sdlc:task-auto-define once to best-effort fill
@@ -34,9 +34,9 @@ When the doc has gaps, record the gap and exit. To drive the user
 through filling gaps, callers (or the user) invoke `/sdlc:task-define`
 separately.
 
-## Input contract — accepted statuses
+## Input contract — accepted states
 
-Allowed input statuses are the four pre-implementation stages —
+Allowed input states are the four pre-implementation stages —
 `draft`, `proposed`, `backlog`, `ready` — plus the two legacy
 execution-plane values, `in-progress` and `in-progress/blocked`.
 
@@ -257,7 +257,7 @@ defers to it.
 
 When `--commit` is passed (the standalone path that commits on the
 author's CURRENT branch, in place), the mutator commits ONLY frontmatter
-(the promotion's `status:` + `readiness_verified_at:`). Before it stages
+(the promotion's `state:` + `readiness_verified_at:`). Before it stages
 anything, it inspects the target task file's uncommitted diff against
 `HEAD` — both staged and unstaged — and **refuses (exit 19)** if any hunk
 lands in the body (any line strictly after the closing `---` of the
@@ -295,11 +295,11 @@ places. The script decides; you invoke it and relay what it printed.
 
 | Situation | What happens | `plane:` |
 |---|---|---|
-| No active lease, `status:` in `planning/*` | ONE promotion commit: `status: open/ready` + `readiness_verified_at:` | `frontmatter-promotion` |
+| No active lease, `state:` in `planning/*` | ONE promotion commit: `state: open/ready` + `readiness_verified_at:` | `frontmatter-promotion` |
 | No active lease, already `open/ready` | Nothing. No commit; the file stays byte-identical. (A stale `definition_gap:` is still cleared — that edit is semantic and keeps its commit.) | `none` |
 | An active lease holds the task | CAS-write the lease's `gates` object. Zero commits on main, no frontmatter write | `lease-gates` |
 
-**Promotion IS the readiness claim.** That is why the status flip and
+**Promotion IS the readiness claim.** That is why the state flip and
 the stamp ride one commit: there is no window in which a task is
 `open/ready` without a verified spec, and no separate stamp commit to
 land, crash between, or resume from. It is one of D-S30G's four
@@ -407,13 +407,13 @@ If the evaluation failed:
 
    A readiness FAIL is semantic — it changes what work the document
    needs — so it keeps its commit. The script handles the carve-out
-   automatically: status is preserved when the task holds an ACTIVE
-   LEASE, or when its `status:` is the legacy `in-progress` /
+   automatically: state is preserved when the task holds an ACTIVE
+   LEASE, or when its `state:` is the legacy `in-progress` /
    `in-progress/blocked`. Both mean a run is mid-flight and
    downshifting would corrupt it; the lease arm is the one that
    matters post-split, since a task in flight now reads `open/ready`
-   and the old status-only carve-out would have downshifted live work.
-   Otherwise status is set to `planning/needs-definition`. The script
+   and the old state-only carve-out would have downshifted live work.
+   Otherwise state is set to `planning/needs-definition`. The script
    also clears `readiness_verified_at:` and leaves `last_reviewed:`
    unchanged. The mutation logic lives in exactly that one place — do
    not re-encode it here.

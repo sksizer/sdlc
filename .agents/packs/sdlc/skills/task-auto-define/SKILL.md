@@ -5,12 +5,11 @@ description: |
   (solutions/ontological/lib/model/entities/task/implementation-ready.md) by synthesizing
   best-effort content from each task's existing prose plus codebase context,
   without prompting the user. Multiple tasks run in sequence, one commit and
-  one slug-namespaced terminal marker each. --set-ready true also promotes
-  each defined task to status: open/ready (default false); --make-pr pushes
-  the run's commits on a chore/ branch and opens a PR (default off — commit
-  on the current branch only). Stamps a discoverable machine-authored marker
-  on every synthesized spec; leaves readiness_verified_at for
-  /sdlc:task-ensure-ready to stamp. Dispatched by /sdlc:task-ensure-ready
+  one slug-namespaced terminal marker each. --make-pr pushes the run's
+  commits on a chore/ branch and opens a PR (default off — commit on the
+  current branch only). Stamps a discoverable machine-authored marker on
+  every synthesized spec. Never changes state: /sdlc:task-ensure-ready
+  promotes to open/ready and stamps readiness_verified_at in one commit. Dispatched by /sdlc:task-ensure-ready
   when a task is autonomy: autonomous/pr and the deterministic verify reports
   a gap.
 allowed-tools: read_file edit_file shell grep glob
@@ -24,14 +23,12 @@ allowed-tools: read_file edit_file shell grep glob
 Usage:
 
 ```text
-/sdlc:task-auto-define <task> [<task> ...] [--set-ready true|false] [--make-pr]
+/sdlc:task-auto-define <task> [<task> ...] [--make-pr]
 ```
 
 - `<task>` — slug, filename, or absolute path (use absolute paths when
   invoking from another skill). Each task runs the per-task flow (Steps
   2–7) in sequence; a failure on one task does not abort the rest.
-- `--set-ready true|false` (default `false`) — on a successful define, also
-  set the task's `status:` to `open/ready` in the same commit.
 - `--make-pr` (default off) — after all tasks are processed, push the run's
   commits on a `chore/` branch and open a PR. Without it the skill commits
   on the caller's current branch and never pushes.
@@ -54,8 +51,8 @@ task, plus the PR marker when `--make-pr` produced one):
 
 | Marker | Meaning |
 |---|---|
-| `TASK-AUTO-DEFINE-DEFINED: <basename>` | The doc was edited (gap fills and/or `--set-ready` status flip), validated, and committed. |
-| `TASK-AUTO-DEFINE-NO-CHANGES: <basename>` | No fillable gap and no pending status flip; no edit, no commit. |
+| `TASK-AUTO-DEFINE-DEFINED: <basename>` | The doc was edited (gap fills), validated, and committed. |
+| `TASK-AUTO-DEFINE-NO-CHANGES: <basename>` | No fillable gap; no edit, no commit. |
 | `TASK-AUTO-DEFINE-INSUFFICIENT: <basename>` | A gap exists but cannot be plausibly synthesized from the available prose + codebase context; no edit, no commit. |
 | `TASK-AUTO-DEFINE-PR: <url>` | `--make-pr` pushed the run's commits and opened a PR. |
 | `ERROR reason="..."` | Shared cross-skill failure marker (bad argument, no task found, validator rejected the synthesized doc). Names the failing task in a multi-task run. |
@@ -152,14 +149,9 @@ with:
 - the nature of the gap (missing / thin / wrong-value / disqualified-by),
 - what an acceptable resolution looks like.
 
-If the gap list is empty:
-
-- `--set-ready true` and `status:` is not `open/ready` → skip to Step 7 for
-  a status-flip-only commit (nothing was synthesized, so no `AUTO-DEFINED:`
-  note).
-- otherwise → report `TASK-AUTO-DEFINE-NO-CHANGES: <basename>` and move to
-  the next task. The caller can run `/sdlc:task-ensure-ready` to formally
-  stamp the verification.
+If the gap list is empty, report `TASK-AUTO-DEFINE-NO-CHANGES: <basename>`
+and move to the next task. The caller can run `/sdlc:task-ensure-ready` to
+promote and stamp.
 
 ## 5. Synthesize gap fills (best-effort)
 
@@ -190,8 +182,8 @@ headers changes.
 
 Do NOT touch the task-state frontmatter fields owned elsewhere:
 `readiness_verified_at:`, `touchpoints_verified_at:`, `definition_gap:`,
-`completion_note:`, `prs:`. This skill edits body content only, plus the
-machine-authored note (Step 6) and the `--set-ready` status flip (Step 7).
+`completion_note:`, `prs:`, and `state:`. This skill edits body content
+only, plus the machine-authored note (Step 6).
 
 ### Insufficient-context bail-out
 
@@ -222,25 +214,21 @@ today's UTC date:
 If a prior `AUTO-DEFINED:` note already exists (a re-run), refresh its date
 rather than stacking a second note.
 
-## 7. Set status and commit
+## 7. Commit
 
-Reached with pending edits (Steps 5–6) or a pending `--set-ready` flip
-(Step 4).
+Reached with pending edits (Steps 5–6).
 
-1. If `--set-ready true`, set the task's frontmatter `status:` to
-   `open/ready` via the task noun's update op (schema-validated, body
-   byte-untouched):
+Do not set `state:` here. Promotion to `open/ready` is
+`/sdlc:task-ensure-ready`'s job: it flips the state and stamps
+`readiness_verified_at:` in one commit. It does nothing to a task that is
+already `open/ready`, so a state flip here would leave the task ready with
+no stamp.
 
-   ```text
-   scripts/sdlc task update <path> --set '{"status": "open/ready"}'
-   ```
-
-   This flag is the one exception to Step 5's frontmatter scope rule.
-2. With `--make-pr`, before the run's **first** commit, create
+1. With `--make-pr`, before the run's **first** commit, create
    `chore/auto-define-<stem>` from the current HEAD and switch to it —
    `<stem>` is the task basename (single task) or `batch-<YYYYMMDD-HHMM>`
    UTC (multiple). Later tasks in the run commit on the same branch.
-3. Run the validator (no pipe — gate on the bare exit code, per
+2. Run the validator (no pipe — gate on the bare exit code, per
    `${CLAUDE_PLUGIN_ROOT}/skills/CLAUDE.md` "Don't pipe commands you gate on"):
 
    ```text
@@ -251,9 +239,9 @@ Reached with pending edits (Steps 5–6) or a pending `--set-ready` flip
    task's edits, report
    `ERROR reason="synthesized doc failed frontmatter validation"`, and move
    to the next task.
-4. Stage only the task file: `git add <path>` (the commit op commits the
+3. Stage only the task file: `git add <path>` (the commit op commits the
    staged index — it does NOT narrow scope).
-5. Commit on the current branch with the model-generated message routed
+4. Commit on the current branch with the model-generated message routed
    through `sdlc commit create --message -` (stdin heredoc; see
    `${CLAUDE_PLUGIN_ROOT}/conventions/commit-messages.md`):
 
@@ -265,11 +253,11 @@ Reached with pending edits (Steps 5–6) or a pending `--set-ready` flip
    EOF
    ```
 
-6. Report:
+5. Report:
 
    ```text
    TASK-AUTO-DEFINE-DEFINED: <basename>
-   sections synthesized: <list, or "none (status flip only)">
+   sections synthesized: <list>
    ```
 
 ## 8. Open the PR (`--make-pr` only)
@@ -299,8 +287,7 @@ Next: run /sdlc:task-ensure-ready <basename> to verify and stamp.
 
 - **Best-effort, not authoritative.** The `AUTO-DEFINED:` note is the
   human's signal to review before trusting the spec. This skill leaves
-  `readiness_verified_at:` for `/sdlc:task-ensure-ready` to stamp;
-  `--set-ready` flips `status:` only.
+  `state:` and `readiness_verified_at:` to `/sdlc:task-ensure-ready`.
 - One commit per task, touching only that task file.
 - **Skill-authoring conventions.** See `${CLAUDE_PLUGIN_ROOT}/skills/CLAUDE.md`
   — slug-namespaced markers, no duplicated prose, gate on bare exit codes.

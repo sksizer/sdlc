@@ -7,7 +7,7 @@
  * shared `deriveSlug` ([[P-0001]]); an explicit slug always wins. `title`
  * is identity/template-only — backlog's authored frontmatter carries no
  * title. Field types derive from `BacklogSchema` (`../schema.ts`), so
- * `status`/`result` validate against the real enum/pattern at input.
+ * `state`/`result` validate against the real enum/pattern at input.
  */
 
 import { defineCreateOp } from '@lib/model/ops/_create'
@@ -19,7 +19,7 @@ export default defineCreateOp({
   fields: {
     title: { noFrontmatter: true, cli: { short: 't' } },
     tags: { cli: { valueName: 'TAG' } },
-    status: {},
+    state: {},
     result: {},
   },
 })

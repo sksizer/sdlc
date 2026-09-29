@@ -12,7 +12,7 @@
  * the op's exit code instead of re-spelling the pattern in prose).
  *
  * Field types and static birth defaults derive from `TaskSchema`
- * (`../schema.ts`): a bare invocation authors status `planning/draft`,
+ * (`../schema.ts`): a bare invocation authors state `planning/draft`,
  * impact/complexity `medium` via the authoring pipeline's schema-default
  * merge — a task is never born closed/ or in-progress. `created` is the one
  * op-owned (dynamic) birth default; `headline` is the one op-only field.
@@ -37,7 +37,7 @@ export default defineCreateOp({
       noFrontmatter: true,
       cli: { short: 'H' },
     },
-    status: {},
+    state: {},
     created: { birthDefault: () => todayUtc() },
     impact: {},
     complexity: {},

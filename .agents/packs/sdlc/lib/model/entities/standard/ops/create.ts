@@ -3,7 +3,7 @@
  * A `defineCreateOp` spec; the shared factory (`@lib/model/ops/_create`) owns
  * the create shape. The slug derives from the required `title` unless given
  * explicitly. Field types derive from `StandardSchema` (`../schema.ts`), so
- * status/supersedes/superseded_by validate against the real enum/wikilink
+ * state/supersedes/superseded_by validate against the real enum/wikilink
  * patterns. `paths` is reshaped into the schema's `applies_to.paths`.
  * Callers own the `closed/superseded` consistency rule.
  */
@@ -27,7 +27,7 @@ export default defineCreateOp({
       toYaml: (paths) => ({ paths: [...(paths as string[])] }),
       cli: { valueName: 'GLOB' },
     },
-    status: {},
+    state: {},
     related: {},
     supersedes: {},
     supersededBy: { fmKey: 'superseded_by' },

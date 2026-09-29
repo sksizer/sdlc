@@ -42,7 +42,7 @@ A Reference is *not*:
 | `id` | required | `RF-NNNN` |  | Immutable; matches filename prefix |
 | `title` | required | string |  | The source's name (`Obsidian Bases`) |
 | `url` | optional | string, `format: uri` |  | The external location; a reference may be a book, a local artifact, or offline material |
-| `status` | required | enum (see Lifecycle) | `open/active` |  |
+| `state` | required | enum (see Lifecycle) | `open/active` |  |
 | `created` | required | ISO date |  |  |
 | `last_reviewed` | optional | ISO date |  |  |
 | `related` | optional | list of wikilinks | `[]` | The roster's Cited-by column: the entities that lean on this source |
@@ -64,7 +64,7 @@ A Reference is *not*:
 
 ## Lifecycle
 
-| Status | Meaning | Roster bucket |
+| State | Meaning | Roster bucket |
 |---|---|---|
 | `open/active` | In use — cited by current decisions/standards. The default — a reference is captured because it is leaned on | Active table |
 | `open/draft` | Captured, not yet vetted or not yet load-bearing | Emerging table |
@@ -87,7 +87,7 @@ resolving.
 
 | Name | Surface | Signature | Pointer | Description |
 |---|---|---|---|---|
-| create | cli | `sdlc reference create [<slug>] --title <name> [--url <url>]` | `solutions/ontological/lib/model/entities/reference/ops/create.ts` | Author a reference with minted `RF-NNNN` identity; status defaults `open/active`; slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
+| create | cli | `sdlc reference create [<slug>] --title <name> [--url <url>]` | `solutions/ontological/lib/model/entities/reference/ops/create.ts` | Author a reference with minted `RF-NNNN` identity; state defaults `open/active`; slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
 | preview-id | cli | `sdlc reference preview-id <title>` | `solutions/ontological/lib/model/entities/reference/ops/preview-id.ts` | Read-only: report the slug + `RF-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
 | validate | cli | `sdlc entities validate <path>` | `solutions/ontological/lib/model/ops/validate.ts` | Frontmatter + body manifest check (generic cross-entity op) |
 | generate | cli | `sdlc docs generate references` | `solutions/ontological/lib/services/docs/` | Reassemble the references roster from the instances |
@@ -97,7 +97,7 @@ cover References with no per-type wiring.
 
 ## Workflow invariants
 
-- A Reference MUST declare `status: open/draft | open/active | closed/retired`.
+- A Reference MUST declare `state: open/draft | open/active | closed/retired`.
 - A Reference's body MUST contain a Summary section whose paragraph
   carries the `^summary` block-id.
 - The references roster is generated, never hand-edited; a catalog
@@ -118,7 +118,7 @@ knows, beside the vocabulary that governs how it talks.
   Summary feeding the generated references roster. ^summary
 - Identifier: `RF-NNNN-<slug>.md` filename, `[[RF-NNNN-<slug>]]`
   wikilink, incrementing ids.
-- Status enum: `open/draft | open/active | closed/retired`; default
+- State enum: `open/draft | open/active | closed/retired`; default
   `open/active`.
 - Body convention: Summary (required, carries `^summary`) + optional
   Material (summarized, copied, or transcluded substance) / Notes.

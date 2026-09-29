@@ -6,7 +6,7 @@
  * Milestones are id-only (no slug in the filename): renaming the title
  * never breaks inbound wikilinks. The id mint is seeded from the required
  * `title` so parallel branches minting different milestones get different
- * ids. Field types and the status birth default (`open/draft`) derive from
+ * ids. Field types and the state birth default (`open/draft`) derive from
  * `MilestoneSchema` (`../schema.ts`), so version/target_date/tasks validate
  * against the real semver/date/wikilink patterns at input; `created` is the
  * one op-owned (dynamic) birth default.
@@ -21,7 +21,7 @@ export default defineCreateOp({
   identity: { kind: 'id-only', seedKey: 'title' },
   fields: {
     title: { cli: { short: 't' } },
-    status: {},
+    state: {},
     created: { birthDefault: () => todayUtc() },
     version: {},
     targetDate: { fmKey: 'target_date' },

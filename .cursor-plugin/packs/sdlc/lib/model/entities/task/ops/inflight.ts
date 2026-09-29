@@ -3,7 +3,7 @@
  *
  * An "in-flight" task is any task that has a worktree under
  * `.sdlc/worktrees/<basename>/` AND a matching local branch named
- * `task/<basename>`. For each such pair the task file's `status:` frontmatter
+ * `task/<basename>`. For each such pair the task file's `state:` frontmatter
  * is read, the task's lease is read off the LOCAL ref mirror, and
  * `gh pr list --search "head:<branch>"` is queried to detect an open PR.
  *
@@ -11,7 +11,7 @@
  *
  * Classification prefers the LEASE ([[D-S30G-task-state-plane-split]]):
  * execution state is authoritative in the lease substrate, and frontmatter
- * `status` no longer moves during a run. The frontmatter rule stays as the
+ * `state` no longer moves during a run. The frontmatter rule stays as the
  * fallback for tasks with no lease in the mirror.
  *
  * The render hook reproduces the `--format summary` line that
@@ -56,7 +56,7 @@ const CATEGORY_OTHER = 'other'
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * Bucket one task from its frontmatter status, its lease phase, and its open PR.
+ * Bucket one task from its frontmatter state, its lease phase, and its open PR.
  *
  * Precedence:
  *
@@ -79,11 +79,11 @@ const CATEGORY_OTHER = 'other'
  * misclassifying.
  */
 function classify(
-  taskStatus: string | null,
+  taskState: string | null,
   openPrNumber: number | null,
   leasePhase: string | null = null,
 ): string {
-  if (taskStatus && taskStatus.startsWith('closed/')) return CATEGORY_STALE
+  if (taskState && taskState.startsWith('closed/')) return CATEGORY_STALE
 
   if (leasePhase === 'claimed' || leasePhase === 'working') {
     return CATEGORY_IMPLEMENTING
@@ -93,7 +93,7 @@ function classify(
   }
   if (leasePhase !== null) return CATEGORY_OTHER
 
-  if (taskStatus === 'in-progress') {
+  if (taskState === 'in-progress') {
     return openPrNumber === null ? CATEGORY_IMPLEMENTING : CATEGORY_AWAITING_REVIEW
   }
   return CATEGORY_OTHER
@@ -105,7 +105,7 @@ const InflightTask = z.object({
   basename: z.string(),
   worktree_path: z.string(),
   branch: z.string(),
-  task_status: z.string().nullable(),
+  task_state: z.string().nullable(),
   open_pr_number: z.number().int().nullable(),
   /** Execution phase off the local lease mirror, or null when no lease. */
   lease_phase: z.string().nullable(),
@@ -149,6 +149,9 @@ const input = z.object({
 export default defineOp({
   path: ['task', 'inflight'],
   summary: 'Categorise in-flight tasks (implementing / awaiting-review / stale / other).',
+  // Read-only: reads worktree/branch/frontmatter/lease/PR state and reports
+  // categories; writes nothing.
+  mutating: false,
   input,
   output,
   cli: {
@@ -172,9 +175,9 @@ export default defineOp({
       const branch = taskBranch(basename)
       if (!branches.has(branch)) continue
 
-      const taskStatus = frontmatterString(
+      const taskState = frontmatterString(
         readFrontmatter(taskFilePath(projectRoot, basename)),
-        'status',
+        'state',
       )
 
       let openPrNumber: number | null = null
@@ -186,12 +189,12 @@ export default defineOp({
       // must stay network-free.
       const leasePhase = readLocalLease(basename, projectRoot, ctx)?.phase ?? null
 
-      const category = classify(taskStatus, openPrNumber, leasePhase)
+      const category = classify(taskState, openPrNumber, leasePhase)
       tasks.push({
         basename,
         worktree_path: worktreePath(projectRoot, basename),
         branch,
-        task_status: taskStatus,
+        task_state: taskState,
         open_pr_number: openPrNumber,
         lease_phase: leasePhase,
         category,

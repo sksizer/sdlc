@@ -42,7 +42,7 @@ export const termProjection: SiteProjection = {
   childPages: true,
   childBackLabel: 'Back to the Glossary',
   childMeta: (e) => [
-    e.status ? `**Status:** \`${e.status}\`` : '',
+    e.state ? `**State:** \`${e.state}\`` : '',
     stringList(e.fm['aliases']).length > 0
       ? `**Aliases:** ${stringList(e.fm['aliases']).join(', ')}`
       : '',

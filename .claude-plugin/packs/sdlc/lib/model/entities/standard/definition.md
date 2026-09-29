@@ -40,15 +40,15 @@ A Standard is *not*:
 | `schema_version` | optional | numeric string | `"1"` |  |
 | `id` | required | `S<NNNN>` |  | Immutable; matches filename prefix |
 | `title` | required | string |  | Human-readable headline |
-| `status` | required | enum (see Lifecycle) | `open/proposed` |  |
+| `state` | required | enum (see Lifecycle) | `open/proposed` |  |
 | `created` | required | ISO date |  |  |
 | `last_reviewed` | optional | ISO date |  | When the standard was last sanity-checked |
 | `applies_to.paths` | required | list of glob patterns |  | Where the rule binds. Authoritative scope |
 | `supersedes` | optional | wikilink to a Standard |  | Legacy — no longer written; supersession deletes the predecessor and the deletion commit records the succession |
-| `superseded_by` | conditional | wikilink to a Standard |  | Required when `status: closed/superseded` (legacy tombstones only — new supersessions delete the predecessor) |
+| `superseded_by` | conditional | wikilink to a Standard |  | Required when `state: closed/superseded` (legacy tombstones only — new supersessions delete the predecessor) |
 | `related` | optional | list of wikilinks | `[]` | Other standards, decisions, principles, milestones |
 | `tags` | optional | list of strings | `[]` | Free-form labels |
-| `deprecation_note` | conditional | string |  | Required when `status: closed/deprecated` |
+| `deprecation_note` | conditional | string |  | Required when `state: closed/deprecated` |
 | `need_human_review` | optional | bool | `false` |  |
 | `created_at` | optional | ISO 8601 datetime |  | When the entity was authored, finer than `created` |
 | `provenance` | optional | string |  | What authored it when not by hand: a skill, tool, or import source |
@@ -73,7 +73,7 @@ shape needs them). Authoritative spec is the `contract(...)` in `schema.ts`.
 
 ## Lifecycle
 
-| Status | Meaning | Required fields |
+| State | Meaning | Required fields |
 |---|---|---|
 | `open/draft` | Actively being authored; not yet in review |  |
 | `open/proposed` | Authored; under review. Not yet binding |  |
@@ -111,13 +111,13 @@ Transitions:
 
 | Name | Surface | Signature | Pointer | Description |
 |---|---|---|---|---|
-| create | runner | `standard create [<slug>] [...]` | `solutions/ontological/lib/model/entities/standard/ops/create.ts` | Scaffold a new instance; status starts `open/proposed` (the relocated `new_standard.ts` core); slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
+| create | runner | `standard create [<slug>] [...]` | `solutions/ontological/lib/model/entities/standard/ops/create.ts` | Scaffold a new instance; state starts `open/proposed` (the relocated `new_standard.ts` core); slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
 | preview-id | cli | `sdlc standard preview-id <title>` | `solutions/ontological/lib/model/entities/standard/ops/preview-id.ts` | Read-only: report the slug + `S-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
 | new | skill | `/sdlc:standard-new` | `solutions/ontological/plugin/plugins/sdlc/skills/standard-new/` | LLM head over `create`; scaffolder shim forwards to the op |
 | update | cli | `sdlc standard update <standard> --set <json>` | `solutions/ontological/lib/model/entities/standard/ops/update.ts` | Apply JSON frontmatter updates, schema-validated (entity-agnostic engine in `model/ops/_update.ts`) |
 | supersede | cli | `sdlc standard supersede <standard> --by <id>` | `solutions/ontological/lib/model/entities/standard/ops/supersede.ts` | Delete the predecessor; the deletion commit names the successor; no-ops on a missing predecessor. (Implementation still tombstones; slated to match this contract) |
-| activate | cli | `sdlc standard update <standard> --set '{"status":"open/active"}'` | `solutions/ontological/lib/model/entities/standard/ops/update.ts` | Transition `open/proposed → open/active` (via `update`) |
-| deprecate | cli | `sdlc standard update <standard> --set '{"status":"closed/deprecated","deprecation_note":"…"}'` | `solutions/ontological/lib/model/entities/standard/ops/update.ts` | Set to `closed/deprecated` with `deprecation_note:` (via `update`) |
+| activate | cli | `sdlc standard update <standard> --set '{"state":"open/active"}'` | `solutions/ontological/lib/model/entities/standard/ops/update.ts` | Transition `open/proposed → open/active` (via `update`) |
+| deprecate | cli | `sdlc standard update <standard> --set '{"state":"closed/deprecated","deprecation_note":"…"}'` | `solutions/ontological/lib/model/entities/standard/ops/update.ts` | Set to `closed/deprecated` with `deprecation_note:` (via `update`) |
 | validate | cli | `sdlc entities validate <path>` | `solutions/ontological/lib/model/ops/validate.ts` | Frontmatter + body manifest check (generic cross-entity op) |
 | review | skill | `/sdlc:standard-review [--propose]` | `solutions/ontological/plugin/plugins/sdlc/skills/standard-review/` | Check bound files against each Rule, standards against each other and their principles, and prose against the descriptive-yet-succinct rubric; renders the `standard-review` report kind (`reports/review/`); `--propose` opens a PR of text edits |
 
@@ -135,7 +135,7 @@ than distinct verbs. `validate` is the generic `entities validate` op
 ## Workflow invariants
 
 - A Standard MUST declare
-  `status: open/draft | open/proposed | open/active | closed/superseded | closed/deprecated`.
+  `state: open/draft | open/proposed | open/active | closed/superseded | closed/deprecated`.
 - A Standard MUST declare `applies_to.paths` with at least one glob.
 - A `closed/superseded` Standard MUST carry `superseded_by:` pointing at a
   Standard.
@@ -159,7 +159,7 @@ sub-layer within that.
   deterministic validator where one exists. ^summary
 - Identifier: `S<NNNN>-<slug>.md` filename, `[[S<NNNN>-<slug>]]`
   wikilink, sequential zero-padded ids.
-- Status enum: `open/draft | open/proposed | open/active | closed/superseded | closed/deprecated`.
+- State enum: `open/draft | open/proposed | open/active | closed/superseded | closed/deprecated`.
   `closed/superseded` requires `superseded_by:` and is legacy — a fully
   superseded Standard is deleted, git history is the archive;
   `closed/deprecated` requires `deprecation_note:`.

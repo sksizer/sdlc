@@ -36,7 +36,7 @@ Project context (don't re-derive every run):
   PR is closed. Closing a folded PR with `--delete-branch` removes its
   only copy of the draft task, so the consolidation PR must already
   carry that file first.
-- Draft task files are at `status: planning/draft` and are never under
+- Draft task files are at `state: planning/draft` and are never under
   a task-lifecycle lease (a lease is only taken when `/sdlc:task-work`
   starts implementation). This skill therefore does no lease handling.
 
@@ -127,7 +127,7 @@ which already extracts them from every open PR head:
 ${CLAUDE_PLUGIN_ROOT}/cli/sdlc task list-unmerged --output json
 ```
 
-Its `tasks[]` rows carry `basename`, `status`, `headline` and the full
+Its `tasks[]` rows carry `basename`, `state`, `headline` and the full
 `text` for exactly these candidates.
 
 Branch on the script's `decision` (see its module docstring for the

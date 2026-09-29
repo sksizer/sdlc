@@ -3,7 +3,7 @@
  *
  * Per [[T-JO4I-entity-zod-schemas-validation-ops-swap]]: `CommonFrontmatter`
  * base + Decision-specific fields, `.strict()` for the JSON
- * `additionalProperties: false`, plus the two status-conditional requireds the
+ * `additionalProperties: false`, plus the two state-conditional requireds the
  * JSON declares via `allOf` if/then — `closed/superseded ⇒ superseded_by` and
  * `closed/deprecated ⇒ deprecation_note` — expressed as a `.superRefine` over
  * the shared `SUPERSESSION_RULES`.
@@ -23,7 +23,7 @@ import {
 import { titleMirrorsH1 } from '../_rules.ts'
 
 /** Mirrors `decision/schema.json` `version`. */
-export const SCHEMA_VERSION = '1'
+export const SCHEMA_VERSION = '2'
 
 /** Decision-shaped wikilink (slug optional). */
 export const DECISION_WIKILINK_PATTERN = entityWikilinkPattern('D')
@@ -40,7 +40,7 @@ export const DecisionSchema = CommonFrontmatter.extend({
         'colliding); legacy sequential D-0001… ids are grandfathered. Never renamed once ' +
         'assigned.',
     ),
-  status: z
+  state: z
     .enum(['open/proposed', 'open/accepted', 'closed/superseded', 'closed/deprecated'])
     .default('open/proposed')
     .describe(
@@ -63,7 +63,7 @@ export const DecisionSchema = CommonFrontmatter.extend({
     .optional()
     .describe(
       'Wikilink to the Decision that replaces this one, if any. Required when ' +
-        'status is closed/superseded. Slug is optional per ' +
+        'state is closed/superseded. Slug is optional per ' +
         '[[D-0002-entity-identifier-shape]].',
     ),
   related: z
@@ -79,7 +79,7 @@ export const DecisionSchema = CommonFrontmatter.extend({
     .min(1)
     .optional()
     .describe(
-      'Short note on why the decision was deprecated. Required when status is ' + 'deprecated.',
+      'Short note on why the decision was deprecated. Required when state is ' + 'deprecated.',
     ),
 })
   .strict()
@@ -90,7 +90,7 @@ export const DecisionSchema = CommonFrontmatter.extend({
     // the rule pair identical to Standard's.
     const fields = fm as Record<string, unknown>
     for (const rule of SUPERSESSION_RULES) {
-      requiredWhen(ctx, fm.status === rule.status && fields[rule.field] === undefined, rule.field)
+      requiredWhen(ctx, fm.state === rule.state && fields[rule.field] === undefined, rule.field)
     }
   })
 

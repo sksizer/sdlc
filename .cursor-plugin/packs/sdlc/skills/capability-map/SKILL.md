@@ -137,7 +137,7 @@ Each sub-agent, in order:
      own.
    - `skip` — scaffolding, a fixture, a build artifact, or already covered.
 3. Grade with the rubric: anchors decide the grain, the surface test decides the audience,
-   the status table decides the status. Low confidence sets `need_human_review`.
+   the state table decides the state. Low confidence sets `need_human_review`.
 4. Return a **strict JSON object**, no surrounding prose:
 
 ```json

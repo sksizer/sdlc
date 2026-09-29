@@ -2,7 +2,7 @@
  * Backlog entity — Zod schema.
  *
  * `CommonFrontmatter` base + Backlog-specific fields, `.strict()` for
- * `additionalProperties: false`, plus seven status-conditional `result` rules in
+ * `additionalProperties: false`, plus seven state-conditional `result` rules in
  * one `.superRefine`:
  *
  *   - `promoted/*`        ⇒ `result` is required (must point at the artifact);
@@ -15,14 +15,14 @@
  *     what shipped — freeform, not wikilink-shaped: the item was built
  *     directly, without going through a promoted artifact).
  *
- * Backlog is deliberately permissive: `type`/`id`/`status` are all optional,
- * since multi-item dump files carry no status. The base `result` field is a
+ * Backlog is deliberately permissive: `type`/`id`/`state` are all optional,
+ * since multi-item dump files carry no state. The base `result` field is a
  * freeform non-empty string; the conditional branches narrow its shape to a
- * wikilink per status where one applies.
+ * wikilink per state where one applies.
  *
  * Schema v2 adds `likely_type` — the triager's non-binding guess at what the
  * item becomes (per the [[D-ORMG-data-model]] roster note). A hint only: it
- * never constrains the promotion outcome, which `status`/`result` record.
+ * never constrains the promotion outcome, which `state`/`result` record.
  */
 
 import { contract, lenientBody } from 'markdown-contract'
@@ -36,10 +36,10 @@ import {
 } from '../_common.ts'
 import { titleMirrorsH1 } from '../_rules.ts'
 
-/** Mirrors `backlog/schema.json` `version`. v2: adds `likely_type`. */
-export const SCHEMA_VERSION = '2'
+/** Mirrors `backlog/schema.json` `version`. v3: `status` renamed `state`. */
+export const SCHEMA_VERSION = '3'
 
-/** Conditional per-status `result` patterns (mirror the JSON if/then branches).
+/** Conditional per-state `result` patterns (mirror the JSON if/then branches).
  *  The base `result` field itself carries no shape constraint beyond
  *  non-empty — `closed/delivered` relies on that to accept a freeform PR
  *  link or note. */
@@ -51,10 +51,10 @@ export const RESULT_DECISION_PATTERN = entityWikilinkPattern('D')
 export const RESULT_BACKLOG_PATTERN = entityWikilinkPattern('B')
 
 /**
- * `status` → the narrowed `result` shape that status demands. Absent key means
- * the status imposes no narrowing beyond the base pattern on the field.
+ * `state` → the narrowed `result` shape that state demands. Absent key means
+ * the state imposes no narrowing beyond the base pattern on the field.
  */
-export const RESULT_PATTERN_BY_STATUS: Readonly<Record<string, RegExp>> = {
+export const RESULT_PATTERN_BY_STATE: Readonly<Record<string, RegExp>> = {
   'promoted/task': RESULT_TASK_PATTERN,
   'promoted/milestone': RESULT_MILESTONE_PATTERN,
   'promoted/decision': RESULT_DECISION_PATTERN,
@@ -79,7 +79,7 @@ export const BacklogSchema = CommonFrontmatter.extend({
         'base-36 chars [0-9A-Z]. Matches the filename; never renamed once assigned. ' +
         'Optional on legacy multi-item dump files.',
     ),
-  status: z
+  state: z
     .enum([
       'promoted/task',
       'promoted/milestone',
@@ -104,7 +104,7 @@ export const BacklogSchema = CommonFrontmatter.extend({
     .describe(
       'Non-binding triage hint: the entity-type slug this item will likely ' +
         'become (task, milestone, decision, driver, ...). Recorded by the ' +
-        'triager; never constrains the promotion outcome — `status`/`result` ' +
+        'triager; never constrains the promotion outcome — `state`/`result` ' +
         'record what actually happened.',
     ),
   title: CommonFrontmatter.shape.title.optional(),
@@ -116,27 +116,27 @@ export const BacklogSchema = CommonFrontmatter.extend({
     .describe(
       'Wikilink to the artifact this backlog file resolved to, or — for ' +
         '`closed/delivered` — a freeform PR link or short note of what shipped. ' +
-        'Required when `status:` starts with `promoted/`, or is `closed/duplicate` ' +
+        'Required when `state:` starts with `promoted/`, or is `closed/duplicate` ' +
         "or `closed/delivered`. The conditional rules narrow `result:`'s pattern to " +
-        'a wikilink for every status but `closed/delivered`.',
+        'a wikilink for every state but `closed/delivered`.',
     ),
 })
   .strict()
   .superRefine((fm, ctx) => {
-    const status = fm.status
+    const state = fm.state
     const result = fm.result
 
     // promoted/* ⇒ result required.
     requiredWhen(
       ctx,
-      typeof status === 'string' && status.startsWith('promoted/') && result === undefined,
+      typeof state === 'string' && state.startsWith('promoted/') && result === undefined,
       'result',
     )
 
-    // Per-status result pattern narrowing (only when result is present — the
+    // Per-state result pattern narrowing (only when result is present — the
     // required check above already covers the absent case for promoted/*).
     if (result !== undefined) {
-      const want = RESULT_PATTERN_BY_STATUS[status ?? '']
+      const want = RESULT_PATTERN_BY_STATE[state ?? '']
       if (want !== undefined && !want.test(result)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -147,15 +147,15 @@ export const BacklogSchema = CommonFrontmatter.extend({
     }
 
     // closed/duplicate ⇒ result required.
-    requiredWhen(ctx, status === 'closed/duplicate' && result === undefined, 'result')
+    requiredWhen(ctx, state === 'closed/duplicate' && result === undefined, 'result')
 
     // closed/delivered ⇒ result required (freeform PR link or note — no
     // wikilink narrowing; the item was built directly, so there's no
     // artifact to link).
-    requiredWhen(ctx, status === 'closed/delivered' && result === undefined, 'result')
+    requiredWhen(ctx, state === 'closed/delivered' && result === undefined, 'result')
 
     // closed/abandoned ⇒ result must be ABSENT.
-    if (status === 'closed/abandoned' && result !== undefined) {
+    if (state === 'closed/abandoned' && result !== undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['result'],

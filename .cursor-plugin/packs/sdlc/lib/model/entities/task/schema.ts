@@ -1,13 +1,13 @@
 /**
- * Task entity — Zod schema, schema version 7.
+ * Task entity — Zod schema, schema version 9.
  *
  * `CommonFrontmatter` base + the full Task field set, `.strict()` for the JSON
  * `additionalProperties: false`, plus the `closed/* ⇒ completion_note`
  * conditional required (the JSON's lone allOf if/then) expressed as a
  * `.superRefine`.
  *
- * Task's only common-level required fields are `status` and `id` (the JSON
- * `required: ["status", "id"]`); `type`/`title`/`created` are optional on Task
+ * Task's only common-level required fields are `state` and `id` (the JSON
+ * `required: ["state", "id"]`); `type`/`title`/`created` are optional on Task
  * (unlike most types), so the common base's required fields are relaxed here
  * via `.partial({...})` on those keys before the strict()/refine(). `tags` is
  * still common-required-with-default.
@@ -32,15 +32,26 @@ import {
 import { titleMirrorsH1 } from '../_rules.ts'
 
 /** The current task frontmatter/body schema version. */
-export const SCHEMA_VERSION = '7'
+export const SCHEMA_VERSION = '9'
 
 /**
- * The canonical task lifecycle status vocabulary — the single source of truth
+ * Canonical shape of the `issue:` field: a bare decimal GitHub issue number
+ * as a string (e.g. `"1234"`) — never a `#`-prefix and never the full
+ * `https://github.com/...` URL. This project's tasks link issues from
+ * exactly one repo (the one `ctx.gh` is rooted at), so a repo-qualified
+ * reference would carry information nothing reads; the bare number is what
+ * `gh issue view <number>` and `Gh.issueView(number)`
+ * ([[T-3YQO]], `@sksizer/easy-gh`) already take verbatim.
+ */
+export const ISSUE_REF_PATTERN = /^\d+$/
+
+/**
+ * The canonical task lifecycle state vocabulary — the single source of truth
  * for the four-major `stage` / `stage/reason` values. Exported so consumers
- * that report or reason over task status (e.g. `sdlc lease task sweep`)
+ * that report or reason over task state (e.g. `sdlc lease task sweep`)
  * reference this enum instead of re-declaring the strings.
  */
-export const TASK_STATUS = z.enum([
+export const TASK_STATE = z.enum([
   'planning/draft',
   'planning/proposed',
   'planning/needs-definition',
@@ -77,7 +88,7 @@ export const TaskSchema = CommonFrontmatter.extend({
       "Immutable identifier per [[D-0002-entity-identifier-shape]]: 'T-' + 4 " +
         'base-36 chars [0-9A-Z]. Matches the filename; never renamed once assigned.',
     ),
-  status: TASK_STATUS.default('planning/draft').describe(
+  state: TASK_STATE.default('planning/draft').describe(
     'Lifecycle stage. Four majors: planning/<stage> (spec still being shaped, ' +
       'not pickable), open/<stage> (available to pick up now), in-progress[/blocked] ' +
       '(someone has it), closed/<reason> (terminal). Under the GitHub Ref Leases ' +
@@ -235,6 +246,21 @@ export const TaskSchema = CommonFrontmatter.extend({
         'by /sdlc:task-close-out. Primary use case is Obsidian static-viewer ' +
         'affordance.',
     ),
+  issue: z
+    .string()
+    .trim()
+    .min(1)
+    .regex(ISSUE_REF_PATTERN, 'issue must be a bare decimal issue number, e.g. "1234"')
+    .optional()
+    .describe(
+      'The linked GitHub issue this task was created for or is tracking ' +
+        '([[D-0019-sdlc-chain-stages-and-labels]]), as a BARE DECIMAL ISSUE NUMBER ' +
+        '(e.g. "1234" — never a "#" prefix, never the full URL). Set by ' +
+        '`lib/services/issues/link.ts#ensureLinkedTask` when an issue enters the ' +
+        "`define` chain stage. Once set, this task's `state` is authoritative over " +
+        "the issue's `sdlc:stage/<x>` label — `sdlc issues sync` reports (never " +
+        'silently fixes) a mismatch between the two.',
+    ),
   relevance_note: z
     .string()
     .optional()
@@ -246,7 +272,7 @@ export const TaskSchema = CommonFrontmatter.extend({
     .string()
     .min(1)
     .optional()
-    .describe('Multiline summary of what shipped. Required when status starts with ' + 'closed/.'),
+    .describe('Multiline summary of what shipped. Required when state starts with ' + 'closed/.'),
   definition_gap: z
     .string()
     .optional()
@@ -295,8 +321,8 @@ export const TaskSchema = CommonFrontmatter.extend({
     // allOf if/then: canonical closed shape requires a completion_note.
     requiredWhen(
       ctx,
-      typeof fm.status === 'string' &&
-        fm.status.startsWith('closed/') &&
+      typeof fm.state === 'string' &&
+        fm.state.startsWith('closed/') &&
         fm.completion_note === undefined,
       'completion_note',
     )

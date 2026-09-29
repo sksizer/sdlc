@@ -7,11 +7,18 @@
  * it.capabilities, plus the Appendix sections it.glossary and
  * it.references — the same data the standalone glossary/references
  * artifacts render). Each section carries `active` rows and `followup` rows
- * (Emerging / obsoleted, with a status). A follow-up table renders only when
+ * (Emerging / obsoleted, with a state). A follow-up table renders only when
  * its bucket is non-empty.
  *
  * Helpers below build a markdown table from a header row and a list of cell
  * arrays, so column layout lives in exactly one place per shape.
+ *
+ * The leading frontmatter block stamps this file as the corpus's OKF
+ * bundle-root `index.md` ([[M-LBU2]] / [[T-IZ3L]]): `type: Note` since this
+ * page is a non-entity narrative/roster front-door, not one of the 12
+ * registered entity types, and `okf_version: "0.2"` naming the OKF spec
+ * revision this bundle conforms to. `sdlc okf validate` checks for exactly
+ * these two keys on this file.
  */
 function pipeRow(cells) {
   return "| " + cells.map((c) => String(c ?? "")).join(" | ") + " |";
@@ -25,12 +32,17 @@ function table(headers, rows) {
 function activeTable(headers, section) {
   return table(headers, section.active.map((r) => r.cells));
 }
-/* Follow-up table: the section's cells plus a trailing Status column. */
+/* Follow-up table: the section's cells plus a trailing State column. */
 function followupTable(headers, section) {
-  const withStatus = headers.concat(["Status"]);
-  return table(withStatus, section.followup.map((r) => r.cells.concat([r.status])));
+  const withState = headers.concat(["State"]);
+  return table(withState, section.followup.map((r) => r.cells.concat([r.state])));
 }
 %>
+---
+type: Note
+okf_version: "0.2"
+---
+
 # Ontological
 
 > The single front-door for Ontological. The **Narrative** lives in the prose
@@ -64,11 +76,11 @@ function followupTable(headers, section) {
 The project may be **multi-product**, starting with one. Source:
 [`./planning/products/`](./planning/products/).
 
-<%~ activeTable(["Product", "Status", "What it is"], it.products) %>
+<%~ activeTable(["Product", "State", "What it is"], it.products) %>
 <% if (it.products.followup.length) { %>
 **Emerging / obsoleted:**
 
-<%~ followupTable(["Product", "Status", "What it is"], it.products) %>
+<%~ followupTable(["Product", "State", "What it is"], it.products) %>
 <% } %>
 ## Drivers
 
@@ -120,7 +132,7 @@ Features get drafted as their releases schedule them.*
 
 | Source                                             | What it is                                                            |
 | -------------------------------------------------- | --------------------------------------------------------------------- |
-| [[D-ORMG-data-model]]                               | Authoritative roster — every entity by layer, with status and purpose |
+| [[D-ORMG-data-model]]                               | Authoritative roster — every entity by layer, with state and purpose |
 | [entity-model](./planning/decisions/entity-model/) | Design rationale and cross-entity relationships                       |
 | [[D-7F2M-why-what-verify-chain]]                    | The why→what→verify chain threaded through the Capability hinge       |
 

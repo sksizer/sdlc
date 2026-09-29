@@ -6,7 +6,7 @@
  * Roadmaps are id-only (no slug in the filename), same as milestone: renaming
  * the title never breaks inbound wikilinks. The id mint is seeded from the
  * required `title` so parallel branches minting different roadmaps get
- * different ids. Field types and the status birth default (`open/draft`)
+ * different ids. Field types and the state birth default (`open/draft`)
  * derive from `RoadmapSchema` (`../schema.ts`); `created` is the one
  * op-owned (dynamic) birth default.
  */
@@ -20,7 +20,7 @@ export default defineCreateOp({
   identity: { kind: 'id-only', seedKey: 'title' },
   fields: {
     title: { cli: { short: 't' } },
-    status: {},
+    state: {},
     created: { birthDefault: () => todayUtc() },
     planDoc: { fmKey: 'plan_doc', cli: { valueName: 'DOC' } },
     related: {},

@@ -70,13 +70,14 @@ Exactly one line on stdout, of the form:
 
 Where `MARKER` is one of:
 
-- `SPAWN-TASK-PR-DONE pr=<pr-url> target=<owner/name> branch=<branch> status=<final-status> action=<created|appended>`
+- `SPAWN-TASK-PR-DONE pr=<pr-url> target=<owner/name> branch=<branch> state=<final-status> action=<created|appended>`
   — the spawned task landed on `<branch>` and is carried by an open PR. The PR URL is the full
-  `https://github.com/...` link. `status=` is the spawned task's final status: `open/ready` when the
-  readiness drive succeeded, otherwise the fallback status. `action=created` when this call opened
-  the PR, `action=appended` when it added the task to a branch whose PR was already open
-  (`--pr rolling`). Keep the `SPAWN-TASK-PR-` prefix: a bare `DONE pr=` collides with `task-work`'s
-  `TASK-WORK-DONE pr=#<N>` and short-circuits an outer task-work LLM (2026-05-28 incident).
+  `https://github.com/...` link. `state=` is the spawned task's final state: `open/ready` when the
+  readiness drive succeeded, `planning/needs-definition` when the gate found a gap, otherwise the
+  fallback status. `action=created` when this call opened the PR, `action=appended` when it added
+  the task to a branch whose PR was already open (`--pr rolling`). Keep the `SPAWN-TASK-PR-` prefix:
+  a bare `DONE pr=` collides with `task-work`'s `TASK-WORK-DONE pr=#<N>` and short-circuits an outer
+  task-work LLM (2026-05-28 incident).
 - `SPAWN-TASK-PR-REHEARSED branch=<meta-task/...>` — `--no-push` was
   supplied; the target worktree exists, the task file was scaffolded
   and committed on a local meta-task branch, but nothing was pushed
@@ -109,7 +110,7 @@ for `Local`. If any required flag is missing, emit
 (`planning/draft`, `planning/needs-definition`, `planning/proposed`,
 `planning/backlog`; default `planning/draft`). Reject other values with
 `ERROR reason="bad fallback-status: <value>"` and exit 2 — a spawned follow-up
-never lands at a ready/in-progress/closed status.
+never lands at a ready/in-progress/closed state.
 
 `--pr`, if present, MUST be `open` or `rolling` (default `open`). Reject other
 values with `ERROR reason="bad pr mode: <value>"` and exit 2.
@@ -218,7 +219,7 @@ plugin install, which is where this SKILL.md lives).
 ${CLAUDE_PLUGIN_ROOT}/cli/sdlc task create \
   <slug> \
   --headline "<headline>" \
-  --status <fallback-status> \
+  --state <fallback-status> \
   --impact medium \
   --complexity small \
   --related <originating-basename> \
@@ -226,8 +227,8 @@ ${CLAUDE_PLUGIN_ROOT}/cli/sdlc task create \
   --project-root <target-repo>
 ```
 
-`--status` is the resolved `--fallback-status` (default `planning/draft`). The
-task is always scaffolded at this non-ready status; the optional readiness drive
+`--state` is the resolved `--fallback-status` (default `planning/draft`). The
+task is always scaffolded at this non-ready state; the optional readiness drive
 (Step 6a) is what promotes it to `open/ready`.
 
 Pass `--tags <classification-tag>` only when `--classification` is
@@ -257,9 +258,10 @@ placeholder convention is one line per section:
 
 These stubs are the landing state when the task is NOT driven to ready.
 When `--drive-to-ready true`, Step 6a runs `/sdlc:task-auto-define`, which
-best-effort replaces these stubs with synthesized content and promotes the
-task to `open/ready`; if it cannot, the stubs remain and the receiver fills
-them before promoting from the fallback status.
+best-effort replaces these stubs with synthesized content, then
+`/sdlc:task-ensure-ready`, which promotes the task to `open/ready`; if
+auto-define cannot fill them, the stubs remain and the receiver fills them
+before promoting from the fallback status.
 
 Run the frontmatter validator:
 
@@ -295,16 +297,24 @@ Follow-up spawned from [[<originating-basename>]] in
 EOF
 ```
 
-### 6a. Drive to ready (only when --drive-to-ready true)
+### 6a. Drive to ready (only when --drive-to-ready true and --fallback-status is not planning/needs-definition)
 
-Skip this step entirely when `--drive-to-ready` is absent or `false` — the
-task's final status is the fallback status from Step 4, and you proceed to
-Step 7.
+Skip this step entirely when `--drive-to-ready` is absent or `false`, or when
+`--fallback-status` is `planning/needs-definition` — the task's final state
+is the fallback status from Step 4, and you proceed to Step 7. The
+`planning/needs-definition` skip isn't an edge case to route around:
+`ensure-ready-mutate` doesn't accept `planning/needs-definition` as an input
+status (it's the gate's own downshift, meant to force human re-definition
+before re-entering the gate), and the config's documented purpose for setting
+`fallback_status: planning/needs-definition` is to route undriveable
+follow-ups straight into the definition backlog without ever attempting the
+gate.
 
-When `true`, best-effort drive the scaffolded task to `open/ready` before the
-PR opens, so the follow-up lands pickable instead of as a draft. The commit
-from Step 6 gives the drive a clean tree to work from (auto-define reads a
-committed body; ensure-ready refuses to stamp over uncommitted edits).
+When `--drive-to-ready` is `true` and `--fallback-status` is anything else,
+best-effort drive the scaffolded task to `open/ready` before the PR opens, so
+the follow-up lands pickable instead of as a draft. The commit from Step 6
+gives the drive a clean tree to work from (auto-define reads a committed
+body; ensure-ready refuses to stamp over uncommitted edits).
 
 Dispatch ONE sub-agent (`Agent` tool, `subagent_type: general-purpose`) that
 runs the two readiness skills in the target worktree and reports the outcome.
@@ -317,30 +327,36 @@ Plugin root: ${CLAUDE_PLUGIN_ROOT}
 Task file: <absolute path to the new task file in the worktree>
 
 Do, in order:
-1. Follow /sdlc:task-auto-define for this one task with --set-ready true:
-   read ${CLAUDE_PLUGIN_ROOT}/skills/task-auto-define/SKILL.md and execute it
+1. Follow /sdlc:task-auto-define for this one task: read
+   ${CLAUDE_PLUGIN_ROOT}/skills/task-auto-define/SKILL.md and execute it
    against the task file. It synthesizes the missing implementation-ready
-   sections from the task's prose + this repo's code, commits on the current
-   branch, and flips status to open/ready — OR bails with
+   sections from the task's prose + this repo's code and commits the body on
+   the current branch. It leaves state unchanged. It bails with
    TASK-AUTO-DEFINE-INSUFFICIENT if the spec can't be synthesized.
-2. If (and only if) auto-define reported TASK-AUTO-DEFINE-DEFINED, follow
-   /sdlc:task-ensure-ready for the same task to verify and stamp
-   readiness_verified_at (read ${CLAUDE_PLUGIN_ROOT}/skills/task-ensure-ready/SKILL.md).
+2. If auto-define reported TASK-AUTO-DEFINE-DEFINED or
+   TASK-AUTO-DEFINE-NO-CHANGES, follow /sdlc:task-ensure-ready for the same
+   task with --commit (read ${CLAUDE_PLUGIN_ROOT}/skills/task-ensure-ready/SKILL.md).
+   On a pass it promotes the task to open/ready and stamps
+   readiness_verified_at in one commit on the current branch.
+Do not set state yourself: ensure-ready does nothing to a task that is
+already open/ready, so an earlier flip would leave it unstamped.
 Do not push and do not open a PR — the parent skill owns that.
-Report exactly one line: DRIVE-RESULT status=<final-status> where final-status
-is open/ready on success, or the task's current fallback status if auto-define
-was INSUFFICIENT or ensure-ready found a gap.
+Report exactly one line: DRIVE-RESULT state=<final-status> where final-status
+is the task's state after the drive: open/ready on success, the fallback
+status if auto-define was INSUFFICIENT, or planning/needs-definition if
+ensure-ready found a gap.
 ```
 
-Read the sub-agent's `DRIVE-RESULT status=<...>` line and carry `<final-status>`
+Read the sub-agent's `DRIVE-RESULT state=<...>` line and carry `<final-status>`
 into Steps 7–8. If the sub-agent errored or returned no parseable line, treat
-the drive as unsuccessful: the final status is the fallback status (the Step 6
-commit already landed the valid draft), and you continue to Step 7 — a failed
+the drive as unsuccessful: read the final state from the task file (the Step
+6 commit already landed the valid draft), and you continue to Step 7 — a failed
 drive never fails the spawn. If `Agent` is unavailable, inline the two skills'
 procedures yourself against the task file, holding the same order and the
 never-fabricate discipline.
 
-The drive's commits (synthesized body, status flip, readiness stamp) are on
+The drive's commits (synthesized body, then the promotion that flips state
+and stamps readiness) are on
 `<branch>` and ride the push in Step 7.
 
 ### 7. Push and open or update the PR (unless --no-push)
@@ -381,12 +397,12 @@ Then decide create-vs-append:
   - Classification: <classification>.
 
   ## What this PR delivers
-  - A task file at `docs/planning/tasks/<file>.md` (status `<final-status>`).
+  - A task file at `docs/planning/tasks/<file>.md` (state `<final-status>`).
   - <If final-status is open/ready:> The spec was best-effort machine-authored
     by `/sdlc:task-auto-define` and carries an `AUTO-DEFINED:` note — review the
     Goal, Approach, Today, Areas, and Acceptance-criteria before
     trusting it.
-  - <If final-status is a planning/* status:> The body sections are stubs — the
+  - <If final-status is a planning/* state:> The body sections are stubs — the
     receiver should fill them before promoting to `open/ready`.
     <!-- include exactly one of the two bullets above, matching final-status -->
   - <If this is a rolling branch (--pr rolling):> Further follow-ups append to
@@ -410,11 +426,12 @@ Then decide create-vs-append:
 Emit on stdout:
 
 ```text
-SPAWN-TASK-PR-DONE pr=<pr-url> target=<owner/name> branch=<branch> status=<final-status> action=<created|appended>
+SPAWN-TASK-PR-DONE pr=<pr-url> target=<owner/name> branch=<branch> state=<final-status> action=<created|appended>
 ```
 
-`<final-status>` is `open/ready` when Step 6a's drive succeeded, otherwise the
-fallback status. Exit 0.
+`<final-status>` is the `DRIVE-RESULT` state from Step 6a, or the fallback
+status when Step 6a did not run — `--drive-to-ready false`, or
+`--fallback-status planning/needs-definition`, which skips the drive. Exit 0.
 
 ## Idempotency
 
@@ -448,16 +465,22 @@ Capture context, do not silently abandon:
   and proceed to a second `gh pr create` call.
 - **Readiness drive fails (Step 6a).** Never an ERROR — the Step 6
   commit already landed a valid draft. The drive is best-effort: on
-  INSUFFICIENT, a gate gap, or a sub-agent error, the task simply keeps
-  the fallback status and the spawn proceeds to push + PR.
+  INSUFFICIENT or a sub-agent error the task keeps the fallback status;
+  on a gate gap ensure-ready moves it to `planning/needs-definition`.
+  Either way the spawn proceeds to push + PR.
 
 ## Notes
 
 - **Drive to ready is best-effort and off by default.** `--drive-to-ready
-  true` (Step 6a) runs `/sdlc:task-auto-define --set-ready true` +
-  `/sdlc:task-ensure-ready` so the follow-up can land `open/ready` instead of
-  a draft; when the spec can't be synthesized or fails the gate, it lands at
-  `--fallback-status` (default `planning/draft`). Both flags come from the
+  true` (Step 6a) runs `/sdlc:task-auto-define` then
+  `/sdlc:task-ensure-ready` so the follow-up can land `open/ready`, with
+  `readiness_verified_at:` stamped, instead of a draft. When the spec can't
+  be synthesized it lands at `--fallback-status` (default `planning/draft`);
+  when it fails the gate it lands at `planning/needs-definition`. When
+  `--fallback-status` is itself `planning/needs-definition`, Step 6a skips
+  the drive entirely — that status is the gate's own give-up destination
+  and not a valid `ensure-ready` input, so the follow-up lands there
+  directly with no auto-define or gate call. Both flags come from the
   caller's resolved `task.execution.spawn_from_post_mortem` policy — see
   `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`.
 - **Commit messages.** See

@@ -86,7 +86,7 @@ invocation.
 Author `docs/planning/products/PR-NNNN-<slug>.md` (Write), following the product
 `body-template.eta`: Summary (first bullet tagged `^summary`) / What it is / Boundary / free-form
 middle / Drivers & goals / Status / References. Frontmatter per the product schema: `type: product`,
-`schema_version: '1'`, `id: PR-NNNN`, `status: open/draft`, `title`, `created` (today,
+`schema_version: '1'`, `id: PR-NNNN`, `state: open/draft`, `title`, `created` (today,
 `date -u +%Y-%m-%d`), `related`, `tags`, `need_human_review: true`.
 
 - Draw Boundary and non-goals from the research's build-vs-wrap and hard-cases findings.
@@ -97,7 +97,7 @@ middle / Drivers & goals / Status / References. Frontmatter per the product sche
 Author one `docs/planning/drivers/DR-NNNN.md` per motivating driver, following the driver
 `body-template.eta`: Statement (ends with `^summary`) / Who-what it affects / Evidence / Toward
 resolution. Frontmatter: `kind` (use-case | pain-point | opportunity), `product: '[[PR-NNNN-<slug>]]'`,
-`status: open/proposed`, plus the common fields.
+`state: open/proposed`, plus the common fields.
 
 - **Driver `related` accepts entity-id wikilinks only** (`[[PR-NNNN-<slug>]]`, `[[DR-NNNN]]`). Do
   NOT put the narrative research doc in a driver's `related` — it fails validation. Cite the

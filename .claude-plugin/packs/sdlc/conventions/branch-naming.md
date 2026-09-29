@@ -74,7 +74,7 @@ When to use:
 
 - Authoring a task spec collaboratively in a PR before anyone runs `task-work`.
 - Iterating on `## Approach` or ACs with reviewers before promoting to
-  `status: ready`.
+  `state: ready`.
 
 When NOT to use:
 

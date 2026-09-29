@@ -6,9 +6,9 @@
  * Tasks are the highest-volume, most-referenced corpus, so they live under
  * Planning (route `planning/tasks`, the generic default — NOT a custom Appendix
  * route). The override ADDS three domain columns to the generic Id / Title /
- * Summary roster — **Status**, **Impact**, **Complexity** — the triage axes a
+ * Summary roster — **State**, **Impact**, **Complexity** — the triage axes a
  * reader scans a task list by. The follow-up table already carries its own
- * Status column (non-active rows), so the Status column here surfaces the exact
+ * State column (non-active rows), so the State column here surfaces the exact
  * lifecycle stage (`open/ready`, `in-progress`, …) in the Active table too.
  *
  * On CHILD pages the override resolves `depends_on` — a list of `[[T-NNNN]]`
@@ -48,12 +48,12 @@ export const taskProjection: SiteProjection = {
   rosterTitle: 'Tasks',
   rosterDescription: 'Units of work, projected from task entities.',
   rosterLead:
-    'Units of work — each a status, impact, and complexity. Edit a task entity (or run `sdlc task create`) and regenerate.',
+    'Units of work — each a state, impact, and complexity. Edit a task entity (or run `sdlc task create`) and regenerate.',
   columns: [
     { header: 'Id', cell: (e, ctx) => anchoredTitleCell(e, ctx.projection) },
     { header: 'Title', cell: (e) => e.title },
     { header: 'Summary', cell: (e) => e.summary },
-    { header: 'Status', cell: (e) => (e.status ? `\`${e.status}\`` : '') },
+    { header: 'State', cell: (e) => (e.state ? `\`${e.state}\`` : '') },
     { header: 'Impact', cell: (e) => (taskImpact(e) ? `\`${taskImpact(e)}\`` : '') },
     { header: 'Complexity', cell: (e) => (taskComplexity(e) ? `\`${taskComplexity(e)}\`` : '') },
   ],
@@ -61,7 +61,7 @@ export const taskProjection: SiteProjection = {
   childPages: true,
   childBackLabel: 'Back to Tasks',
   childMeta: (e) => [
-    e.status ? `**Status:** \`${e.status}\`` : '',
+    e.state ? `**State:** \`${e.state}\`` : '',
     taskImpact(e) ? `**Impact:** \`${taskImpact(e)}\`` : '',
     taskComplexity(e) ? `**Complexity:** \`${taskComplexity(e)}\`` : '',
   ],

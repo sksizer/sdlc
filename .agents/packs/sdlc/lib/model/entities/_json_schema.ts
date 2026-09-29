@@ -18,7 +18,7 @@
  * with `$refStrategy: "none"` inlining the `CommonFrontmatter` base so the
  * `properties` map carries the common fields first, then the per-type extras.
  * Each property carries its `.describe()` text as `description`, its `pattern`
- * (id), `enum` (status), and `const` (type). The conditional-required types
+ * (id), `enum` (state), and `const` (type). The conditional-required types
  * (task, milestone, …) are `.superRefine`-wrapped (`ZodEffects`); the converter
  * unwraps them automatically, so the top level always has `properties`.
  *

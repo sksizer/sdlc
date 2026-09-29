@@ -21,7 +21,7 @@ import {
 import { titleMirrorsH1 } from '../_rules.ts'
 
 /** Mirrors `driver/schema.json` `version`. */
-export const SCHEMA_VERSION = '1'
+export const SCHEMA_VERSION = '2'
 
 /** Product-shaped wikilink (slug optional). */
 export const PRODUCT_WIKILINK_PATTERN = entityWikilinkPattern('PR')
@@ -37,7 +37,7 @@ export const DriverSchema = CommonFrontmatter.extend({
         "(Drivers use incrementing numbering; 'D' is taken by Decision). Never " +
         'renamed once assigned.',
     ),
-  status: z
+  state: z
     .enum(['open/proposed', 'open/validated', 'closed/resolved', 'closed/retired'])
     .default('open/proposed')
     .describe(

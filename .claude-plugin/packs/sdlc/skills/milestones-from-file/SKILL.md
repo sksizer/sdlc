@@ -106,9 +106,9 @@ pass through the source rather than a re-read per candidate later.
 ### Frontmatter fields (passed to `sdlc milestone create`)
 
 - **title** (required) — a one-line headline. Distill from the source heading or first sentence.
-- **status** — default `open/draft`. Upgrade to `open/planned` if the source says it's committed but
+- **state** — default `open/draft`. Upgrade to `open/planned` if the source says it's committed but
   not started, or `open/active` if work has visibly begun. Use `closed/done` only if the source
-  explicitly states it shipped (then a `completion_note` is mandatory). Statuses, conditional
+  explicitly states it shipped (then a `completion_note` is mandatory). States, conditional
   requirements, and the full enum live in
   `${CLAUDE_PLUGIN_ROOT}/lib/model/entities/milestone/schema.ts` — consult it rather than guessing.
 - **version** — only if a semver-shaped version is named near the candidate.
@@ -157,7 +157,7 @@ then `git branch -D` the empty branch) and tell the user no milestones were foun
 If `--auto` was passed, skip this step.
 
 Otherwise, present the candidate list to the user as a numbered text summary. For each candidate,
-include title, status, and any of version/target_date/tags/tasks that were populated. Keep each
+include title, state, and any of version/target_date/tags/tasks that were populated. Keep each
 entry to ≤2 lines.
 
 Then ask via AskUserQuestion how to proceed:
@@ -177,7 +177,7 @@ For each confirmed candidate, run from inside the worktree:
 ${CLAUDE_PLUGIN_ROOT}/cli/sdlc milestone create \
   --project-root <worktree-absolute-path> \
   --title "<title>" \
-  --status <status> \
+  --state <state> \
   [--version <semver>] \
   [--target-date YYYY-MM-DD] \
   [--tasks <basename>]... \
@@ -269,8 +269,8 @@ N milestones created.
 
 ## Milestones
 
-- M0001 — <title> (<status>)
-- M0002 — <title> (<status>)
+- M0001 — <title> (<state>)
+- M0002 — <title> (<state>)
 ...
 
 ## Source
@@ -283,7 +283,7 @@ Each milestone is `open/draft` (or as labeled) and meant as a starting point.
 Body sections were best-effort distilled from the source; any remaining
 `<...>` placeholders indicate sections the source didn't cover.
 Reviewers should refine titles, fill in remaining placeholders, and adjust
-status before merging if any candidate isn't actually a milestone.
+state before merging if any candidate isn't actually a milestone.
 EOF
 )"
 ```

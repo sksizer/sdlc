@@ -11,18 +11,55 @@ managed by `/sdlc:setup`'s entity-schema machinery.
 The **authoritative source of truth** for `sdlc.yaml` is the Zod schema
 `SdlcConfigSchema` in `solutions/ontological/lib/config/load.ts`. Every supported
 top-level key, its type, its default, and its description live there as
-`.describe()` and `.default()` annotations. This prose doc covers the
-"why" (what each key is for, which skills consume it, when to set it) but
+`.describe()` and `.default()` annotations, and every top-level key also
+carries a `.meta()` block (see [Key meta](#key-meta)). This prose doc covers
+the "why" (what each key is for, which skills consume it, when to set it) but
 does not re-state the field list.
 
 `SdlcConfigSchema` is the **only** validation path. There is no generated
 JSON-Schema artifact and no AJV validator: both `loadConfig`'s hydration
-and the strict surface (`validateFile`, and `lib/config/verbs.ts`'s
-`resolveVerb` when it validates, via the `.safeParse` core in
+and the strict surface (`validateFile`, and `lib/config/workflows.ts`'s
+`resolveWorkflow` when it validates, via the `.safeParse` core in
 `solutions/ontological/lib/config/schema.ts`) validate against this
 one Zod schema. To export a JSON Schema for an external tool, generate it
-on demand from `SdlcConfigSchema` with `zod-to-json-schema`; nothing is
-checked in, so there is no resync step and no drift to guard.
+on demand from `SdlcConfigSchema` with Zod 4's `z.toJSONSchema` (the key meta
+rides along as extra properties); nothing is checked in, so there is no
+resync step and no drift to guard.
+
+The **field-by-field reference** is generated from the same schema and meta:
+`sdlc docs generate sdlc-yaml` writes `docs/sdlc-yaml-reference.md` (one
+section per top-level key: description, meta, value shape, default, nested
+fields; `lib/config/reference.ts`), and `sdlc docs generate --check` fails when
+the committed copy drifts from the schema. From inside a project,
+`sdlc config list` shows every key's effective value and the layer it comes
+from, and `sdlc config explain <key>` (dotted paths such as
+`orchestrator.max_implementations` work) prints one key's reference entry
+alongside its value here.
+
+## Key meta
+
+Every top-level key of `SdlcConfigSchema` ends its schema chain with
+`.meta(keyMeta({...}))`, typed by `ConfigKeyMeta` in
+`solutions/ontological/lib/config/meta.ts`:
+
+| Field | Values | Meaning |
+|---|---|---|
+| `category` | `lifecycle` \| `automation` \| `integration` \| `planning` \| `infrastructure` | Grouping for `sdlc config list` and the generated reference. |
+| `consumers` | non-empty list of `<path>.ts#<symbol>` or `planned:<note>` | The code that reads the key, paths relative to the sdlc source root. `planned:` marks a reserved section whose reader is not built yet. |
+| `layers` | non-empty subset of `project` \| `local` \| `machine` \| `subtree` | The files that may set it: `sdlc.yaml`, `sdlc.local.yaml`, the machine config, a nested `sdlc.yaml` (`verify:` only). |
+| `applies_via` | `read` \| `apply:hooks` \| `apply:harness` \| `apply:mcp` | `read`: consumers read it at run time. `apply:<applier>`: `sdlc apply` must run before a change is live. |
+| `runs_in` | non-empty subset of `cli` \| `hook` \| `loop` \| `session` \| `ci` | Where the consumers run. |
+
+Meta is required on top-level keys only; a nested field carries a
+`.describe()` and inherits its section's meta. `.meta()` must be the last call
+on the chain, because `.default()`/`.prefault()`/`.optional()` each wrap the
+schema in a new instance and the registry is keyed by instance.
+`checkConfigMeta(shape)` reports every key with missing or malformed meta, and
+`lib/config/meta.test.ts` fails on any report. The same test checks the claims
+the code can confirm: every `<path>#<symbol>` consumer exists and mentions the
+symbol, the `machine` layer is claimed by exactly the keys
+`MachineConfigSchema` declares, and no trust key appears in `SdlcConfigSchema`
+(trust is machine-local; see [Trust](#trust)).
 
 ## Single hydration point
 
@@ -72,25 +109,41 @@ equal the all-defaults object, so writing the file changes no behavior; it only
 documents the surface. Preview or regenerate it any time with `sdlc config
 scaffold`.
 
+`sdlc init` writes the smaller **starter** form
+instead (`configStarterYaml`, same module): only the verbs detection finds are
+set — `workflows.check` from the project's aggregate `ci`/`check` task or else
+its `fmt-check`/`lint`/`typecheck`/`test` tasks (`@sksizer/detect-runners`, as
+`sdlc quality detect` probes), `workflows.setup` from `sdlc project
+detect-setup`'s candidates — and every other key is a commented-out skeleton
+with its description, grouped by meta category. It refuses to overwrite an
+existing `sdlc.yaml` without `--force`; `--dry-run` prints the file instead.
+
 ## Shape at a glance
 
 A minimal example covering every supported key:
 
 ```yaml
-verbs:                      # named lifecycle verbs: setup, setup-hooks, check
+workflows:                  # named lifecycle workflows: setup, setup-hooks, check, ...
   setup:
     - bun install
   setup-hooks:              # optional; absent/null → fallback to setup, [] → no-op
     - bun install --frozen-lockfile --filter '@myname/my-package'
-  check:
+  fmt-check:
+    - bun run format:check
+  lint:
     - bun run lint
+  check:                    # composed BY REFERENCE — each line lives in one place
+    - run: fmt-check
+    - run: lint
     - bun test
+  pr-review:
+    engine: codex            # engine/host live beside steps on any entry
 
 orchestrator:
   max_implementations: 5    # cap on concurrent /sdlc:task-work sub-agents
   max_awaiting_review: 20   # informational ceiling on open PRs awaiting review
   review:
-    command: '/pr-tools:review-pr {pr} --mode auto'  # Step 2a's per-PR command
+    max_rounds: 3           # review/respond round-trips per PR before it stops
 
 pr_update:                  # sdlc pr survey / sdlc pr update
   author: null              # null = every author; '@me' = just yours
@@ -135,10 +188,10 @@ checkout:                   # sdlc repo checkout <url>
   protocol: https           # https | ssh, for a bare owner/repo input
 
 host:
-  default: terminal         # terminal | orca | cmux
+  default: terminal         # terminal | orca | cmux | tmux
 
 pr_review:                  # sdlc pr review
-  engine: claude            # claude | codex
+  engine: claude            # claude | codex | cursor | pi
   untrusted: skip-init      # skip-init | full | refuse
   setup: true               # run setup on every launch; --no-setup skips it
 
@@ -148,44 +201,56 @@ verify:                     # sdlc verify changes
 ```
 
 Every top-level key is optional. An entirely empty file (or a missing
-file) is valid and means "no preferences set." `additionalProperties:
-false` on the schema means typos at the top level (e.g. `vebs:` instead
-of `verbs:`) are caught — see the validator output for the specific key
-name.
+file) is valid and means "no preferences set." The schema is `.strict()`
+at every level, so typos (e.g. `workflow:` instead of `workflows:`) are
+caught — see the validator output for the specific key name.
 
 ## Keys — the "why" (the "what" is in the schema)
 
-### `verbs:` — named lifecycle commands
+### `workflows:` — named lifecycle commands
 
-A map of name → list of shell verbs. Each verb is the exact command line a
-human would type, invoked through a shell (`sh -c "<verb>"`). Verbs are the
-canonical home for every lifecycle command this project's tools run:
-`/sdlc:task-work` Step 4 (setup), Step 7 (check), `sdlc pr review` (setup),
-ephemeral commit-worktrees (setup-hooks), and `sdlc quality run` (any named
-verb). Baseline names `setup`, `setup-hooks`, and `check` are run by SDLC
-itself; [[S-0013-baseline-task-vocabulary]] names (`fmt`, `lint`, `test`,
-`build`, etc.) pass through unchanged; any other name is allowed and validated
-for shape only (non-empty string list). sdlc's own `setup`/`check` sit above
+A map of name → an ordered list of steps, resolved and executed by the one
+shared cascade every lifecycle-command consumer calls through
+([[D-LSLH-collapse-verbs-workflows-chain-hooks]]; see "Resolution: the
+workflow cascade" below). A step is `{script: '<command>'}` (a shell command
+line, invoked through a shell — `sh -c "<command>"`), `{run: '<name>'}`
+(splices in another named workflow's own resolved steps, recursively —
+see "Composing a workflow from named leaves" below), `{skill: '<name>'}` or
+`{prompt: '<text>'}` (launches an agent session; only meaningful for the
+built-in lifecycle names, never for a `hooks:` step). **A bare string in the
+list is sugar for `{script: '<string>'}`** — a verb's old shell-command list
+is spelled identically, just under this key.
+
+`workflows:` is the canonical home for every lifecycle command this
+project's tools run: `/sdlc:task-work` Step 4 (setup), Step 7 (check),
+`sdlc pr review` (setup), ephemeral commit-worktrees (setup-hooks), and
+`sdlc quality run` (any named entry). Baseline names `setup`, `setup-hooks`,
+and `check` are run by SDLC itself; [[S-0013-baseline-task-vocabulary]] names
+(`fmt`, `lint`, `test`, `build`, etc.) pass through unchanged; any other name
+is allowed and validated for shape only. sdlc's own `setup`/`check` sit above
 the S-0013 runner vocabulary — a project's S-0013 tasks (`moon run fmt`, etc.)
-are typically what a `verbs:` entry invokes.
+are typically what a `workflows:` entry invokes. An entry may also set
+`engine`/`host` (`workflows.<name>.engine`/`.host`) with no `steps` at all —
+the one place a workflow's session engine/host live, read by `resolveWorkflow`
+and dispatched by the orchestrate loop and `sdlc session launch` alike.
 
 Execution semantics:
 
-- Each verb is invoked through a shell. Multi-word verbs, pipes, and
-  redirections work (`just full-check`, `cmd | grep foo`, etc.). Cwd varies
-  by consumer: task-worktrees run in the worktree root; ephemeral
-  commit-worktrees run in their detached root; other contexts (quality run)
-  default to the project root or explicit override.
-- Order matters: verbs execute sequentially; the first failure aborts
+- A `script`/bare-string step is invoked through a shell. Multi-word
+  commands, pipes, and redirections work (`just full-check`, `cmd | grep
+  foo`, etc.). Cwd varies by consumer: task-worktrees run in the worktree
+  root; ephemeral commit-worktrees run in their detached root; other
+  contexts (quality run) default to the project root or explicit override.
+- Order matters: steps execute sequentially; the first failure aborts
   the run.
-- Empty list (`verbs.check: []`) and missing name both mean "nothing" for
+- Empty list (`workflows.check: []`) and missing name both mean "nothing" for
   baseline verbs, with one exception: `setup-hooks` absent falls back to
   `setup` (same cascade logic as below); explicit `[]` means no fallback.
 
 Examples:
 
 ```yaml
-verbs:
+workflows:
   setup:
     - bun install
   check:
@@ -195,15 +260,48 @@ verbs:
 ```
 
 ```yaml
-verbs:
+workflows:
   check:
     - solutions/ontological/cli/sdlc entities audit
     - bun test solutions/ontological/plugin/plugins/sdlc/skills/entities-audit/tests/run_evals.test.ts
 ```
 
+#### Composing a workflow from named leaves
+
+A `{run: <name>}` step splices in `<name>`'s own already-resolved steps —
+recursively, guarded against a cycle by a threaded visited-name set (a real
+cycle throws `OpError('SCHEMA_ERROR', 'workflow cycle: a → b → a')`; a
+non-cyclical multi-level chain, e.g. a hook's `run: check` where `check`
+itself composes four `run:` references, resolves fine). This is how the
+[[S-0013-baseline-task-vocabulary]] names compose into `check` BY REFERENCE
+rather than duplicating command lines:
+
+```yaml
+workflows:
+  fmt-check:
+    - bun run format:check
+  lint:
+    - bun run lint
+  typecheck:
+    - bunx tsc --noEmit
+  test:
+    - bun test
+  check:                      # composed BY REFERENCE, not duplicated lines
+    - run: fmt-check
+    - run: lint
+    - run: typecheck
+    - run: test
+```
+
+Each command line lives in exactly one place; `check` is a plain list of
+names. A project that wants CI to run a different test tier edits
+`workflows.check` alone — the leaf entries don't move. By the time
+`resolveWorkflow` returns, a `run:` step has always been spliced away: the
+resolved list contains only `skill`/`prompt`/`script` steps.
+
 #### Baseline-gated mode: isolating pre-existing drift
 
-Some `verbs.check` entries (notably `sdlc entities audit`) audit the
+Some `workflows.check` entries (notably `sdlc entities audit`) audit the
 entire entity corpus on every run and emit findings that may already
 be present on `origin/main` — drift the current branch did not
 introduce. Without a baseline, the gate forces every operator to
@@ -251,21 +349,32 @@ multiple in-flight branches without manual cleanup.
 gate needs to capture each verb's stdout to compute the diff. Passing
 both warns and coerces to `--line`.
 
-## Resolution: the verb cascade
+## Resolution: the workflow cascade
 
-Every tool that runs a verb (task-work, pr review, quality run, or
-ephemeral commit-worktree arming) calls the same resolver: `resolveVerb(name,
-repoRoot)` from `lib/config/verbs.ts`. It picks the effective verb list for
-a name by walking four layers in order, highest layer wins per name (the
-whole list replaces, never merges):
+Every tool that runs a named command list (task-work, pr review, quality run,
+or ephemeral commit-worktree arming) calls the same resolver:
+`resolveWorkflow(name, projectRoot)` (or its script-only-shaped wrapper,
+`resolveWorkflowCommands`) from `lib/config/workflows.ts`. It picks the
+effective step list for a name by walking layers in order, the highest layer
+either fully REPLACING the layer beneath it or WRAPPING it (`prepend`/
+`append`) — see [[D-LSLH-collapse-verbs-workflows-chain-hooks]] for the full
+design:
 
 | Layer | Where | Source tag | Whose |
 |-------|-------|------------|-------|
-| Environment | `SDLC_VERB_<NAME>` (uppercase, `-` → `_`), newline-separated; an empty value means `[]` | `env` | the person's, a one-run override |
-| Local | `<repoRoot>/sdlc.local.yaml` `verbs.<name>` | `local` | the checkout's |
-| Project | `<repoRoot>/sdlc.yaml` `verbs.<name>` (via `loadConfig`) | `project` | the repository's |
-| Default | Heuristic, `setup` only (below) | `default` | inferred from the repository |
-| None | Name absent from all layers | `none` | — |
+| Environment | `SDLC_WORKFLOW_<NAME>` (uppercase, `-` → `_`), newline-separated; an empty value means `[]`; full replace only, never a wrap | `env` | the person's, a one-run override |
+| Local | `<projectRoot>/sdlc.local.yaml` `workflows.<name>` (raw, its own layer) | `local` | the checkout's |
+| Project | `<projectRoot>/sdlc.yaml` `workflows.<name>` (raw, its own layer) | `project` | the repository's |
+| Default | Built-in step list in code, or (`setup` only) the heuristic below | `default` | sdlc's own, or inferred from the repository |
+| None | Nothing — not env, not local, not project, not a builtin entry — named this `name` at all | `none` | — |
+
+Every resolved step carries `{layer, mode}` provenance (`mode` is
+`'default'`/`'replace'`/`'prepend'`/`'append'`) — `sdlc config explain
+workflows.<name>` renders it directly, one line per step. The envelope
+`layer` above is distinct from any one step's: it is `'none'` only when
+NOTHING named `name` at all, which is what lets `sdlc run <name>` tell "nobody
+has ever heard of this name" (a hard error) apart from "this name resolves to
+zero steps on purpose" (a silent no-op) — see `lib/services/workflow/ops/run.ts`.
 
 **The default heuristic (setup only).** When no config layer carries `setup`,
 the resolver probes the repo with `detect-runners#collect`, passing
@@ -274,31 +383,41 @@ what a verb RESOLVES to, not merely whether it may run (see Trust, below). A
 single `just`/`moon`/`mise` task named `setup`, `install`, or `bootstrap`
 becomes `setup`. Otherwise, a single lockfile-driven package-manager install
 (from `detectDeps`) becomes `setup`. More than one candidate at any step
-(ambiguity) yields `source: 'none'` — no guess. Under `allowExec: false`
+(ambiguity) yields `layer: 'none'` — no guess. Under `allowExec: false`
 (the repo is not trusted and no per-run `--trust` applies) only parse-kind
 runners surface tasks: `just` does, `moon` and `mise` (exec-kind, readable
 only by running them) contribute nothing until the repo is trusted (`sdlc repo
 trust`) or a per-run `--trust` flag lets the probe execute.
 
 **The `setup-hooks` fallback.** When `setup-hooks` is absent from all three
-config layers (env, local, project), `resolveVerb('setup-hooks', …)` walks
-the cascade FOR `setup` and returns that result verbatim (so `source` reports
-where `setup` actually came from). Explicit `setup-hooks: []` in any layer
-means "no fallback" — that name is satisfied and setup-hooks runs nothing.
+config layers (env, local, project), `resolveWorkflow('setup-hooks', …)`
+walks the cascade FOR `setup` and returns that result verbatim (so `layer`
+reports where `setup` actually came from). Explicit `setup-hooks: []` in any
+layer means "no fallback" — that name is satisfied and setup-hooks runs
+nothing.
 
-**Cross-repo validation.** When `repoRoot` differs from the preflight cwd
-(e.g., `sdlc pr review <url>` targeting another repo), `resolveVerb` validates
-the target's `sdlc.yaml` and `sdlc.local.yaml` (when present), throwing
-`OpError('SCHEMA_ERROR', …)` so a stale key fails loudly rather than silently
-defaulting. Callers that choose `validate: false` opt out (used internally
-when recursing to the `setup` fallback).
+**`run:` composition.** A `{run: <other>}` step is not a shell command — it
+splices `<other>`'s own already-resolved steps in place, recursively
+(cycle-guarded). See "Composing a workflow from named leaves" above. By the
+time `resolveWorkflow` returns, its steps are always `skill`/`prompt`/
+`script` only.
+
+**Cross-repo validation.** When `projectRoot` differs from the preflight cwd
+(e.g., `sdlc pr review <url>` targeting another repo), `resolveWorkflow`
+validates the target's `sdlc.yaml` and `sdlc.local.yaml` (when present),
+throwing `OpError('SCHEMA_ERROR', …)` so a stale key fails loudly rather than
+silently defaulting. Callers that choose `validate: false` opt out (used
+internally when recursing into a `run:`/fallback splice).
 
 **Unknown keys fail validation.** A top-level key the schema does not declare
-fails Zod's ordinary unrecognized-key check, the same diagnostic as any typo.
-There is no migration shim for earlier shapes; [[D-V2XJ-verb-cascade-and-repo-trust]]
-records what moved where.
+fails Zod's ordinary unrecognized-key check, the same diagnostic as any typo
+— including a leftover `verbs:` section from before this cascade collapsed
+`verbs:`/`workflows:` into one. There is no migration shim for the retired
+shape; [[D-LSLH-collapse-verbs-workflows-chain-hooks]] records what moved
+where (superseding [[D-V2XJ-verb-cascade-and-repo-trust]], which specified the
+now-retired `verbs:`-only cascade).
 
-**The gate rule.** A resolved verb list whose `source` is `local`, `project`
+**The gate rule.** A resolved step whose `layer` is `local`, `project`
 or `default` was read from inside the repository being acted on, and runs
 only when that repo is trusted (`sdlc repo trust`) or the caller passes
 `--trust` for this run on a command that offers it. The gate asks about the
@@ -307,8 +426,8 @@ worktree and a subdirectory resolve to the main checkout `sdlc repo trust`
 grants, so one grant covers every worktree of a repository and the two
 surfaces cannot disagree. A command with no `--trust` flag (the ephemeral
 commit-worktree arming, which runs unattended) says so — its refusal names
-`sdlc repo trust <root>` and nothing else. `env`-sourced verbs — the person's own shell — run
-ungated, and so does `source: 'none'` (nothing to gate). Every verb-running
+`sdlc repo trust <root>` and nothing else. `env`-sourced steps — the person's own shell — run
+ungated, and so does `layer: 'none'` (nothing to gate). Every verb-running
 call site checks this immediately before its resolved list executes, never
 before resolution; see Trust, below.
 
@@ -403,15 +522,15 @@ project file accepts; deep-merged over the project config BEFORE validation
 Use it to override one verb without editing the project file:
 
 ```yaml
-verbs:
+workflows:
   check:
     - just full-check-local
 ```
 
-The resolver reports `source: 'local'` when the verb came specifically from
+The resolver reports `layer: 'local'` when the verb came specifically from
 this file, not from the underlying project config. The strict-validation
-surfaces (`resolveVerb`'s loud path, and the per-op preflight gate) validate
-`sdlc.local.yaml` on its own — a read/parse/non-mapping error or an unknown
+surfaces (`resolveWorkflow`'s loud path, and the per-op preflight gate)
+validate `sdlc.local.yaml` on its own — a read/parse/non-mapping error or an unknown
 key fails loudly naming the local file — before also validating the two
 merged together. The standalone check matters because `loadConfig`/
 `loadConfigLayers` (the tolerant path other callers use) degrade an
@@ -435,13 +554,13 @@ orchestrator:
 ```
 
 - **`max_implementations:`** — hard cap on the count of tasks
-  currently in the `implementing` category (status `in-progress`,
+  currently in the `implementing` category (state `in-progress`,
   no open PR). When the count is at or above this limit, the
   orchestrator does NOT dispatch any new `/sdlc:task-work`
   sub-agents this tick. This is the only limit that blocks
   dispatch. Default: `5`.
 - **`max_awaiting_review:`** — informational ceiling on the count
-  of tasks in the `awaiting-review` category (status `in-progress`
+  of tasks in the `awaiting-review` category (state `in-progress`
   AND an open PR exists for `task/<basename>`). When the count is
   at or above this limit, the orchestrator's digest line records
   `caps-reached=max_awaiting_review` as a warning so the human knows
@@ -469,29 +588,206 @@ treated the same as missing.
 ```yaml
 orchestrator:
   review:
-    engine: claude   # default; or codex
     max_rounds: 3    # default
+    response_policy: docs/planning/standards/S-0018-review-response-policy.md
+
+workflows:
+  pr-review:
+    engine: codex    # the prs/merges ticks' dispatch engine — see below
 ```
 
 Configures the `prs`/`merges` ticks' (`sdlc orchestrate run`) built-in
-`pr-review` workflow dispatch.
+`pr-review` workflow dispatch. The dispatch ENGINE is no longer set here —
+`orchestrator.review.engine` was retired
+([[D-LSLH-collapse-verbs-workflows-chain-hooks]]) in favor of
+`workflows.pr-review.engine`, the one place a workflow's engine/host live
+(see `workflows:` above). It is deliberately separate from `pr_review.engine`
+(the interactive `sdlc pr review` engine) so an unattended review can run a
+different model from the one the PR author used. Default: `claude`.
 
-- **`engine:`** — engine the `prs`/`merges` ticks dispatch the
-  `pr-review` workflow with. Deliberately separate from
-  `pr_review.engine` (the interactive `sdlc pr review` engine) so an
-  unattended review can run a different model from the one the PR
-  author used. Default: `claude`.
+Every orchestrate/`sdlc run` dispatch is HEADLESS — there is no person
+sitting at a terminal to attend it — so `engine` here (and on any other
+`workflows.<name>` entry a headless caller runs) must be `claude` or `codex`.
+`cursor`/`pi` have no headless mode at all (`session/ops/launch.ts`'s
+`headlessArgv` doc) and are rejected before any step runs
+(`orchestrator/step-runner.ts`'s `runWorkflow`), not merely warned about or
+left to fail partway through a step. An interactive `sdlc session launch
+--workflow` has no such restriction — all four engines are valid there.
+
 - **`max_rounds:`** — cap on review/respond round-trips per PR
   (tracked on the per-PR cursor's `review_rounds` field) before the
   loop stops dispatching `pr-review`/`pr-respond` for that PR and
   fires a `max-rounds` notification instead of looping forever.
   Default: `3`.
+- **`response_policy:`** — repo-relative path to a standard document
+  the `pr-respond` skill triages review comments against: fix /
+  decline-with-a-reply / verify-before-acting / minimize-churn /
+  loop-guard-at-`max_rounds`. Unset (the default) falls back to a
+  short built-in policy inlined in the skill's own prose, which states
+  the same triage shape. `S-0018-review-response-policy.md` is the
+  editable, project-tunable version — point this key at a project's
+  own copy to change the triage rules without editing the skill. Read
+  via `sdlc config get orchestrator.review.response_policy`, and also
+  surfaced in the Router's feedback bundle
+  (`lib/services/dispatch/feedback.ts`'s `responsePolicyLine`) so a
+  `resume`/`live` delivery — which sends the bundle as a bare
+  follow-up prompt, never re-reading the `pr-respond` skill's own
+  instructions — still knows which policy governs its reply. This key
+  is a DIFFERENT document from `S-0017-code-review-rubric.md` (no
+  config key of its own — `sdlc verify changes` applies it by matching
+  every standard whose `applies_to.paths` encloses a changed file, not
+  by a named key): S-0017 judges a diff when it's opened;
+  `response_policy` governs how a session responds to feedback on a
+  diff already opened.
 
-Missing block or missing key defaults to both values above. (An
-earlier `command` field here backed the OLD `/sdlc:orchestrate`
+Missing block or missing key defaults to `max_rounds: 3` and no
+`response_policy` (built-in fallback); a missing `workflows.pr-review.engine`
+defaults to `claude`. (An earlier `command` field here backed the OLD
+`/sdlc:orchestrate`
 Step 2a opt-in review phase; that phase and its `get-review-policy` op
 were retired when the orchestrate skill was rewritten as a thin
 `orchestrate run` wrapper — see [[T-XRFD]].)
+
+#### `orchestrator.router:` — delivering PR feedback into its producing session
+
+```yaml
+orchestrator:
+  router:
+    enabled: true                        # default
+    routes: [live, resume, fresh]        # default
+    live_enabled: false                  # default
+    max_deliveries_per_pr: 20            # default
+```
+
+The Router (M-27ZR, `lib/services/dispatch/`) is how the `prs`/`merges`
+ticks deliver a PR's review comments, failing checks, or merge conflicts
+back to the session that produced the PR, instead of always paying for a
+brand-new, context-less `pr-respond` sub-agent. It tries an ordered
+fallback chain and stops at the first route that succeeds:
+
+- **`live`** — send text into a still-running session (Orca-hosted
+  only today; the one host with a documented terminal-injection
+  mechanism). Off by default (`live_enabled: false`) — unverified
+  against a real Orca session outside this repo's own dev loop.
+- **`resume`** — a headless native resume of the originating harness
+  session (`claude -p --resume <id> -- <message>` /
+  `codex exec resume <id> -- <message>`) with the feedback bundle as
+  the follow-up prompt. The common case once a task's session record
+  has a `hostSessionId`.
+- **`fresh`** — today's cold dispatch: open a brand-new `pr-respond`
+  sub-agent with the feedback as its prompt. Always reachable once a
+  PR number is known; the terminal fallback when no session can be
+  resolved or every earlier route fails.
+
+Delivery is idempotent per feedback item (a signature-keyed
+`DeliveryRecord` — the same comment is never redelivered) and gated by
+the same per-task operation lease and `orchestrator.review.max_rounds`
+cap `pr-respond` itself already respects.
+
+- **`enabled:`** — whether the `prs`/`merges` ticks route feedback
+  through the Router at all. `false` restores the pre-Router
+  cold-dispatch-only behavior for every tick's OWN automatic
+  reconciliation; `sdlc pr route`/`sdlc task dispatch` (below) can
+  still be invoked manually regardless of this flag. Default: `true`.
+- **`routes:`** — the ordered fallback chain itself; a route missing
+  from this list is never attempted. Default: `[live, resume, fresh]`.
+- **`live_enabled:`** — whether `live` may actually run even when
+  `routes` lists it. Default: `false` (see above).
+- **`max_deliveries_per_pr:`** — cap on entries kept in one subject's
+  `DeliveryRecord` attempt history (oldest dropped past this); does
+  NOT cap how many distinct items can be delivered. Default: `20`.
+
+Missing block or missing key defaults to all four values above.
+
+##### Pausing the orchestrator
+
+`sdlc orchestrate pause [--loop work|prs|merges|issues]...` /
+`sdlc orchestrate resume [--loop ...]` / `sdlc orchestrate status` are
+runtime switches, not `sdlc.yaml` config — they persist to
+`.sdlc/pause.json` (gitignored, `lib/services/dispatch/pause.ts`), so a
+running `sdlc orchestrate run --loop ... --interval ...` foreground
+loop picks up a pause on its very next tick without a restart. No
+`--loop` means all four loops; repeating the flag composes (two
+separate `pause --loop prs` / `pause --loop work` calls both end up
+paused, not the second replacing the first). Both `pause` and `resume`
+accept `--dry-run` to preview the resulting state without writing it.
+
+While paused, a tick still classifies open PRs/issues, still runs
+`task next`/`task inflight`, and still logs to
+`.sdlc/orchestrator-log.md` — pause gates dispatch ONLY, never
+read-only survey/classification/logging. Every mutating step of a
+paused loop is gated, not just its main dispatch: `work.ts`'s
+per-candidate `define`/`implement`/`check`/`judge` dispatch,
+`prs.ts`'s `pr-review`/`pr-respond` dispatch (both the pre-Router
+path and the Router `deliver()` call), `merges.ts`'s close-out
+(step 1), `pr-update` fan-out (step 3), and CONFLICTS dispatch
+(step 4), and `issues.ts`'s per-issue dispatch/relabel all report
+`claim: 'paused'` (or, for `merges.ts`'s `pr-update` fan-out,
+`ran: false, paused: true`) per item instead of running.
+`merges.ts`'s step 5 survey/requeue signal is the one merges-tick
+part that keeps running regardless — it is genuinely read-only.
+`ops/run.ts` folds a paused `merges` tick's step-1/3 skip counts
+into one `PAUSED: loop=merges detail="skipped close-out/pr-update
+for N PRs"` line, and a paused `issues` tick's skip count into one
+`PAUSED: loop=issues detail="skipped dispatch/relabel for N
+issues"` line, on the tick digest so an operator watching the log
+can see the pause actually took effect (see `ticks/work.ts`,
+`ticks/prs.ts`, `ticks/merges.ts`, `ticks/issues.ts`, and
+`ops/log-tick.ts`'s `PAUSED:` event).
+
+`issues.ts`'s workflow-bound dispatch (`define`/`implement`/`check`/
+`judge`/`review`/`respond`/`close-out`) claims, for each stage, the
+SAME operation lease the sibling tick that could independently pick
+up that exact item claims for that exact stage — never one blanket
+lease:
+
+- `define`/`implement`/`check`/`judge` claim `work.ts`'s own per-task
+  lease (`orchestrate-work/<basename>`, `ticks/_op_lease.ts`) — an
+  issue's linked task can independently surface as a `task next`
+  candidate for `work.ts`'s own ready-task walk.
+- `review`/`respond` claim `ticks/_pr_action.ts`'s own per-PR lease
+  (`orchestrate-pr-review`/`orchestrate-pr-respond`, keyed by PR
+  NUMBER, never the task basename) — the SAME lease `prs.ts` claims
+  for its own verdict-driven `pr-review`/`pr-respond` dispatch of that
+  exact PR.
+- `close-out` claims `ticks/_close_out.ts`'s own lease
+  (`orchestrate-merge-close-out/<basename>`) — the SAME lease
+  `merges.ts` claims for its own MERGED-verdict close-out dispatch of
+  that exact basename.
+
+A stage bound to a workflow `_pr_action.ts` doesn't recognize (a
+project override of `review`/`respond` to something other than
+`pr-review`/`pr-respond`) is parked with a logged reason instead of
+guessing which lease namespace to claim. Losing any of these claims to
+a live holder skips the issue for the tick (`claim: 'lost'`, no
+relabel) rather than racing it; a dispatched workflow that fails fires
+the same `task.parked` notification `work.ts` fires on its own
+dispatch failures.
+
+##### Manual per-item dispatch
+
+Two ops bypass every loop and every pause switch by construction, for
+acting on ONE task or ONE PR on demand:
+
+- **`sdlc pr route --pr <n> [--route live|resume|fresh] [--force]`** —
+  runs the exact same Router `deliver()` chain the `prs`/`merges`
+  ticks use, for one PR, right now. `--route` skips straight to one
+  route (still subject to the lease/max-rounds/signature gates);
+  `--force` bypasses ONLY the signature dedupe, never the lease or
+  max-rounds gate. `--dry-run` previews the route without claiming a
+  lease or writing a delivery record.
+- **`sdlc task dispatch <basename>`** — runs the same
+  define/implement/check/judge sequence the `work` tick's loop would,
+  for one task, right now (`dispatchOneTask`, shared code with
+  `ticks/work.ts`). No `--force` (the lease pair is the only
+  concurrency guard, and force-stealing an actively-held lease would
+  let two runs collide on the same worktree); `--dry-run` reports the
+  plan without claiming a lease or running a workflow.
+
+Both are the escape hatch for "the loop is paused (or a tick simply
+hasn't run yet) but I want this one item handled now" — they read no
+pause state at all, so they work identically whether the orchestrator
+is paused or not.
 
 ### `pr_check:` — comment-filtering for `/sdlc:pr-check` and `orchestrate watch`
 
@@ -602,8 +898,9 @@ merge git resolved itself or an artifact a generator rebuilt, and running a
 project's whole gate once per PR does not scale across a fifty-PR run — CI on
 the PR is the real gate. Set `check` where a bad push is expensive.
 
-`verify: check` resolves and runs `verbs.check` (via `resolveVerb`) exactly
-like `sdlc quality run` — a project-sourced verb list, so it is trust-gated
+`verify: check` resolves and runs `workflows.check` (via
+`resolveWorkflowCommands`) exactly like `sdlc quality run` — a project-sourced
+verb list, so it is trust-gated
 the same way (see Trust, above): the repository must be trusted (`sdlc repo
 trust`) or the run must pass `sdlc pr update --trust`, or it exits
 `UNTRUSTED` before touching any PR.
@@ -635,20 +932,24 @@ Governs the Step 8 post-mortem → follow-up-task flow
   friction by hand.
 - **`drive_to_ready`** — whether each spawned follow-up is best-effort driven
   to `open/ready` before its PR opens. `true` runs
-  `/sdlc:task-auto-define --set-ready true` then `/sdlc:task-ensure-ready` on
-  the scaffolded task: when the spec can be synthesized from the friction
-  bullet plus codebase context AND passes the readiness gate, the task lands
-  `open/ready` with `readiness_verified_at:` stamped and carries an
-  `AUTO-DEFINED:` review note. When it can't, the task lands at
-  `fallback_status`. The drive is best-effort — it never fabricates a spec
-  and never fails the spawn.
+  `/sdlc:task-auto-define` then `/sdlc:task-ensure-ready` on the scaffolded
+  task: when the spec can be synthesized from the friction bullet plus
+  codebase context AND passes the readiness gate, ensure-ready promotes the
+  task to `open/ready` with `readiness_verified_at:` stamped, and it carries
+  an `AUTO-DEFINED:` review note. When the spec can't be synthesized, the
+  task lands at `fallback_status`; when it fails the gate, at
+  `planning/needs-definition`. The drive is best-effort — it never
+  fabricates a spec and never fails the spawn.
 - **`fallback_status`** — the `planning/*` status a follow-up lands at when it
-  is NOT driven to ready (either `drive_to_ready: false`, or the drive
-  couldn't produce a ready spec). Must be a non-ready planning status
+  is NOT driven to ready (either `drive_to_ready: false`, or auto-define
+  couldn't synthesize the spec). Must be a non-ready planning status
   (`planning/draft`, `planning/needs-definition`, `planning/proposed`,
   `planning/backlog`); default `planning/draft`. Set
   `planning/needs-definition` to route undriveable follow-ups straight into
-  the definition backlog.
+  the definition backlog — note that with `drive_to_ready: true` this value
+  also skips the drive entirely, since `planning/needs-definition` isn't a
+  status `/sdlc:task-ensure-ready` accepts as input; the follow-up lands
+  there directly instead of the gate ever running.
 
 Missing block or missing keys default to `enabled: true`,
 `drive_to_ready: true`, `fallback_status: planning/draft`. A `drive_to_ready`
@@ -831,23 +1132,28 @@ wins over the project's.
 
 ```yaml
 host:
-  default: terminal       # terminal | orca | cmux
+  default: terminal       # terminal | orca | cmux | tmux
 ```
 
 The default host for every feature that opens something for a person — an
 agent session, a command in a terminal. `terminal` runs it in the current
 terminal and returns when it ends; `orca` opens a terminal tab in the Orca
-app; `cmux` opens a cmux workspace. A feature's own key (`pr_review.host`)
-overrides this, and a `--host` flag overrides both. Hosts fulfil a contract
-in parts; a feature that needs a part the host lacks fails rather than
-falling back. See `solutions/ontological/conventions/host.md`.
+app; `cmux` opens a cmux workspace; `tmux` opens a detached tmux session
+named deterministically from the working directory. Every host is a
+WRAPPER host: it runs whichever coding-agent CLI (`engine`, see below) the
+feature resolves, in a terminal/workspace it opens — the two are
+independent, never a fixed pairing; `claude`/`codex`/`cursor` are engines,
+never hosts. A feature's own key (`pr_review.host`) overrides this, and a
+`--host` flag overrides both. Hosts fulfil a contract in parts; a feature
+that needs a part the host lacks fails rather than falling back. See
+`solutions/ontological/conventions/host.md`.
 
 ### `pr_review:` — how `sdlc pr review` opens a session
 
 ```yaml
 pr_review:
-  engine: claude          # claude | codex
-  host: orca              # optional; absent → host.default
+  engine: claude          # claude | codex | cursor | pi
+  host: orca              # terminal | orca | cmux | tmux; optional, absent → host.default
   untrusted: skip-init    # skip-init | full | refuse
   setup: true             # run setup on every launch; --no-setup skips it
   prompt:
@@ -890,6 +1196,206 @@ pr_review:
 
 Missing block defaults to `claude` in the current terminal with the built-in
 brief.
+
+### `hooks:`
+
+Git hooks sdlc runs, keyed by client-side hook name: `pre-commit`,
+`pre-merge-commit`, `prepare-commit-msg`, `commit-msg`, `post-commit`,
+`pre-rebase`, `post-checkout`, `post-merge`, `pre-push`, `post-rewrite`. Any
+other name fails validation. Each value is an ordered list of hook steps: a
+`run:` (a workflow name, resolved through `lib/config/hooks.ts`'s
+`resolveHook` — the same shared layered-resolution primitive `workflows:`
+uses, with no `env` layer and an empty default, since hooks have no built-in
+step list) or `script:` (a command line) step, plus three optional fields. A
+`run:` target's own steps splice in via `resolveWorkflow` exactly like a
+workflow's own `run:` composition (see "Composing a workflow from named
+leaves" above) — a spliced-in `skill:`/`prompt:` step fails resolution with
+the same message a literal one would. Each resolved step carries the shared
+`{layer, mode}` provenance; `sdlc config explain hooks.<hookname>` renders it.
+
+```yaml
+hooks:
+  pre-commit:
+    - run: setup              # a fresh worktree gets its deps first...
+      when: deps-missing      # ...only when a lockfile has no deps dir
+    - run: check
+      name: gates
+      on_fail: park           # let the commit through, park the task
+  commit-msg:
+    - script: scripts/lint-msg.sh "$1"
+      on_fail: warn
+```
+
+- **`when`**: `always` (default), or `deps-missing`, which runs the step only
+  when the checkout root has a lockfile whose deps dir is absent (`bun.lock`
+  with no `node_modules`, `uv.lock` with no `.venv`; see `hasMissingDeps` in
+  `@sksizer/detect-runners`). The check repeats just before the step runs,
+  so an earlier `run: setup` that installed the deps skips it. A post-checkout
+  file checkout (git's third argument `0`) skips it too.
+- **`on_fail`**: `block` (default) stops and exits 1, which aborts the commit
+  or push. Git ignores the exit code of post-commit, post-checkout,
+  post-merge and post-rewrite. `warn` prints the failure, runs the next step
+  and exits 0. `park` stops and exits 0 so the git operation proceeds, then
+  writes a park marker to `<git-common-dir>/sdlc/park/<branch-slug>.json`
+  (branch, hook, step, exit code, stderr tail, timestamp). The orchestrator's
+  `work` tick consumes the marker for `task/<basename>` and parks that task
+  instead of running its next workflow. A `park` failure is notified later,
+  when the `work` tick discovers the park marker and fires `task.parked`
+  through `notify:` (below); a `block` failure notifies `hook.blocked`
+  directly, through the same `notify:` section.
+- **`name`**: the label hook output, markers and notifications use. It
+  defaults to the verb or script text.
+
+Each step runs as `sh -c <text> <hook> <args...>` in the checkout root, so
+the hook's own arguments are `$1`, `$2`, and so on. No `{placeholder}`
+templating happens. The steps come from the repository, so a hook with a
+step to run needs the repo trusted (`sdlc repo trust`) and exits 21 without
+running any step otherwise. A hook with nothing to run exits 0 without a
+trust check. A shim in the shared hooks dir fires in every worktree, and that
+exit costs one config read. A hook shim calls
+`sdlc hooks run <hook> -- "$@"`, adding `--stdin -` for pre-push and
+post-rewrite, which git feeds on stdin.
+
+### `chain:`
+
+The `sdlc` chain: a fixed, ordered 11-stage pipeline — `capture` →
+`triage` → `define` → `ready` → `implement` → `check` → `judge` →
+`review` → `respond` → `merge` → `close-out` — declared once in code
+(`CHAIN_STAGE_NAMES`, `lib/config/chain.ts`) and never reordered,
+renamed, or extended by a project. 7 stages bind to a built-in
+workflow (`define`, `implement`, `check`, `judge`, `review` → `pr-review`,
+`respond` → `pr-respond`, `close-out`); 4 are checkpoints with no bound
+workflow (`capture`, `triage`, `ready`, `merge`) — points where a human
+or an external event (filing an issue, merging a PR) moves the item,
+not an automated step. `resolveChain(projectRoot)` returns the effective
+11-entry binding list, each entry tagged `{layer: 'project' | 'local' |
+'default'}` — the same provenance vocabulary `workflows:`/`hooks:` report,
+narrowed to the modes that make sense for a single nullable name (no `mode`,
+no `env`: nothing to wrap or run directly). See
+[[D-0019-sdlc-chain-stages-and-labels]] for the full stage table and
+rationale, and
+[[D-LSLH-collapse-verbs-workflows-chain-hooks]] for the shared resolver.
+
+`stages.<name>.workflow` overrides ONE stage's bound workflow — the
+same override-the-value, never override-the-shape convention
+`workflows:` uses for its own built-ins (see `workflows:` in "Shape at
+a glance" above). An unknown stage name under `chain.stages` fails
+validation rather than being silently ignored.
+
+```yaml
+chain:
+  stages:
+    review:
+      workflow: custom-review   # override: run a different workflow at `review`
+    merge:
+      workflow: null            # explicit checkpoint — same as the built-in default
+```
+
+### `notify:`
+
+Named notification channels (`channels`), and an event catalog (`events`)
+that routes each event to zero or more of them. A channel is one of three
+shapes, picked by `type`: `desktop` (no other fields — raises a desktop
+notification on the machine running the loop), `ntfy` (`topic_url:`, an ntfy
+HTTP topic to POST to), or `webhook` (`url:` plus `format:` — `slack`,
+`discord`, or `raw`, the default — controlling the POSTed JSON body's shape).
+`events` has exactly 10 fixed keys — `pr.needs_response`, `pr.ci_failed`,
+`task.parked`, `stage.ceiling_reached`, `phase.ready_for_review`,
+`lease.expired`, `session.ended`, `hook.blocked`, `orchestrator.dead_stop`,
+`usage.budget_exceeded` — each an ordered list of channel names from
+`channels`; an unknown event key, or an `events.*` entry naming a channel
+that `channels` does not define, fails validation at `sdlc.yaml` load time.
+An event with no list, or an empty one, fires no channel — a silent no-op.
+`phase.ready_for_review` and `orchestrator.dead_stop` are config-only today:
+no detector fires them yet.
+
+```yaml
+notify:
+  channels:
+    desk:
+      type: desktop
+    pager:
+      type: ntfy
+      topic_url: https://ntfy.sh/my-private-topic
+    slack:
+      type: webhook
+      url: https://hooks.slack.com/services/…
+      format: slack
+  events:
+    task.parked: [desk, pager]
+    hook.blocked: [slack]
+    pr.ci_failed: [slack]
+```
+
+`notify(event, payload, ctx)` (`lib/services/notify/dispatch.ts`) resolves
+`events[event]` to channel names, looks each one up in `channels`, and
+dispatches best-effort per channel — one channel failing (an unreachable
+ntfy server, a missing notifier binary, a non-2xx webhook response) never
+suppresses another or fails the caller that fired the event.
+
+### `usage:`
+
+Token/cost usage reporting (`sdlc usage report`) and the `budget:` gate: a
+rolling-window token/cost ceiling that pauses the orchestrator `work` tick's
+dispatch and fires `usage.budget_exceeded` (routed through `notify:` above)
+when exceeded.
+
+```yaml
+usage:
+  budget:
+    window_hours: 24 # default; rolling lookback ending now
+    tokens: 2000000 # optional token ceiling
+    cost_usd: 50 # optional USD ceiling
+```
+
+`budget` is optional, and either limit inside it is optional — absent (or
+both `tokens`/`cost_usd` unset) means no cap: inert, the same "valid but
+inert" posture an unreferenced `notify.channels` entry has. Both limits
+compare a SUM over `.sdlc/usage.jsonl` rows inside the trailing
+`window_hours` hours (default 24), a row's `null` token/cost field counting
+as `0` toward that sum — see `lib/services/usage/budget.ts#checkUsageBudget`.
+This is a different concept from `orchestrate log-tick`'s own
+`usage={tokens=…,cost=…}` digest field, which is an ALL-TIME cumulative
+total (every row ever logged), not a rolling window.
+
+**`tokens` compares a BILLABLE sum, not the ledger's own `totalTokens`
+column.** A row's `totalTokens` (what `sdlc usage report` shows) includes
+cache reads, which dominate real usage — a typical session's deduplicated
+tokens are 90%+ cache reads — so a ceiling compared against that
+cache-inclusive total would trip within a single session. The `tokens`
+budget instead sums `inputTokens + outputTokens + cacheWriteTokens` per row,
+deliberately excluding `cacheReadTokens` — see
+`lib/services/usage/record.ts#sumBillableTokens`, the one place this
+reduction is computed, consumed by
+`lib/services/usage/budget.ts#checkUsageBudget`. `2000000` above is sized
+against that billable total, not the (much larger, cache-dominated) ledger
+total.
+
+**`cost_usd` only ever caps headless Claude spend.** Only a headless Claude
+run's own JSON envelope reports a dollar figure (`total_cost_usd`) — every
+interactive row (`claude` or `codex`) and every codex row (headless or
+interactive) is always `costUsd: null`, since codex reports no cost and there
+is no local price table. A `cost_usd` ceiling is therefore silently inert
+against everything but headless Claude usage, not a true total-spend cap.
+
+### Reserved and apply-driven sections
+
+These top-level keys are optional and read as absent (`undefined`) when unset.
+Most are reserved for a later sdlc 1.0 phase: a strict empty object that fails
+validation on any key until that phase defines its fields, so adding a field
+never breaks a file someone already wrote.
+
+| Key | Today | `applies_via` |
+|---|---|---|
+| `hooks:` | git hook name → hook steps, run by `sdlc hooks run` (see [`hooks:`](#hooks)) | `apply:hooks` |
+| `harness:` | `targets:` — harness exporter names to install for | `apply:harness` |
+| `mcp:` | `allow:` / `deny:` — op names the `sdlc mcp` server may or may not expose (both default `[]`) | `apply:mcp` |
+| `knowledge:` | reserved | `read` |
+| `issues:` | reserved — issue sync and the issues loop (Phase 7) | `read` |
+
+A key whose `applies_via` is `apply:<applier>` changes nothing on its own:
+`sdlc apply` writes the files it drives (hook shims, harness installs, MCP
+registrations).
 
 ## Machine-level config
 
@@ -938,7 +1444,9 @@ relocates the file for one run.
 
 All in-process consumers read config via `ctx.sdlcConfig` (set by
 `createCtx` → `loadConfig`). **Do not add new ad-hoc `sdlc.yaml` reads;**
-use `ctx.sdlcConfig` instead.
+use `ctx.sdlcConfig` instead. The per-key `consumers` list in each key's
+`.meta()` is the checked inventory; when you add a reader of a key, add it
+there too. The list below is the narrative companion.
 
 - **`ctx.sdlcConfig`** (`solutions/ontological/lib/registry.ts`) — the op-context field
   hydrated once per CLI invocation by `createCtx` via `loadConfig`. Every
@@ -950,9 +1458,18 @@ use `ctx.sdlcConfig` instead.
   **`_pr_action.ts`** — read `ctx.sdlcConfig.orchestrator.review.max_rounds`
   to cap `pr-review`/`pr-respond` round-trips per PR.
 - **`solutions/ontological/lib/services/orchestrator/step-runner.ts`** —
-  reads `ctx.sdlcConfig.orchestrator.review.engine` (falling back from
-  `orchestrator.workflows.<name>.engine`) to pick the `pr-review`
-  workflow's dispatch engine.
+  `resolveEngine`/`resolveHost` read `resolveWorkflow(name).engine`/`.host`
+  (i.e. `workflows.<name>.engine`/`.host`) to pick a dispatched workflow's
+  engine/host, falling back to `'claude'`/`host.default` when unset. The
+  retired `orchestrator.workflows`/`orchestrator.review.engine` settings
+  collapsed into this one place
+  ([[D-LSLH-collapse-verbs-workflows-chain-hooks]]).
+- **`solutions/ontological/lib/services/session/ops/launch.ts`** — resolves
+  `resolveWorkflow(name).engine`/`.host` (i.e. `workflows.<name>.engine`/
+  `.host`, the SAME setting `step-runner.ts` reads above) as a `--workflow
+  <name>` launch's fallback default, below `--engine`/`--host` and above the
+  hardcoded `claude`/`host.default` fallbacks. `--skill`/`--prompt` launches
+  never consult it (no workflow name to key off).
 - **`solutions/ontological/lib/services/pr/ops/review.ts`** — reads
   `ctx.sdlcConfig.pr_review` for the engine, host and prompt, and
   `loadConfig(<target-repo>).repos` + `loadMachineConfig().repos` (via
@@ -966,17 +1483,21 @@ use `ctx.sdlcConfig` instead.
 - **`solutions/ontological/lib/services/pr/ops/classify.ts`** — reads
   `ctx.sdlcConfig.pr_check.author_comments` to decide whether the PR
   author's own comments are actionable or self-notes.
-- **`solutions/ontological/lib/services/pr/ops/survey.ts`** — reads
-  `ctx.sdlcConfig.pr_update` for scope (`author`, `include_drafts`), the
-  top-level `repos:` containers (via `repoContainers` / `locateRepo`) to
-  locate a `--repo` target, and hands the strategy block to
-  `lib/services/pr/strategy.ts#chooseStrategy`, which decides rebase vs
-  merge vs skip per PR.
-- **`solutions/ontological/lib/services/pr/ops/update.ts`** — plans from
-  `runSurvey` (the same call, never a second implementation) and reads
-  `pr_update.lockfile_install`, `pr_update.resolvers` and `pr_update.verify`
-  for the conflict-resolver ladder and the pre-push gate; `verify: check`
-  calls `resolveVerb('check', targetRepo)` to run the check verbs.
+- **`solutions/ontological/lib/services/pr/ops/survey.ts`** — a thin
+  wrapper over `@sksizer/pr-update`: hands `ctx.sdlcConfig.pr_update`
+  through unchanged as the package's `PrUpdateConfig` (scope: `author`,
+  `include_drafts`; the strategy block goes to the package's
+  `chooseStrategy`, which decides rebase vs merge vs skip per PR), and binds
+  the top-level `repos:` containers (via `repoContainers` / `locateRepo`) as
+  the package's `locate` port for a `--repo` target.
+- **`solutions/ontological/lib/services/pr/ops/update.ts`** — a thin
+  wrapper over `@sksizer/pr-update`'s `runUpdate`, which plans from the same
+  `runSurvey` call and reads `pr_update.lockfile_install`,
+  `pr_update.resolvers` and `pr_update.verify` for the conflict-resolver
+  ladder and the pre-push gate; `verify: check` reaches the wrapper's
+  `resolveVerifyVerbs` port, which calls `resolveWorkflowCommands('check',
+  projectRoot)` and trust-gates the result before the package runs the check
+  verbs.
 - **`solutions/ontological/lib/services/lease/runtime.ts`** — calls `lowReadLeaseAuthority`
   (from `@lib/config/load.ts`) as the raw YAML read inside its
   `readAuthorityFromSdlcYaml` dedup point. The env-override / throw-on-unset
@@ -986,28 +1507,32 @@ use `ctx.sdlcConfig` instead.
   `.safeParse` and surfaces each Zod issue as an `at <location>:
   <message>` diagnostic line.
 - **`solutions/ontological/lib/services/config/ops/{get,set}-verbs.ts`** —
-  YAML-Document **read/write** paths for named verbs. `get-verbs --name
-  <verb>` retrieves the verb list; `set-verbs --name <verb> <cmd1> <cmd2> …`
-  writes it. These use the `yaml` Document API for comment/sibling
-  preservation and are out of scope for the typed hydration path.
+  YAML-Document **read/write** paths for one named `workflows.<name>` entry
+  (their own CLI-facing names, `get-verbs`/`set-verbs`, kept over the
+  `verbs:` → `workflows:` migration — see `get-verbs.ts`'s own doc comment).
+  `get-verbs --name <verb>` retrieves the list; `set-verbs --name <verb>
+  <cmd1> <cmd2> …` writes it. These use the `yaml` Document API for
+  comment/sibling preservation and are out of scope for the typed hydration
+  path.
 - **`sdlc quality run`** (`solutions/ontological/lib/services/quality/ops/run.ts`) — executor.
-  Resolves a verb name via `resolveVerb(name, projectRoot)` where name
-  defaults to `check`, and runs each verb. Also accepts `--baseline-dir
+  Resolves a verb name via `resolveWorkflowCommands(name, projectRoot)` where
+  name defaults to `check`, and runs each verb. Also accepts `--baseline-dir
   <path>` and `--diff-against-baseline <sha>`.
 - **`solutions/ontological/lib/services/git/arm-worktree.ts`** — resolves
-  `setup-hooks` for ephemeral commit-worktrees via `resolveVerb`, with trust
-  gating and progress output.
+  `setup-hooks` for ephemeral commit-worktrees via `resolveWorkflowCommands`,
+  with trust gating and progress output.
 - **`solutions/ontological/lib/services/project/ops/detect-setup.ts`** —
   probes the repo with `detect-runners#collect` for the implicit `setup`
-  default heuristic (part of `resolveVerb`'s default layer).
+  default heuristic (part of `resolveWorkflow`'s default layer).
 - **`solutions/ontological/plugin/plugins/sdlc/skills/task-work/task-work.md`** Steps 4 and 7 — call
-  `resolveVerb('setup', worktreeRoot)` (Step 4) and `resolveVerb('check',
-  repoRoot)` (Step 7) via `sdlc quality run --name check`.
+  `resolveWorkflowCommands('setup', worktreeRoot)` (Step 4) and
+  `resolveWorkflowCommands('check', repoRoot)` (Step 7) via `sdlc quality run
+  --name check`.
 - **`solutions/ontological/plugin/plugins/sdlc/skills/orchestrate/orchestrate.md`** — a thin wrapper
   around `sdlc orchestrate run --once`, which reads the whole
   `orchestrator:` block (`loops`, `interval_seconds`, `review.max_rounds`,
-  `pr_filters`, `notify`) — see the `orchestrate run` op
-  (`lib/services/orchestrator/ops/run.ts`) and its ticks
+  `pr_filters`) plus the top-level `notify:` section — see the
+  `orchestrate run` op (`lib/services/orchestrator/ops/run.ts`) and its ticks
   (`lib/services/orchestrator/ticks/`) for where each field is read.
 - **`sdlc project setup`** (called by `/sdlc:setup`) — creates an empty
   `sdlc.yaml` when absent; creates an empty gitignored `sdlc.local.yaml`
@@ -1015,7 +1540,17 @@ use `ctx.sdlcConfig` instead.
 
 ## Editing
 
-`sdlc.yaml` is human-authored YAML. Two paths to populate verbs:
+`sdlc.yaml` is human-authored YAML. `sdlc config set <key> <value>` edits
+any key in place (`<value>` read as YAML: a scalar or a flow list/map;
+`--layer local` targets `sdlc.local.yaml`), and `sdlc config unset <key>`
+removes one. Both validate the whole resulting config against
+`SdlcConfigSchema` before writing and write through `@sksizer/yaml-splice`
+(`lib/config/edit.ts`), so comments, key order and blank lines elsewhere in the
+file survive byte-for-byte. A key whose meta says `applies_via: apply:<x>`
+prints a reminder to run `sdlc apply`. `sdlc config get <key>` prints the
+effective value (`--layer` for one file's).
+
+Two paths to populate verbs specifically:
 
 1. **Interactively:** run `/sdlc:find-verbs --name check` (or `--name setup` /
    `--name setup-hooks`). The skill probes the project, presents detected
@@ -1032,8 +1567,8 @@ refuses to run any op while the file fails the schema, printing each Zod
 issue as an `at <location>: <message>` line. Inside the library `loadConfig`
 still degrades a schema-invalid document to the all-defaults object, so
 in-process callers never throw on config; the CLI is where a person gets
-told. The `verbs:` names are validated through the same schema every time a
-tool resolves them, so a malformed verb list surfaces at that point.
+told. The `workflows:` names are validated through the same schema every time
+a tool resolves them, so a malformed verb list surfaces at that point.
 
 ## Why not under `entities/`?
 

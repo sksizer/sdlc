@@ -48,7 +48,7 @@ export const referenceProjection: SiteProjection = {
     const url = typeof e.fm['url'] === 'string' ? (e.fm['url'] as string) : undefined
     return [
       url ? `**Source:** ${hostLinkCell(url)}` : '',
-      e.status ? `**Status:** \`${e.status}\`` : '',
+      e.state ? `**State:** \`${e.state}\`` : '',
     ]
   },
   childBodyAppendix: (e, ctx) => {

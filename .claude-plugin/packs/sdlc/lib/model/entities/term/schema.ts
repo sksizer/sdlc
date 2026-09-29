@@ -14,7 +14,7 @@ import { CommonFrontmatter, DOC_WIKILINK_PATTERN, entityIdPattern } from '../_co
 import { titleMirrorsH1 } from '../_rules.ts'
 
 /** Mirrors `term/schema.json` `version`. */
-export const SCHEMA_VERSION = '1'
+export const SCHEMA_VERSION = '2'
 
 export const TermSchema = CommonFrontmatter.extend({
   type: z.literal('term').describe('Dispatch tag for the validator framework.'),
@@ -26,7 +26,7 @@ export const TermSchema = CommonFrontmatter.extend({
         "[[D-0002-entity-identifier-shape]]: 'TM-' + 4 zero-padded chars [0-9A-Z] " +
         '(Terms use incrementing numbering). Never renamed once assigned.',
     ),
-  status: z
+  state: z
     .enum(['open/draft', 'open/active', 'closed/retired'])
     .default('open/active')
     .describe(

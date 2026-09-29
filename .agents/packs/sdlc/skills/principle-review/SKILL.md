@@ -47,7 +47,7 @@ Usage:
 
 6. **Match against outstanding work.** For each open finding, fan out
    (grouped by principle) to search the non-closed tasks
-   (`docs/planning/tasks/`, status not `closed/*`) for ones whose
+   (`docs/planning/tasks/`, state not `closed/*`) for ones whose
    completion would resolve the violation — confirm by reading the
    candidate task, never by title alone. Record them in a **Tracked by**
    column (task ids; empty = untracked gap).

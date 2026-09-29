@@ -13,7 +13,7 @@
  * Acquiring the work IS the lease transition: this checks the task is eligible
  * off origin/main's copy, CAS-REPLACEs the lease ref from `claimed` to
  * `working`, and resets the named feature branch (inside the worktree) onto the
- * current origin/main tip. Frontmatter `status` stays `open/ready` for the
+ * current origin/main tip. Frontmatter `state` stays `open/ready` for the
  * task's whole in-flight life; the `## Post-mortem` stub the old start-commit
  * planted is planted at close time instead.
  *
@@ -65,9 +65,9 @@ export {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
-// Statuses that are valid inputs (a task that can be transitioned to
+// States that are valid inputs (a task that can be transitioned to
 // in-progress). Mirrors the implementation-ready contract.
-const ALLOWED_INPUT_STATUSES = new Set<string>([
+const ALLOWED_INPUT_STATES = new Set<string>([
   'planning/draft',
   'planning/proposed',
   'planning/backlog',
@@ -97,24 +97,24 @@ function resolveMainRepo(worktree: string, override: string | null, runner: Comm
 }
 
 /**
- * Refuse to start a task whose status is not a pre-implementation one, off
+ * Refuse to start a task whose state is not a pre-implementation one, off
  * origin/main's copy as returned by the entity read layer
  * (`readTask(..., { at: "origin/main" })`).
  *
- * There is no status flip to plan ([[D-S30G-task-state-plane-split]]) — only
+ * There is no state flip to plan ([[D-S30G-task-state-plane-split]]) — only
  * this precondition. It reads the wrapper's raw `fm` (present on both arms),
- * so a schema-drifted copy at origin/main still gates off its raw status.
+ * so a schema-drifted copy at origin/main still gates off its raw state.
  */
 function assertStartEligible(res: TaskReadResult): void {
   if (res.fm === null) {
     throw new StartTaskError('task frontmatter is not a YAML mapping', EXIT.error)
   }
 
-  const status = res.fm['status']
-  if (typeof status !== 'string' || !ALLOWED_INPUT_STATUSES.has(status)) {
-    const allowed = [...ALLOWED_INPUT_STATUSES].sort()
+  const state = res.fm['state']
+  if (typeof state !== 'string' || !ALLOWED_INPUT_STATES.has(state)) {
+    const allowed = [...ALLOWED_INPUT_STATES].sort()
     throw new StartTaskError(
-      `task status ${repr(status)} is not eligible for start ` +
+      `task state ${repr(state)} is not eligible for start ` +
         `(expected one of ${JSON.stringify(allowed)})`,
       EXIT.error,
     )
@@ -201,7 +201,7 @@ export function startTask(opts: StartTaskOptions): number {
   // Source of truth is origin/main, NOT the (possibly stale or dirty) primary
   // checkout. Read origin/main's copy through the typed entity read layer to
   // check eligibility. Nothing is written back: the start transition is a lease
-  // write, and frontmatter `status` stays `open/ready` for the task's whole
+  // write, and frontmatter `state` stays `open/ready` for the task's whole
   // in-flight life ([[D-S30G-task-state-plane-split]]).
   const fetchMain = new Git(mainRepo, { runner }).try.fetch('origin', 'main', {
     quiet: true,

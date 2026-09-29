@@ -313,7 +313,7 @@ spawn policy on every dispatch. With `drive_to_ready=true`, `spawn-task-pr`
 best-effort drives the spawned task to `open/ready` (auto-define +
 ensure-ready) before opening its PR, landing it at `fallback_status` when the
 spec can't be readied. Pass `--branch` / `--pr` / `--pr-title` from 4a-bis.
-The `SPAWN-TASK-PR-DONE` marker gains `status=<final-status>` and
+The `SPAWN-TASK-PR-DONE` marker gains `state=<final-status>` and
 `action=<created|appended>` fields so you can report readied-vs-draft and
 which spawns opened vs. appended to a shared PR (step 7).
 
@@ -404,7 +404,7 @@ After processing all bullets, edit the originating task body:
 
   Carry the PR URL inline for each spawned entry so a reader can
   click through to the follow-up's PR without grepping, and the
-  `[<final-status>]` from the `SPAWN-TASK-PR-DONE status=` field so a
+  `[<final-status>]` from the `SPAWN-TASK-PR-DONE state=` field so a
   reader sees at a glance which follow-ups already reached `open/ready`
   versus landed as a draft. For
   `LINKED-EXISTING` entries the PR URL is omitted (the linked task

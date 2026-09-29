@@ -109,7 +109,7 @@ const UnmergedTask = z.object({
   pr_number: z.number().int(),
   pr_url: z.string(),
   head_ref: z.string(),
-  status: z.string().nullable(),
+  state: z.string().nullable(),
   headline: z.string(),
   text: z.string(),
 })
@@ -141,7 +141,7 @@ function renderListUnmerged(out: Output, io: OpIo): number {
     return 0
   }
   for (const t of out.tasks) {
-    io.stdout(`${t.basename}\t#${t.pr_number}\t${t.status ?? 'unknown'}\t${t.headline}\n`)
+    io.stdout(`${t.basename}\t#${t.pr_number}\t${t.state ?? 'unknown'}\t${t.headline}\n`)
   }
   io.stdout(
     `unmerged-tasks=${out.tasks.length} prs-scanned=${out.prs_scanned}` +
@@ -155,6 +155,8 @@ function renderListUnmerged(out: Output, io: OpIo): number {
 export default defineOp({
   path: ['task', 'list-unmerged'],
   summary: 'Task files present on an open PR head ref but not on the base branch.',
+  // Read-only: queries `gh pr list` and reads git refs/blobs; writes nothing.
+  mutating: false,
   input,
   output,
   cli: {
@@ -217,7 +219,7 @@ export default defineOp({
           pr_number: pr.number,
           pr_url: pr.url,
           head_ref: pr.headRefName,
-          status: fmString(parseFrontmatter(text), 'status'),
+          state: fmString(parseFrontmatter(text), 'state'),
           headline: extractHeadline(body),
           text: args.withText ? text : '',
         })

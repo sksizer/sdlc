@@ -36,14 +36,14 @@ Usage:
 - `/sdlc:setup --obsidian --force` — overwrite existing `.base` files from the template.
 - `/sdlc:setup --detect` — when creating a fresh `sdlc.yaml`, probe the project with the same
   runner-detection logic as `sdlc quality detect` and write the detected verbs as **commented-out**
-  suggestions under `verbs.check:` so the user opts in by uncommenting. No effect on an existing
+  suggestions under `workflows.check:` so the user opts in by uncommenting. No effect on an existing
   `sdlc.yaml` (re-run `/sdlc:find-verbs --name check` to refresh interactively).
 
 Once the structure and `sdlc.yaml` are in place, `/sdlc:setup` calls the two interactive verb
 configurators — `/sdlc:find-verbs --name check` (Step 6) then
 `/sdlc:find-verbs --name setup` (Step 7), unless `--dry-run` — to populate
-`sdlc.yaml`'s `verbs.check:` list (the gates `/sdlc:task-work` Step 7 runs
-before opening a PR) and its `verbs.setup:` list (the verbs Step 4 runs to
+`sdlc.yaml`'s `workflows.check:` list (the gates `/sdlc:task-work` Step 7 runs
+before opening a PR) and its `workflows.setup:` list (the verbs Step 4 runs to
 bootstrap a fresh worktree — install deps, arm git hooks, trust tools).
 
 Project context (don't re-derive every run):
@@ -54,11 +54,11 @@ Project context (don't re-derive every run):
   under the project root — `task` → `docs/planning/tasks/`. Other skills (`/sdlc:task-work`,
   `/sdlc:task-review`) assume those paths exist.
 - `sdlc.yaml` at the project root holds per-project runtime configuration consumed by other skills
-  (`/sdlc:task-work` Step 7 reads its `verbs.check:` list; Step 4 reads its `verbs.setup:` list).
-  Shape documented at `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`. Setup creates an empty
-  starter when the file is absent (with a commented-out `verbs.setup:` hint block); both
-  `verbs.check:` and `verbs.setup:` are then populated interactively by the configurator steps below
-  (Steps 6 and 7) — or edited directly.
+  (`/sdlc:task-work` Step 7 reads its `workflows.check:` list; Step 4 reads its `workflows.setup:`
+  list). Shape documented at `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`. Setup creates an
+  empty starter when the file is absent (with a commented-out `workflows.setup:` hint block); both
+  `workflows.check:` and `workflows.setup:` are then populated interactively by the configurator
+  steps below (Steps 6 and 7) — or edited directly.
 - `.gitignore` at the project root needs a canonical `# --- Claude Code project-local ---` block so
   project-local Claude Code state (`.claude/settings.json`, `.claude/skills/`, `.claude/commands/`,
   `.claude/agents/`, `.claude/hooks.json`, and `.claude/hooks/<name>.py`) is committable while
@@ -124,7 +124,7 @@ Project context (don't re-derive every run):
 6. **Configure check verbs.** Unless `--dry-run`, invoke
    `/sdlc:find-verbs --name check` via the `Skill` tool. It probes the project for
    runner candidates (just / npm / make / cargo / python / pyproject tools), asks
-   (via AskUserQuestion) which to gate into `sdlc.yaml`'s `verbs.check:` list,
+   (via AskUserQuestion) which to gate into `sdlc.yaml`'s `workflows.check:` list,
    and writes the approved subset to the file Step 1 ensured exists. Capture its
    terminal marker — `FIND-VERBS-WROTE name=check count=<count> path=<path>`
    or `FIND-VERBS-UNCHANGED name=check count=<count> path=<path>` — and
@@ -136,7 +136,7 @@ Project context (don't re-derive every run):
 7. **Configure setup verbs.** Unless `--dry-run`, invoke
    `/sdlc:find-verbs --name setup` via the `Skill` tool. It probes the project for
    dependency-install, git-hook-arming, and tool-trust commands, asks (via
-   AskUserQuestion) which to write to `sdlc.yaml`'s `verbs.setup:` list, and
+   AskUserQuestion) which to write to `sdlc.yaml`'s `workflows.setup:` list, and
    writes the approved subset to the file Step 1 ensured exists. Capture its
    terminal marker — `FIND-VERBS-WROTE name=setup count=<count> path=<path>`
    or `FIND-VERBS-UNCHANGED name=setup count=<count> path=<path>` — and fold
@@ -170,10 +170,10 @@ Project context (don't re-derive every run):
 ## Notes
 
 - Steps 6 and 7 call the two interactive verb configurators — `/sdlc:find-verbs --name check`
-  (`verbs.check:`) and `/sdlc:find-verbs --name setup` (`verbs.setup:`) — both skipped under
+  (`workflows.check:`) and `/sdlc:find-verbs --name setup` (`workflows.setup:`) — both skipped under
   `--dry-run`. They are symmetric: each probes the project, asks which detected commands to keep,
   and writes the approved subset. Re-run either skill standalone any time to refresh its list.
-  Without a configured `verbs.check:` list, `/sdlc:task-work` Step 7 warn-and-skips.
+  Without a configured `workflows.check:` list, `/sdlc:task-work` Step 7 warn-and-skips.
 - Adopting the plugin in a project that already has planning content (READMEs with roadmap sections,
   brain-dump notes, dated checklists)? Run `/sdlc:import-planning` after this skill — it walks the
   repo, surfaces planning-shaped files, and produces draft tasks/milestones from them so prior

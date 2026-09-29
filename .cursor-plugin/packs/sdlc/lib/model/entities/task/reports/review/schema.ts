@@ -37,7 +37,7 @@ export const taskRow = z.object({
     .string()
     .describe('Task file basename, e.g. `T-0XV0-orchestrated-sub-agent-design-call-gap.md`.'),
   headline: z.string().describe("The task's one-line headline."),
-  status: z.string().describe('Status AFTER this review, e.g. `open/ready` or `closed/done`.'),
+  state: z.string().describe('State AFTER this review, e.g. `open/ready` or `closed/done`.'),
   decision: taskDecision,
   impact: z.enum(['high', 'medium', 'low']),
   complexity: z.enum(['small', 'medium', 'large']),
@@ -73,7 +73,7 @@ export const taskRow = z.object({
 
 export const newlyClosedRow = z.object({
   file: z.string(),
-  status: z.enum(['closed/done', 'closed/obsoleted']),
+  state: z.enum(['closed/done', 'closed/obsoleted']),
   completionNote: z.string().describe('The `completion_note:` written, citing real evidence.'),
 })
 
@@ -96,7 +96,7 @@ export const taskReviewReport = baseReport.extend({
   newlyClosed: z
     .array(newlyClosedRow)
     .default([])
-    .describe('Tasks whose status changed to closed/* during this run.'),
+    .describe('Tasks whose state changed to closed/* during this run.'),
   schemaViolations: z
     .array(schemaViolationRow)
     .default([])

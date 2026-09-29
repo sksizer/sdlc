@@ -19,7 +19,7 @@
  *
  * Exactly four consistency rules are implemented (nothing broader — no
  * "is this version shipped" reconciliation, which needs a documented
- * mapping from milestone status to "shipped" this brief left undefined):
+ * mapping from milestone state to "shipped" this brief left undefined):
  *
  *   (a) `missing_milestone`   — a milestone wikilink in a top-level section
  *       does not resolve to an existing milestone file.
@@ -41,7 +41,7 @@
  * so a roadmap with drifted frontmatter still gets its cross-reference
  * findings.
  *
- * Never hand-rolls entity reading: milestone/task existence and status come
+ * Never hand-rolls entity reading: milestone/task existence and state come
  * from the shared corpus loader + `resolveTarget` (`@lib/model/corpus`, the
  * same seam `entities audit`'s `depends_on` check uses) and
  * `readRawFrontmatter` (the bulk fm-only primitive `lib/model/read.ts`
@@ -49,21 +49,20 @@
  * through `readEntity`.
  */
 
-import { readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
-import { parse, sectionsAt, blocksOfKind } from 'markdown-contract'
 import { z } from 'zod'
 
-import { defineOp, OpError } from '@lib/registry'
+import { defineOp } from '@lib/registry'
 import type { OpIo } from '@lib/registry'
-import { isDir, isFile } from '@lib/util/fs'
 import { cmpStr } from '@lib/util/strings'
 import { unwrapWikilink } from '@lib/util/wikilinks'
 import { loadCorpus, resolveTarget } from '@lib/model/corpus'
-import { readEntity, readRawFrontmatter, resolveInstanceDocPath } from '@lib/model/read'
+import { readEntity, readRawFrontmatter } from '@lib/model/read'
 import type { EntityReadResult } from '@lib/model/read'
-import { pluralize } from '@lib/util/naming'
+
+import { resolveRoadmapPaths, scanTopLevelMilestoneLinks } from '../sections'
+import type { MilestoneLinkOccurrence } from '../sections'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -89,61 +88,10 @@ export const RoadmapCheckFinding = z.object({
 export type RoadmapCheckFinding = z.infer<typeof RoadmapCheckFinding>
 
 // ---------------------------------------------------------------------------
-// Body scan — extracting milestone links from top-level sections
+// Body scan — extracting milestone links from top-level sections. The scan
+// itself (`scanTopLevelMilestoneLinks`) is shared with `./progress.ts` via
+// `../sections`; what follows here is check.ts's own use of it.
 // ---------------------------------------------------------------------------
-
-/** A wikilink target that names a Milestone: `M-XXXX`, optionally with the
- *  `.N` sub-id suffix and/or a `-slug` tail. */
-const MILESTONE_TARGET_RE = /^M-[0-9A-Z]{4}(\.\d+)?(-[a-z0-9]+(?:-[a-z0-9]+)*)?$/
-
-/** Every `[[target]]` / `[[target|alias]]` / `[[target#frag]]` occurrence in
- *  free text, capturing just `target`. Mirrors the recognition regex
- *  `@lib/util/site_table.ts#transformWikilinks` uses for the same shape. */
-const WIKILINK_SCAN_RE = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]+)?\]\]/g
-
-/** One milestone-wikilink occurrence found under a top-level section. */
-interface LinkOccurrence {
-  sectionName: string
-  /** Raw wikilink target as written (may include a slug). */
-  target: string
-  /** Resolved corpus basename, or `null` when it doesn't resolve. */
-  resolved: string | null
-  /** The enclosing list item's full text (wikilink included), for the
-   *  stale-link "carries a note" check. */
-  itemText: string
-  line: number
-}
-
-/** Every milestone-wikilink occurrence under every top-level H2 section of
- *  `text` — version sections (`## v0.4.0`) and any other section carrying
- *  milestone-link bullets alike (e.g. a `## Pre-release` phase-0 section
- *  that precedes the first versioned release). A section with no milestone
- *  wikilinks in it (e.g. `## Overview`) simply contributes no occurrences;
- *  a non-milestone wikilink (e.g. a decision cited as rationale) is ignored. */
-function scanTopLevelSections(text: string, corpusBasenames: Set<string>): LinkOccurrence[] {
-  const tree = parse(text)
-  const occurrences: LinkOccurrence[] = []
-  for (const top of sectionsAt(tree.root, 2)) {
-    for (const list of blocksOfKind(top, 'list', { recursive: true })) {
-      for (const item of list.items) {
-        WIKILINK_SCAN_RE.lastIndex = 0
-        let m: RegExpExecArray | null
-        while ((m = WIKILINK_SCAN_RE.exec(item.text)) !== null) {
-          const target = (m[1] as string).trim()
-          if (!MILESTONE_TARGET_RE.test(target)) continue
-          occurrences.push({
-            sectionName: top.name.trim(),
-            target,
-            resolved: resolveTarget(target, corpusBasenames),
-            itemText: item.text,
-            line: item.pos.line,
-          })
-        }
-      }
-    }
-  }
-  return occurrences
-}
 
 /** The list item's text with every wikilink stripped and leading/trailing
  *  connector punctuation trimmed — `""` means "carries no note". */
@@ -180,7 +128,7 @@ function checkContract(
 /** (a) `missing_milestone` — a milestone wikilink in a top-level section does
  *  not resolve to an existing milestone file. */
 function checkMissingMilestones(
-  occurrences: LinkOccurrence[],
+  occurrences: MilestoneLinkOccurrence[],
   roadmapId: string,
   relPath: string,
 ): RoadmapCheckFinding[] {
@@ -203,7 +151,9 @@ function checkMissingMilestones(
  *  top-level H2, e.g. `## Pre-release`). Shared by the duplicate-link check
  *  (c) and the missing-task check (b), which both key off "which milestones
  *  does this roadmap resolve to". */
-function groupByResolvedMilestone(occurrences: LinkOccurrence[]): Map<string, Set<string>> {
+function groupByResolvedMilestone(
+  occurrences: MilestoneLinkOccurrence[],
+): Map<string, Set<string>> {
   const sectionsByMilestone = new Map<string, Set<string>>()
   for (const occ of occurrences) {
     if (occ.resolved === null) continue
@@ -244,7 +194,7 @@ function checkDuplicateMilestones(
  *  "carries a note" is a property of that specific list item, not of the
  *  milestone overall. */
 function checkStaleMilestoneLinks(
-  occurrences: LinkOccurrence[],
+  occurrences: MilestoneLinkOccurrence[],
   planningRoot: string,
   roadmapId: string,
   relPath: string,
@@ -254,13 +204,13 @@ function checkStaleMilestoneLinks(
     if (occ.resolved === null) continue
     const milestonePath = join(planningRoot, 'milestones', `${occ.resolved}.md`)
     const fm = readRawFrontmatter(milestonePath)
-    const status = fm !== null && typeof fm['status'] === 'string' ? fm['status'] : undefined
-    if (status === 'closed/abandoned' || status === 'closed/superseded') {
+    const state = fm !== null && typeof fm['state'] === 'string' ? fm['state'] : undefined
+    if (state === 'closed/abandoned' || state === 'closed/superseded') {
       if (noteText(occ.itemText) === '') {
         findings.push({
           id: roadmapId,
           kind: 'stale_milestone_link',
-          message: `milestone ${occ.resolved} is ${status} but is still linked from section "${occ.sectionName}" with no note explaining why`,
+          message: `milestone ${occ.resolved} is ${state} but is still linked from section "${occ.sectionName}" with no note explaining why`,
           location: `${relPath}:${occ.line}`,
         })
       }
@@ -326,7 +276,7 @@ function checkOneRoadmap(
   const roadmapId =
     res.fm !== null && typeof res.fm['id'] === 'string' ? (res.fm['id'] as string) : relPath
 
-  const occurrences = scanTopLevelSections(res.text, corpusBasenames)
+  const occurrences = scanTopLevelMilestoneLinks(res.text, corpusBasenames)
   const sectionsByMilestone = groupByResolvedMilestone(occurrences)
 
   return [
@@ -342,24 +292,6 @@ function checkOneRoadmap(
       roadmapId,
     ),
   ]
-}
-
-// ---------------------------------------------------------------------------
-// Roadmap-file discovery
-// ---------------------------------------------------------------------------
-
-/** Every roadmap file under `docs/planning/roadmaps/` (README/index skipped),
- *  sorted. `[]` when the directory doesn't exist. */
-function discoverRoadmapFiles(planningRoot: string): string[] {
-  const dir = join(planningRoot, pluralize('roadmap'))
-  if (!isDir(dir)) return []
-  const out: string[] = []
-  for (const name of readdirSync(dir)) {
-    if (!name.endsWith('.md')) continue
-    if (/^(README|index)\.md$/i.test(name)) continue
-    out.push(join(dir, name))
-  }
-  return out.sort(cmpStr)
 }
 
 // ---------------------------------------------------------------------------
@@ -390,6 +322,9 @@ function renderCheck(out: z.infer<typeof output>, io: OpIo): number {
 export default defineOp({
   path: ['roadmap', 'check'],
   summary: 'Validate a roadmap (or every roadmap) against the milestone/task corpus it links to.',
+  // Read-only: reads roadmap/milestone/task files and reports findings; never
+  // writes.
+  mutating: false,
   input,
   output,
   cli: {
@@ -398,17 +333,7 @@ export default defineOp({
   },
   handler: (args, ctx) => {
     const planningRoot = join(ctx.projectRoot, 'docs', 'planning')
-
-    let paths: string[]
-    if (args.id !== undefined) {
-      const path = resolveInstanceDocPath('roadmap', ctx.projectRoot, args.id)
-      if (!isFile(path)) {
-        throw new OpError('INVALID_INPUT', `roadmap file not found: ${path}`)
-      }
-      paths = [path]
-    } else {
-      paths = discoverRoadmapFiles(planningRoot)
-    }
+    const paths = resolveRoadmapPaths(ctx.projectRoot, planningRoot, args.id)
 
     const corpus = loadCorpus(planningRoot)
     const corpusBasenames = new Set(corpus.keys())

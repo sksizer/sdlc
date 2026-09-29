@@ -1,6 +1,12 @@
 /**
  * `sdlc capability graph` — the capability corpus as one graph: containment
- * from `parent_key`, and `related` wikilinks as edges between capabilities.
+ * from `parent_key`, `related` wikilinks as edges between capabilities, and
+ * (OKF v0.2 conformance, [[T-I1KJ]]) any `[[...]]` wikilink appearing in a
+ * capability's BODY prose that RESOLVES TO ANOTHER CAPABILITY as a further
+ * edge, tagged `kind: 'wikilink'` to distinguish it from a
+ * frontmatter-declared `kind: 'related'` edge (a body link to a non-capability
+ * or to nothing is reported as a warning or silently dropped, never an edge —
+ * see `buildCapabilityGraph` below).
  *
  * Read fail-safe from raw frontmatter, the way `loadCorpus` reads: a malformed
  * file is a warning, never a throw, because the consumer is a viewer and an
@@ -10,10 +16,24 @@
  * so containment holds and the hole is visible. Every warning quotes the id
  * it is about in double quotes — that is how the system-graph viewer joins a
  * warning to its node.
+ *
+ * The body-wikilink scan is deliberately LOCAL to this op, not a change to
+ * the generic `buildEdges()` substrate (`@lib/model/corpus`) it otherwise
+ * shares with `model/ops/audit.ts` and `task/ops/next.ts`: those two consume
+ * `buildEdges()` for real dependency/audit semantics over frontmatter-declared
+ * links only, and must not start treating a casual body-prose mention as a
+ * hard graph edge. `buildEdges()` itself is reused UNMODIFIED — this file adds
+ * two capability-graph-only call sites (the `related` edges and the body
+ * `wikilink` edges below), on top of its other two callers (`model/ops/audit.ts`,
+ * `task/ops/next.ts`) — four in total. The body-text scan walks the mdast
+ * `markdown-contract` already builds (`text` nodes only, `code`/`inlineCode`
+ * excluded) rather than a hand-rolled fence-stripping regex — see
+ * `bodyWikilinkTargets` below.
  */
 
 import { basename as pathBasename, join } from 'node:path'
 
+import { parse as parseMarkdownContract } from 'markdown-contract'
 import { z } from 'zod'
 
 import { buildEdges, findCycles, loadCorpus, resolveTarget } from '@lib/model/corpus'
@@ -27,8 +47,8 @@ import { unwrapWikilink } from '@lib/util/wikilinks'
 import { CapabilityEntity } from '../schema.ts'
 
 export const CapabilityGraphNode = CapabilityEntity.extend({
-  /** The segment before `/` in `status`: `open`, `closed`, or `unknown`. */
-  status_group: z.string(),
+  /** The segment before `/` in `state`: `open`, `closed`, or `unknown`. */
+  state_group: z.string(),
   audience: z.string(),
   locations: z.array(z.string()),
   /** Resolved `related` targets as basenames, any entity type. */
@@ -39,7 +59,15 @@ export const CapabilityGraphNode = CapabilityEntity.extend({
 }).meta({ id: 'CapabilityGraphNode' })
 
 export const CapabilityGraphEdge = z
-  .object({ from: z.string(), to: z.string(), kind: z.literal('related') })
+  .object({
+    from: z.string(),
+    to: z.string(),
+    /** `related`: declared in frontmatter's `related` array. `wikilink`: a
+     *  `[[...]]` occurrence in the capability's body prose (OKF v0.2
+     *  conformance, [[T-I1KJ]]) — a capability can produce both kinds of edge
+     *  to the same target. */
+    kind: z.enum(['related', 'wikilink']),
+  })
   .meta({ id: 'CapabilityGraphEdge' })
 
 export const CapabilityGraph = z
@@ -72,6 +100,66 @@ function linkTarget(value: string): string {
   return unwrapWikilink(value) ?? value
 }
 
+/** Every `[[target]]` / `[[target|alias]]` / `[[target#frag]]` occurrence in
+ *  free text, capturing just `target`. The leading `(?<!!)` excludes an
+ *  Obsidian `![[transclusion]]` embed — a different relationship (splicing
+ *  in another document's content) than a `[[wikilink]]` mention, so it must
+ *  not silently produce the same `kind: 'wikilink'` edge a mention does.
+ *  Mirrors the recognition grammar `roadmap/sections.ts#WIKILINK_SCAN_RE`
+ *  and `util/site_table.ts`'s `transformWikilinks` use for the same shape —
+ *  deliberately duplicated rather than shared (see the module header note on
+ *  why this scan stays local to the capability graph). Applied only to mdast
+ *  `text` node values (`bodyWikilinkTargets` below), so — unlike a plain
+ *  string scan over raw markdown — it never needs to itself account for code
+ *  fences or inline code spans. */
+const BODY_WIKILINK_RE = /(?<!!)\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]+)?\]\]/g
+
+/**
+ * Visit every mdast `text` node's string value in document order, skipping
+ * `code` and `inlineCode` subtrees. Both are leaf nodes that hold their raw
+ * content directly in `.value`, never as a nested `text` child, so the skip
+ * is belt-and-suspenders (documents the intent, survives a future
+ * mdast-util shape change) rather than load-bearing today.
+ */
+function walkTextNodes(node: unknown, visit: (value: string) => void): void {
+  if (node === null || typeof node !== 'object') return
+  const n = node as { type?: unknown; value?: unknown; children?: unknown }
+  if (n.type === 'code' || n.type === 'inlineCode') return
+  if (n.type === 'text' && typeof n.value === 'string') {
+    visit(n.value)
+    return
+  }
+  if (Array.isArray(n.children)) {
+    for (const child of n.children) walkTextNodes(child, visit)
+  }
+}
+
+/**
+ * Every wikilink TARGET (already unwrapped, trimmed) named in `rawText`'s
+ * BODY prose — found by walking the mdast tree `markdown-contract` already
+ * builds ([#2412](https://github.com/sksizer/dev/pull/2412) review round 1,
+ * replacing a hand-rolled fence-stripping regex that missed several real
+ * CommonMark shapes: a fence indented inside a list item, an unclosed fence,
+ * a closing fence longer than its opener, and an inline code span). The
+ * frontmatter block needs no separate stripping either: `markdown-contract`
+ * parses it into its own `yaml` node, which this walk never visits (only
+ * `text` nodes are), so a `related:` entry is never double-counted as a body
+ * wikilink. `parse()` is a total function over any string input (remark has
+ * no "invalid markdown" — worst case, unparseable syntax degrades to a plain
+ * paragraph of text), so there is no failure mode here to fail safe from.
+ */
+function bodyWikilinkTargets(rawText: string): string[] {
+  const tree = parseMarkdownContract(rawText).mdast
+  const targets: string[] = []
+  walkTextNodes(tree, (value) => {
+    for (const m of value.matchAll(BODY_WIKILINK_RE)) {
+      const target = m[1]?.trim()
+      if (target !== undefined && target.length > 0) targets.push(target)
+    }
+  })
+  return targets
+}
+
 /** The id half of a basename: `C-D2GO-readiness-scheduling` → `C-D2GO`. */
 function idOfBasename(basename: string): string {
   return parseCanonicalFilename(basename)?.id ?? basename
@@ -101,11 +189,15 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
     node: CapabilityGraphNode
     parentRaw: string | null
     relatedRaw: string[]
+    /** Raw (already-unwrapped) wikilink targets found in the body prose,
+     *  encounter order, duplicates included — `buildEdges` de-dupes after
+     *  resolution. OKF v0.2 conformance, [[T-I1KJ]]. */
+    bodyWikilinksRaw: string[]
   }
   const rows: Row[] = []
   const idByBasename = new Map<string, string>()
 
-  for (const row of scanEntityDir(join(planningDir, 'capabilities'))) {
+  for (const row of scanEntityDir(join(planningDir, 'capabilities'), { withText: true })) {
     if (!row.basename.startsWith('C-')) continue
     if (row.fm === null) {
       warnings.push(`unreadable frontmatter: "${row.basename}"`)
@@ -113,15 +205,15 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
     }
     const fm = row.fm
     const id = str(fm['id']) ?? idOfBasename(row.basename)
-    const status = str(fm['status']) ?? ''
+    const state = str(fm['state']) ?? ''
     idByBasename.set(row.basename, id)
     rows.push({
       node: {
         id,
         basename: row.basename,
         title: str(fm['title']) ?? id,
-        status,
-        status_group: status === '' ? 'unknown' : (status.split('/', 1)[0] as string),
+        state,
+        state_group: state === '' ? 'unknown' : (state.split('/', 1)[0] as string),
         kind: str(fm['kind']),
         audience: str(fm['audience']) ?? 'system',
         parent: null,
@@ -132,6 +224,7 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
       },
       parentRaw: str(fm['parent_key']),
       relatedRaw: strList(fm['related']),
+      bodyWikilinksRaw: row.text !== undefined ? bodyWikilinkTargets(row.text) : [],
     })
   }
 
@@ -178,8 +271,8 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
         id: ghostId,
         basename: target,
         title: ghostId,
-        status: '',
-        status_group: 'unknown',
+        state: '',
+        state_group: 'unknown',
         kind: null,
         audience: 'system',
         parent: null,
@@ -219,13 +312,60 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
     warnings.push(`unresolved related: "${source}" -> ${linkTarget(raw)}`)
   }
   const edges: CapabilityGraphEdge[] = []
+  // (from, to) pairs already carrying a `related` edge — a body wikilink to
+  // the same pair is skipped below rather than added as a second edge
+  // ([#2412](https://github.com/sksizer/dev/pull/2412) review round 1: the
+  // system-graph viewer's `aggregateEdges` groups edges by pair and can't
+  // display two edges between the same two nodes, so an un-deduplicated
+  // `related` + `wikilink` pair rendered as a misleading "2 deps"/count-2
+  // edge). `related` is the more intentional, explicit declaration, so it
+  // wins the pair; the looser body-prose mention is redundant once a
+  // `related` edge already says the same thing.
+  const relatedPairs = new Set<string>()
   for (const [id, targets] of related.forwardEdges) {
     const row = byId.get(id)
     if (row === undefined) continue
     row.node.related = targets
     for (const target of targets) {
       const to = idByBasename.get(target)
-      if (to !== undefined && to !== id) edges.push({ from: id, to, kind: 'related' })
+      if (to !== undefined && to !== id) {
+        edges.push({ from: id, to, kind: 'related' })
+        relatedPairs.add(`${id}\u0000${to}`)
+      }
+    }
+  }
+
+  // Body wikilinks (OKF v0.2 conformance, [[T-I1KJ]]): a `[[...]]` occurrence
+  // in the body prose is ALSO an edge, tagged `kind: 'wikilink'` — but only
+  // when no `related`-array edge already connects the same pair (see
+  // `relatedPairs` above). Resolved and reported exactly like `related`
+  // above: an unresolved link is a warning (deduplicated — the same body
+  // link to a non-entity narrative page, e.g. a mention repeated across a
+  // capability's prose, would otherwise repeat the identical warning line
+  // once per occurrence), a resolved-but-non-capability target is silently
+  // dropped (same "edge only between capabilities" policy `related`
+  // follows). `buildEdges` is the same generic substrate `related` uses
+  // above, called again unmodified with body-text targets — see the module
+  // header note on why this stays a capability-graph-local call rather than
+  // a change to `buildEdges()`'s other callers.
+  const wikilinks = buildEdges({
+    nodes: byId.keys(),
+    targetsOf: (id) => byId.get(id)?.bodyWikilinksRaw ?? [],
+    resolve,
+  })
+  const warnedUnresolvedWikilinks = new Set<string>()
+  for (const { source, raw } of wikilinks.unresolved) {
+    const key = `${source}\u0000${linkTarget(raw)}`
+    if (warnedUnresolvedWikilinks.has(key)) continue
+    warnedUnresolvedWikilinks.add(key)
+    warnings.push(`unresolved wikilink: "${source}" -> ${linkTarget(raw)}`)
+  }
+  for (const [id, targets] of wikilinks.forwardEdges) {
+    for (const target of targets) {
+      const to = idByBasename.get(target)
+      if (to !== undefined && to !== id && !relatedPairs.has(`${id}\u0000${to}`)) {
+        edges.push({ from: id, to, kind: 'wikilink' })
+      }
     }
   }
 
@@ -245,11 +385,13 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
 function renderGraph(out: CapabilityGraph, io: OpIo): number {
   for (const n of out.nodes) {
     io.stdout(
-      `${n.id}\t${n.parent ?? '-'}\t${n.kind ?? '-'}\t${n.status || '-'}\t${n.ghost ? '(ghost) ' : ''}${n.title}\n`,
+      `${n.id}\t${n.parent ?? '-'}\t${n.kind ?? '-'}\t${n.state || '-'}\t${n.ghost ? '(ghost) ' : ''}${n.title}\n`,
     )
   }
+  const relatedCount = out.edges.filter((e) => e.kind === 'related').length
+  const wikilinkCount = out.edges.filter((e) => e.kind === 'wikilink').length
   io.stdout(
-    `capabilities=${out.scanned} ghosts=${out.nodes.length - out.scanned} related-edges=${out.edges.length} warnings=${out.warnings.length}\n`,
+    `capabilities=${out.scanned} ghosts=${out.nodes.length - out.scanned} related-edges=${relatedCount} wikilink-edges=${wikilinkCount} warnings=${out.warnings.length}\n`,
   )
   for (const w of out.warnings) io.stdout(`warning: ${w}\n`)
   return 0
@@ -258,6 +400,9 @@ function renderGraph(out: CapabilityGraph, io: OpIo): number {
 export default defineOp({
   path: ['capability', 'graph'],
   summary: 'The capability corpus as one graph: parent_key containment, related edges, ghosts.',
+  // Read-only: reads the capability corpus and reports its graph; writes
+  // nothing.
+  mutating: false,
   input: z.object({}),
   output: CapabilityGraph,
   cli: { render: renderGraph },

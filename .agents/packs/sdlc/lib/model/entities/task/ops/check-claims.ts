@@ -49,6 +49,9 @@ export default defineOp({
   // a lefthook/agent-reached claim resolver no human types. Absent from
   // `sdlc task --help`, revealed by --advanced, still dispatches directly.
   hidden: true,
+  // Read-only: every claim resolver inspects the task doc/frontmatter and
+  // reports findings; none writes.
+  mutating: false,
   input,
   output,
   cli: {

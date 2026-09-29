@@ -43,8 +43,21 @@ single skill invocation, so this skill always passes `--once` and leaves
 repeat cadence to whatever wraps it (see below).
 
 The op reads `orchestrator:` config (`loops`, `interval_seconds`,
-`review.max_rounds`, `pr_filters`, `notify`) from the project's
-`sdlc.yaml` — see `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`.
+`review.max_rounds`, `review.response_policy`, `router`, `pr_filters`) and
+the top-level `notify:` section from the project's `sdlc.yaml` — see
+`${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`.
+
+## Pausing, and acting on one item
+
+`sdlc orchestrate pause|resume|status` is a runtime switch this skill's
+own `orchestrate run --once` invocation respects. `sdlc pr route --pr
+<n>` and `sdlc task dispatch <basename>` bypass pause entirely — the
+manual per-item escape hatch for "handle this one thing now." See
+`${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`'s "Pausing the
+orchestrator" / "Manual per-item dispatch" sections for the full
+contract (including each command's flags), and `orchestrator.router`'s
+doc there for the `live`/`resume`/`fresh` delivery chain `pr route`
+and the `prs`/`merges` ticks both use.
 
 ## Loop cadence
 
@@ -70,12 +83,15 @@ this skill's own logic.
 - `notify` fires per event, not on a "stuck" threshold: this is a Phase-2
   scope reduction from this skill's own retired prose, which used to fire
   "only when genuinely stuck" (routine blockers did NOT notify). Today
-  `notify('work-park', …)` fires once for EVERY failing step in the `work`
-  tick's dispatched-task workflow sequence (`check`/`judge`/`implement`/…),
-  and `notify('max-rounds', …)` fires once a PR's `review.max_rounds` cap
-  trips — both unconditionally, every time, per
+  `notify('task.parked', …)` fires once for EVERY failing step in the `work`
+  tick's dispatched-task workflow sequence (`check`/`judge`/`implement`/…) —
+  whether a blocking hook parked the branch or the step itself failed — and
+  `notify('pr.ci_failed'|'pr.needs_response', …)` fires once a PR's
+  `review.max_rounds` cap trips, then REPEATS every subsequent tick for as
+  long as that PR stays stuck (no dedup or one-shot suppression), per
   `lib/services/orchestrator/ticks/work.ts` and `ticks/_pr_action.ts`. Each
-  channel enabled under `orchestrator.notify` (`desktop`, `ntfy.topic_url`)
-  receives every one of these; expect more frequent notifications than the
-  old prose skill gave, especially on a project with a lot of routine,
-  self-recovering task failures.
+  channel named by the matching `notify.events.<event>` list (`notify:`'s
+  `channels` — `desktop`, `ntfy`, `webhook`) receives every one of these;
+  expect more frequent notifications than the old prose skill gave,
+  especially on a project with a lot of routine, self-recovering task
+  failures or a PR stuck past max_rounds.

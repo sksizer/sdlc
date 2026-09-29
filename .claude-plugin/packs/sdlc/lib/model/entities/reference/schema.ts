@@ -13,7 +13,7 @@ import { CommonFrontmatter, DOC_WIKILINK_PATTERN, entityIdPattern } from '../_co
 import { titleMirrorsH1 } from '../_rules.ts'
 
 /** Mirrors `reference/schema.json` `version`. */
-export const SCHEMA_VERSION = '1'
+export const SCHEMA_VERSION = '2'
 
 export const ReferenceSchema = CommonFrontmatter.extend({
   type: z.literal('reference').describe('Dispatch tag for the validator framework.'),
@@ -25,7 +25,7 @@ export const ReferenceSchema = CommonFrontmatter.extend({
         "[[D-0002-entity-identifier-shape]]: 'RF-' + 4 zero-padded chars [0-9A-Z] " +
         '(References use incrementing numbering). Never renamed once assigned.',
     ),
-  status: z
+  state: z
     .enum(['open/draft', 'open/active', 'closed/retired'])
     .default('open/active')
     .describe(

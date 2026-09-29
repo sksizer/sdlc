@@ -110,7 +110,7 @@ workflow engine would absorb.
 
 ### Rethinking task state
 
-A cluster of backlog items circles the same tension: task `status:` is a
+A cluster of backlog items circles the same tension: task `state:` is a
 frontmatter cache of a fact the lease ref owns. Whether to make the event
 log primary with frontmatter as a derived cache
 ([B-M9JX](https://github.com/sksizer/dev/blob/main/docs/planning/backlog/B-M9JX-append-only-event-log-with-frontmatter-cache.md),

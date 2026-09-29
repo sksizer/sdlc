@@ -23,11 +23,14 @@ Usage:
 - `/sdlc:pr-respond <pr-number>` — respond to review feedback on the
   named PR.
 
-The caller is typically `/sdlc:orchestrate`'s per-PR dispatch when
-`/sdlc:pr-check` returns `NEEDS-RESPONSE`; an operator may also invoke
-directly. The skill discovers the task lease via the PR's footer
-(planted by `/sdlc:task-work` at PR open) — no env vars, no argv lease
-state, no out-of-band handoff.
+This skill is the `fresh`-route (cold-dispatch) leg of the Router's
+(M-27ZR) `live`/`resume`/`fresh` chain, and can also be invoked
+directly by an operator. See
+`${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`'s `orchestrator.router`
+section for the full chain and the manual `sdlc pr route`/
+`sdlc task dispatch` escape hatches. The skill discovers the task lease
+via the PR's footer (planted by `/sdlc:task-work` at PR open) — no env
+vars, no argv lease state, no out-of-band handoff.
 
 References:
 
@@ -41,18 +44,23 @@ References:
   the lease-binding footer this skill reads.
 - `${CLAUDE_PLUGIN_ROOT}/skills/task-close-out/SKILL.md` — terminal
   skill in the lease lifecycle; takes over when the PR merges.
+- Whatever `orchestrator.review.response_policy` points at (this repo's
+  own copy sets it to S-0018-review-response-policy, one example
+  shape) is the triage policy Step 7's sub-agent applies when sorting
+  review comments — fix / decline-with-a-reply / verify-before-acting /
+  minimize-churn / loop-guard-at-`max_rounds`. See Step 6 for how the
+  skill resolves it (and its built-in fallback) before Step 7 hands it
+  to the sub-agent.
 - `pr-tools`' `check-pr` skill (a different plugin — see its own
-  `SKILL.md` when installed) is the assessment rubric Step 6's
-  sub-agent should apply when triaging review comments (fix / decline
-  / answer / ack, proposal-vs-auto-fix). check-pr itself is a general,
-  lease-unaware "tend any PR" tool with no notion of sdlc's task lease
-  — it must never be invoked directly against a PR carrying an
-  `sdlc-lease` footer (it would rebase/push/comment outside the lease
-  protocol, racing a concurrent task-work or pr-respond run). The two
-  skills are not duplicate implementations of one loop: check-pr is
-  the portable, standalone comment-triage + rebase tool for repos
-  without sdlc's lease infrastructure; pr-respond is the lease-coordinated
-  write path sdlc's own orchestrate loop dispatches on `NEEDS-RESPONSE`.
+  `SKILL.md` when installed) is a general, lease-unaware "tend any PR"
+  tool with no notion of sdlc's task lease — it must never be invoked
+  directly against a PR carrying an `sdlc-lease` footer (it would
+  rebase/push/comment outside the lease protocol, racing a concurrent
+  task-work or pr-respond run). The two skills are not duplicate
+  implementations of one loop: check-pr is the portable, standalone
+  comment-triage + rebase tool for repos without sdlc's lease
+  infrastructure; pr-respond is the lease-coordinated write path
+  sdlc's own orchestrate loop dispatches on `NEEDS-RESPONSE`.
 
 ## Output contract — deterministic markers
 
@@ -235,9 +243,39 @@ echo $! > .sdlc/runtime/lease-heartbeat-<task_id>.pid
 
 The script's stderr (one `HEARTBEAT ref=<ref> expires_at=<rfc3339>`
 line per tick) lands in the log file so the parent shell stays quiet.
-Step 7 targets the PID file to stop the loop.
+Step 8 targets the PID file to stop the loop.
 
-## 6. Dispatch the response sub-agent
+## 6. Resolve the response policy
+
+Before drafting the sub-agent's brief (Step 7), resolve which triage
+policy governs this round:
+
+1. Run
+   `scripts/sdlc config get orchestrator.review.response_policy`.
+2. If it prints a path, read that file (a standard document, e.g.
+   `docs/planning/standards/S-0018-review-response-policy.md`) and
+   carry its text forward as the resolved policy — it is
+   project-tunable independently of this skill's own prose.
+3. If it prints nothing (the key is unset), use this built-in policy
+   as the resolved text instead:
+   - **Fix** blocking comments, real bugs, and cheap/clear nits — a
+     typo, a genuinely clearer name, a stale comment — replying
+     `Fixed — <what changed>`.
+   - **Decline, with a reply** (`Declined — <one-clause reason>`,
+     thread resolved) bikeshedding: a preference with no clear winner,
+     or a change whose churn outweighs its value.
+   - **Verify** each comment against the code before acting. If it
+     doesn't hold up, reply `No change — <reason>` instead of editing;
+     if a later commit already covers it, reply
+     `Already addressed — <where>`.
+   - **Make surgical edits only**, no reflowing or tidying of
+     neighboring text.
+   - **After `orchestrator.review.max_rounds` rounds** on this PR,
+     stop fixing should-fix items, leave those threads open, and flag
+     them for the owner instead — a capped item is a decision for a
+     human, not a closed triage.
+
+## 7. Dispatch the response sub-agent
 
 Launch a sub-agent with the Agent tool. Brief it like a colleague who
 just walked in to the PR:
@@ -255,13 +293,11 @@ just walked in to the PR:
   `${CLAUDE_PLUGIN_ROOT}/skills/pr-check/post_self_comment.sh
   <pr-number> <body>` (the wrapper that records the comment in the
   pr-check cursor so the next tick doesn't re-fire NEEDS-RESPONSE on
-  our own reply). Sort each comment into fix / decline / answer / ack
-  before acting on it — the same rubric `pr-tools`' `check-pr` skill
-  uses (see References): a fix is a real defect or in-scope ask; a
-  decline is wrong, out of scope, or costs more than it returns (say
-  why); an answer is a question, no code change; an ack is a nit
-  needing only a one-line reply. Be honest — a reviewer's suggestion
-  is not a fix just because a reviewer made it.
+  our own reply). Be honest — a reviewer's suggestion is not a fix
+  just because a reviewer made it.
+- Tell it to triage every comment using the policy resolved in Step
+  6, verbatim — quote or attach that text in the brief rather than
+  re-deriving it.
 - Tell it to run the project's quality checks after substantive
   changes (via `scripts/sdlc quality run
   --config <project-root>/sdlc.yaml --line`) and to fix issues before
@@ -272,10 +308,10 @@ If review threads are large, break the work into waves and brief
 sequential sub-agents — but each sub-agent must leave the worktree in
 a clean, committed state before the next runs.
 
-## 7. Stop the heartbeat
+## 8. Stop the heartbeat
 
 When the Agent invocation returns (success, failure, or exception),
-**always** stop the heartbeat — pair it with Step 6 like a
+**always** stop the heartbeat — pair it with Step 7 like a
 `try/finally` so the sibling process never leaks:
 
 ```text
@@ -288,7 +324,7 @@ tick cleanly. The `2>/dev/null` swallows the race where the loop
 already exited on its own (e.g. CAS-FAILED because another worker
 advanced the ref).
 
-## 8. Push the response commits
+## 9. Push the response commits
 
 Push the commits the sub-agent landed on `task/<task_id>` to the
 remote. The PR will pick them up automatically (GitHub re-renders the
@@ -299,11 +335,11 @@ git push
 ```
 
 If the push fails (network, force-with-lease, race lost), surface the
-failure to the operator. Still run Step 9: the lease must transition
+failure to the operator. Still run Step 10: the lease must transition
 back to `awaiting-review` regardless so the next pr-respond invocation
 can re-acquire cleanly.
 
-## 9. Transition the lease back to `awaiting-review`
+## 10. Transition the lease back to `awaiting-review`
 
 Compose the updated handoff inputs and shell out to the CLI's
 transition subcommand. The handoff body reflects the response work
@@ -350,7 +386,7 @@ op doc-comment + `sdlc lease task transition --help`.
 Exit codes the caller must dispatch on:
 
 - **Exit 0** — lease transitioned; the updated `handoff.md` is in the
-  lease commit tree. Proceed to Step 10.
+  lease commit tree. Proceed to Step 11.
 - **Exit 1** — `HANDOFF-REQUIRED message="..."` on stderr means one
   of the three required textual flags is missing or empty. Fill it
   in and re-invoke; do NOT skip the gate by dropping back to a
@@ -363,9 +399,9 @@ Exit codes the caller must dispatch on:
   if it fires, something interrupted the heartbeat loop. Surface
   and stop.
 
-## 10. Emit the terminal marker
+## 11. Emit the terminal marker
 
-The successful end of Step 9 MUST emit one final stdout line in this
+The successful end of Step 10 MUST emit one final stdout line in this
 exact shape as the last line of the run:
 
 ```text
@@ -379,7 +415,7 @@ successfully; its absence means the sub-agent stopped early — guard
 against mistaking an intermediate marker for end-of-flow (see
 `${CLAUDE_PLUGIN_ROOT}/skills/CLAUDE.md` on marker namespacing).
 
-Emit this marker only on the success path through Steps 4–9. The
+Emit this marker only on the success path through Steps 4–10. The
 structured-failure paths (footer-missing, worktree-missing,
 fencing-mismatch, lease-conflict, lease-missing) end with their own
 stderr markers and exit cleanly without the
@@ -399,7 +435,7 @@ local; surface the conflict to the operator and stop. Do NOT push
 (another worker's response is already pushing, and our push would
 collide).
 
-If Step 8's push race-conditions against the concurrent worker's
+If Step 9's push race-conditions against the concurrent worker's
 push, `git push` will fail with a non-fast-forward. Do NOT
 force-push; surface the failure to the operator and stop.
 

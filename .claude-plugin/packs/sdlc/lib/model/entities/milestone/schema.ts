@@ -3,7 +3,7 @@
  *
  * Per [[T-JO4I-entity-zod-schemas-validation-ops-swap]]: `CommonFrontmatter`
  * base + Milestone-specific fields, `.strict()` for the JSON
- * `additionalProperties: false`, plus the two status-conditional requireds
+ * `additionalProperties: false`, plus the two state-conditional requireds
  * (`closed/* ⇒ completion_note`, `closed/done ⇒ version`). The Milestone `id`
  * admits a `.N` sub-milestone suffix; `version` is product semver (distinct
  * from this schema's own version).
@@ -24,7 +24,7 @@ import { titleMirrorsH1 } from '../_rules.ts'
 
 /** Mirrors `milestone/schema.json` `version` (the SCHEMA version, not the
  *  product `version` field). */
-export const SCHEMA_VERSION = '1'
+export const SCHEMA_VERSION = '2'
 
 /** Product-release semver, optional leading `v`, optional pre-release/build. */
 export const MILESTONE_VERSION_PATTERN = /^v?\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/
@@ -41,7 +41,7 @@ export const MilestoneSchema = CommonFrontmatter.extend({
         'sub-milestone inserted between top-levels (e.g. M-0001.1). Never renamed ' +
         'once assigned.',
     ),
-  status: z
+  state: z
     .enum([
       'open/draft',
       'open/planned',
@@ -61,7 +61,7 @@ export const MilestoneSchema = CommonFrontmatter.extend({
       'Semver of the product release this milestone targets (and ships as). ' +
         'Milestones are product releases, so version IS roadmap order — ascending ' +
         'semver. Set by a human once known; absent means deferred/unpositioned ' +
-        '(sorts last). Required when status is closed/done. Two milestones sharing a ' +
+        '(sorts last). Required when state is closed/done. Two milestones sharing a ' +
         'version is a defect flagged by project-check (see milestone definition ' +
         "Workflow invariants). Distinct from this schema's own version.",
     ),
@@ -95,18 +95,18 @@ export const MilestoneSchema = CommonFrontmatter.extend({
     .string()
     .min(1)
     .optional()
-    .describe('What shipped (or why work stopped). Required for any closed/* status.'),
+    .describe('What shipped (or why work stopped). Required for any closed/* state.'),
 })
   .strict()
   .superRefine((fm, ctx) => {
     // allOf if/then: closed milestones must record what shipped or why stopped.
     requiredWhen(
       ctx,
-      fm.status.startsWith('closed/') && fm.completion_note === undefined,
+      fm.state.startsWith('closed/') && fm.completion_note === undefined,
       'completion_note',
     )
     // allOf if/then: a milestone closed as done must record its shipped version.
-    requiredWhen(ctx, fm.status === 'closed/done' && fm.version === undefined, 'version')
+    requiredWhen(ctx, fm.state === 'closed/done' && fm.version === undefined, 'version')
   })
 
 export type Milestone = z.infer<typeof MilestoneSchema>

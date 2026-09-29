@@ -50,8 +50,8 @@ carry order. The separate `roadmap` manifest is retired.
 | `schema_version` | optional | numeric string | `"1"` | Numeric string; new entities set this |
 | `id` | required | `M<NNNN>` or `M<NNNN>.<N>` |  | Immutable; matches filename prefix. Decimal form for sub-milestones inserted between top-levels |
 | `title` | required | string |  | Human-readable headline |
-| `status` | required | enum (see Lifecycle) | `open/draft` |  |
-| `version` | conditional | semver |  | Target product release; **ascending `version` is the roadmap order**. Set once known; absent = deferred/unpositioned. Required when `status: closed/done` |
+| `state` | required | enum (see Lifecycle) | `open/draft` |  |
+| `version` | conditional | semver |  | Target product release; **ascending `version` is the roadmap order**. Set once known; absent = deferred/unpositioned. Required when `state: closed/done` |
 | `created` | required | ISO date |  | First-authored date |
 | `last_reviewed` | optional | ISO date |  | Last triage date |
 | `target_date` | optional | ISO date |  | Aspirational; not a deadline |
@@ -59,7 +59,7 @@ carry order. The separate `roadmap` manifest is retired.
 | `tags` | optional | list of strings | `[]` | Free-form labels |
 | `related` | optional | list of wikilinks | `[]` | Other milestones or tasks |
 | `relevance_note` | optional | string |  | What shifted since planning |
-| `completion_note` | conditional | string |  | Required for any `closed/` status |
+| `completion_note` | conditional | string |  | Required for any `closed/` state |
 | `need_human_review` | optional | bool | `false` | Review-tracking flag |
 | `created_at` | optional | ISO 8601 datetime |  | When the entity was authored, finer than `created` |
 | `provenance` | optional | string |  | What authored it when not by hand: a skill, tool, or import source |
@@ -91,7 +91,7 @@ readable contract is the `contract(...)` in `schema.ts`.
 
 ## Lifecycle
 
-| Status | Meaning | Required fields |
+| State | Meaning | Required fields |
 |---|---|---|
 | `open/draft` | Being defined; not committed to |  |
 | `open/planned` | Committed; tasks queued; none started |  |
@@ -119,10 +119,10 @@ terminal (re-opening requires an explicit `open/*` move).
 
 | Operation | CLI | What it does |
 |---|---|---|
-| Create | `sdlc milestone new` | Scaffold a new instance with system-assigned id; status starts `open/draft` |
+| Create | `sdlc milestone new` | Scaffold a new instance with system-assigned id; state starts `open/draft` |
 | Validate | `sdlc milestone validate <path>` (or via `project-check`) | Frontmatter + body manifest check |
-| Close | `sdlc milestone close <id> --reason done|partial|superseded|abandoned` | Transition to terminal status; prompts for `completion_note` and (for `done`) `version` |
-| List | `sdlc milestone list` | Roster of all milestones, optionally filtered by status |
+| Close | `sdlc milestone close <id> --reason done|partial|superseded|abandoned` | Transition to terminal state; prompts for `completion_note` and (for `done`) `version` |
+| List | `sdlc milestone list` | Roster of all milestones, optionally filtered by state |
 
 The `Create` deterministic core is the relocated `milestone create` op
 (`solutions/ontological/lib/model/entities/milestone/ops/create.ts`, Surface `runner`
@@ -167,7 +167,7 @@ Lives in the **Work layer** of the five-layer model
 - Identifier: `M<NNNN>` sequential id, `M<NNNN>-<slug>.md` filename,
   `[[M<NNNN>-<slug>]]` wikilink. Order is the `version` field
   (ascending semver); the `roadmap` manifest is retired.
-- Status enum: `open/{draft,planned,active}` and
+- State enum: `open/{draft,planned,active}` and
   `closed/{done,partial,superseded,abandoned}`. `closed/*` requires
   `completion_note`; `closed/done` also requires `version`.
 - Body convention: Goal / Success criteria / Deliverables / Out of

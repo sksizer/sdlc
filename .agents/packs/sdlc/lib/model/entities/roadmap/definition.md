@@ -44,13 +44,13 @@ A Roadmap is *not*:
 | `schema_version` | optional | numeric string | `"1"` | Numeric string; new entities set this |
 | `id` | required | `RM<NNNN>` |  | Immutable; matches filename |
 | `title` | required | string |  | Human-readable headline |
-| `status` | required | enum (see Lifecycle) | `open/draft` |  |
+| `state` | required | enum (see Lifecycle) | `open/draft` |  |
 | `plan_doc` | required | wikilink |  | Rationale/planning doc this roadmap tracks against (non-entity doc, e.g. `[[sdlc-0.8-plan]]`) |
 | `created` | required | ISO date |  | First-authored date |
 | `last_reviewed` | optional | ISO date |  | Last triage date |
 | `related` | optional | list of wikilinks | `[]` | Other entities or planning docs |
 | `tags` | optional | list of strings | `[]` | Free-form labels |
-| `completion_note` | conditional | string |  | Required for any `closed/` status — what superseded it, or why abandoned |
+| `completion_note` | conditional | string |  | Required for any `closed/` state — what superseded it, or why abandoned |
 | `need_human_review` | optional | bool | `false` | Review-tracking flag |
 | `created_at` | optional | ISO 8601 datetime |  | When the entity was authored, finer than `created` |
 | `provenance` | optional | string |  | What authored it when not by hand |
@@ -77,7 +77,7 @@ linked with no note.
 
 ## Lifecycle
 
-| Status | Meaning | Required fields |
+| State | Meaning | Required fields |
 |---|---|---|
 | `open/draft` | Being defined; not yet the working plan |  |
 | `open/active` | The working roadmap; version sections are maintained |  |
@@ -102,7 +102,7 @@ a living tracking document, not a shippable unit; it stays
 
 | Operation | CLI | What it does |
 |---|---|---|
-| Create | `sdlc roadmap create` | Scaffold a new instance with system-assigned id; status starts `open/draft` |
+| Create | `sdlc roadmap create` | Scaffold a new instance with system-assigned id; state starts `open/draft` |
 | Validate | `sdlc entities validate docs/planning/roadmaps/` | Frontmatter + body contract check |
 | Check | `sdlc roadmap check [<id>]` | Validate cross-references: milestone links resolve, their tasks resolve, no duplicate milestone links, no unexplained stale links. Checks every roadmap when `<id>` is omitted |
 
@@ -121,7 +121,7 @@ checkable index, not a delivery vehicle.
   release structure. ^summary
 - Identifier: `RM<NNNN>` base-36 id, `RM<NNNN>.md` filename (id-only,
   no slug), `[[RM<NNNN>]]` wikilink.
-- Status enum: `open/{draft,active}` and `closed/{superseded,abandoned}`
+- State enum: `open/{draft,active}` and `closed/{superseded,abandoned}`
   (no `closed/done` — a roadmap is never "finished", only replaced or
   dropped). `closed/*` requires `completion_note`.
 - Body convention: `Overview` (required) plus any number of free-form

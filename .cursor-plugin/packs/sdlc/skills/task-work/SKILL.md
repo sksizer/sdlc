@@ -25,7 +25,7 @@ Usage:
 - `/sdlc:task-work` — pick the next task via
 
   ```text
-  scripts/sdlc task next --status open/ready --exclude-autonomy human-only --limit 1
+  scripts/sdlc task next --state open/ready --exclude-autonomy human-only --limit 1
   ```
 
   (canonical pickup-order; see `docs/planning/decisions/D-Q2WR-task-pickup-order.md`). If the verb
@@ -33,7 +33,7 @@ Usage:
 
 Project context (don't re-derive every run):
 
-- Task documents live in `docs/planning/tasks/`. Frontmatter fields used here: `status`, `autonomy`,
+- Task documents live in `docs/planning/tasks/`. Frontmatter fields used here: `state`, `autonomy`,
   `last_reviewed`, `relevance_note`, `completion_note`. Full schema in
   `docs/planning/tasks/README.md`.
 - Frontmatter is validated by the sdlc plugin's schema. After any edit that touches frontmatter
@@ -47,11 +47,11 @@ Project context (don't re-derive every run):
   automatically. If it reports a failure, fix the frontmatter before committing — the validator is
   part of the contract, not advisory. Schema lives at
   `${CLAUDE_PLUGIN_ROOT}/lib/model/entities/task/schema.ts`.
-- Status uses a four-major `stage` or `stage/reason` form:
+- State uses a four-major `stage` or `stage/reason` form:
   - **Planning (spec still being shaped, not pickable):** `planning/draft`, `planning/proposed`,
     `planning/needs-definition`, `planning/backlog`
   - **Open (available to pick up):** `open/ready`
-  - **In-progress (someone has it):** carried by the LEASE's `phase`, not by `status:`. The
+  - **In-progress (someone has it):** carried by the LEASE's `phase`, not by `state:`. The
     `in-progress` / `in-progress/blocked` enum values are legacy — tolerated on read through the
     deprecation window, never written (D-S30G-task-state-plane-split)
   - **Closed (always with reason):** `closed/done`, `closed/superseded`,
@@ -60,16 +60,17 @@ Project context (don't re-derive every run):
   - Closed tasks must include a `completion_note:` body field.
 - Worktrees: `.sdlc/worktrees/<task-basename>` (basename = filename without `.md`).
 - Branch: `task/<task-basename>` (see `${CLAUDE_PLUGIN_ROOT}/conventions/branch-naming.md`).
-- Quality checks: declared per-project in `<project-root>/sdlc.yaml` under the `verbs.check:` key (a
-  list of shell verbs). See `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md` for the shape. Step 7
-  invokes `scripts/sdlc quality run --name check` against that file rather than
-  hard-coding any specific runner. Absent file or empty list emits a visible warning and skips the
-  gate (no silent fallback).
+- Quality checks: declared per-project in `<project-root>/sdlc.yaml` under the `workflows.check:`
+  key (a list of shell verbs). See `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md` for the shape.
+  Step 7 invokes `scripts/sdlc quality run --name check` against that file rather
+  than hard-coding any specific runner. Absent file or empty list emits a visible warning and skips
+  the gate (no silent fallback).
 - Worktree initialisation: the `setup` verb, resolved through the cascade in
-  D-V2XJ-verb-cascade-and-repo-trust (env → `sdlc.local.yaml` → `sdlc.yaml` `verbs.setup:` →
-  a default detected from the repo's own task runner or lockfile). Step 4 invokes the same
-  executor with `--name setup --allow-empty` so that projects where nothing resolves (or that
-  declare `verbs.setup: []`) no-op rather than prompting the operator to invent a recipe.
+  D-LSLH-collapse-verbs-workflows-chain-hooks (env → `sdlc.local.yaml` → `sdlc.yaml`
+  `workflows.setup:` → a default detected from the repo's own task runner or lockfile). Step 4
+  invokes the same executor with `--name setup --allow-empty` so that projects where nothing
+  resolves (or that declare `workflows.setup: []`) no-op rather than prompting the operator to
+  invent a recipe.
 
 References:
 
@@ -114,7 +115,7 @@ labeled `autonomy: human-only`. Proceed anyway, or stop?" Default:
 stop.
 
 If no argument: shell out to the canonical pickup-order verb
-(`scripts/sdlc task next --status open/ready
+(`scripts/sdlc task next --state open/ready
 --exclude-autonomy human-only --limit 1`) — the verb owns the
 sort-key chain, the `priority:`-aware lift, the dependency
 propagation, and the default dispatchability filter (a task blocked on
@@ -123,7 +124,7 @@ an unsatisfied `depends_on` is never picked) (see
 emitted on stdout as the task to work. If the verb emits nothing,
 exit `NO READY TASKS FOUND`.
 
-Read the file. Capture: status, autonomy, last_reviewed,
+Read the file. Capture: state, autonomy, last_reviewed,
 relevance_note, headline (the first `#` line).
 
 ### 1a. Project-local extension point
@@ -160,7 +161,7 @@ scripts/sdlc task probe-state <basename> --output json
 
 The stop/proceed decision — and the "don't sweep the user's WIP" consent
 hand-off in the resume branch below — stay with this skill's AskUserQuestion. The
-JSON carries the raw signals (`worktree_exists`, `branch_exists`, `task_status`,
+JSON carries the raw signals (`worktree_exists`, `branch_exists`, `task_state`,
 `open_pr_number`, `readiness_verified_at`, `main_head_subject`,
 `main_head_is_verify_stamp`) plus two derived gates the skill branches on:
 `blocked_preflight` and `resume_candidate`. (Pass `--no-gh` to skip the
@@ -170,8 +171,8 @@ JSON carries the raw signals (`worktree_exists`, `branch_exists`, `task_status`,
 Block and report (do not proceed) when `blocked_preflight` is `true` — it is
 `true` if ANY of these hold:
 
-- Status starts with `closed/` (any reason — `closed/done`, `closed/obsoleted`, etc.).
-- Status is the legacy `in-progress` or `in-progress/blocked` (a file no run has healed yet).
+- State starts with `closed/` (any reason — `closed/done`, `closed/obsoleted`, etc.).
+- State is the legacy `in-progress` or `in-progress/blocked` (a file no run has healed yet).
 - An active lease already holds the task and it is not the resume shape below.
 - A worktree already exists at `.sdlc/worktrees/<basename>` (`worktree_exists`).
 - A branch already exists named `task/<basename>` (`branch_exists`).
@@ -181,9 +182,9 @@ The `planning/*` soft-gate below is deliberately NOT folded into
 `blocked_preflight` — it is a judgment hand-off to AskUserQuestion, not a hard
 block.
 
-If status is in the `planning/*` family (`planning/draft`, `planning/proposed`,
+If state is in the `planning/*` family (`planning/draft`, `planning/proposed`,
 `planning/needs-definition`, `planning/backlog`), surface this to the user via AskUserQuestion:
-"This task is `<status>`, not `open/ready`. Proceed anyway, or stop?" Default: stop.
+"This task is `<state>`, not `open/ready`. Proceed anyway, or stop?" Default: stop.
 
 ### Resume detection — recover from a stalled previous run
 
@@ -200,13 +201,13 @@ it permanently.
 
 **The lease is the signal.** Under the
 D-S30G-task-state-plane-split plane rule, execution state lives on
-the lease and frontmatter `status:` is a derived cache — so "is a run
+the lease and frontmatter `state:` is a derived cache — so "is a run
 half-finished?" is a question only the lease can answer. The probe from
 the top of Step 2 reads it and decides: `resume_candidate` is `true`
 iff ALL of the following hold simultaneously. Treat the run as a resume
 rather than a fresh pickup exactly when `resume_candidate` is `true`:
 
-- Task `status:` on main is `open/ready` — which it is for the task's
+- Task `state:` on main is `open/ready` — which it is for the task's
   whole in-flight life; the split retired the start commit that used to
   flip it to `in-progress`.
 - The probe's `lease_phase` is `claimed` or `working` — a lease exists,
@@ -365,7 +366,7 @@ main so the task file only changes once on main per run.
 ### 3a. Capture the quality-check baseline
 
 `sdlc quality run --name check` (Step 7) gates the PR on the project's declared
-`verbs.check:` verbs. Some verbs (notably `sdlc entities audit`)
+`workflows.check:` verbs. Some verbs (notably `sdlc entities audit`)
 emit pre-existing drift already broken on `origin/main`. Capturing a
 baseline now lets Step 7 gate only on drift this branch introduced,
 not pre-existing findings (see
@@ -417,13 +418,13 @@ Procedure:
    ```
 
    where `N` is the total number of finding lines across all verbs in
-   `verbs.<verb>.findings`. This is informational — capture never
+   `workflows.<verb>.findings`. This is informational — capture never
    fails the run; even if the baseline contains many findings, that
    IS the baseline, and Step 7's gate will subtract them out.
 
 4. If `<project-root>/sdlc.yaml` is absent OR declares no
-   `verbs.check:` verbs, the capture is a no-op: emit
-   `Baseline skipped: no verbs.check configured` and proceed
+   `workflows.check:` verbs, the capture is a no-op: emit
+   `Baseline skipped: no workflows.check configured` and proceed
    without setting `ORIGIN_MAIN_SHA`. Step 7 will surface the same
    missing-config warning it surfaces today; nothing else changes.
 
@@ -440,8 +441,8 @@ Before creating the worktree, confirm the operator's resolved Claude Code sandbo
   managers the project uses from its lockfiles / ecosystem markers (node
   `bun.lock`/`pnpm-lock.yaml`/ `yarn.lock`/`package-lock.json`, Rust `Cargo.toml`, Python
   `uv.lock`/`poetry.lock`/ `requirements.txt`, Go `go.mod`) UNION the leading verb token of every
-  `verbs.check:` / `verbs.setup:` entry in the project's `sdlc.yaml`. A polyglot bun+cargo repo
-  resolves BOTH. Each resolved manager lacking a `Bash(<pm>:*)` grant is a hard gap.
+  `workflows.check:` / `workflows.setup:` entry in the project's `sdlc.yaml`. A polyglot bun+cargo
+  repo resolves BOTH. Each resolved manager lacking a `Bash(<pm>:*)` grant is a hard gap.
 - **Body-text heuristics → advisory warnings.** A package-manager family the body mentions but the
   project does not resolve (e.g. a passing `npm install` mention in a pnpm repo) is at most a
   `warning:` line on stderr — never a hard gap, never exit 1.
@@ -504,14 +505,14 @@ worktree, so the first feature-branch commit fails when the `commit-msg` hook ca
 dependencies.
 
 Run the project's `setup` verb via the same executor that powers Step 7's quality checks. The
-executor resolves it through the cascade (see `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`):
-an `SDLC_VERB_SETUP` override, then `sdlc.local.yaml`, then `sdlc.yaml` `verbs.setup:`, then a
-default detected from the repo's task runner (`just`/`moon`/`mise` `setup`) or lockfile. A
-declared `verbs.setup: []` means "nothing to run". If nothing resolves, the step is a no-op with a
+executor resolves it through the cascade (see `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`): an
+`SDLC_WORKFLOW_SETUP` override, then `sdlc.local.yaml`, then `sdlc.yaml` `workflows.setup:`, then a
+default detected from the repo's task runner (`just`/`moon`/`mise` `setup`) or lockfile. A declared
+`workflows.setup: []` means "nothing to run". If nothing resolves, the step is a no-op with a
 warning — do NOT invent verbs yourself. `sdlc quality run --name setup` is trust-gated
-(D-V2XJ-verb-cascade-and-repo-trust): if the repo has not been trusted, it exits `UNTRUSTED`
-naming the fix (`sdlc repo trust`); run that once per repo before Step 4, or pass `--trust` to
-this one invocation.
+(D-LSLH-collapse-verbs-workflows-chain-hooks): if the repo has not been trusted, it exits
+`UNTRUSTED` naming the fix (`sdlc repo trust`); run that once per repo before Step 4, or pass
+`--trust` to this one invocation.
 
 Procedure (in the worktree, immediately after `git worktree add`, before any other commit attempt):
 
@@ -525,28 +526,28 @@ Procedure (in the worktree, immediately after `git worktree add`, before any oth
        --project-root <worktree-root> --log --allow-empty
    ```
 
-   `--allow-empty` turns an empty resolution (`verbs.setup: []`, or nothing declared and nothing
+   `--allow-empty` turns an empty resolution (`workflows.setup: []`, or nothing declared and nothing
    detected) into exit 0 with a single stderr warning — that's the expected outcome on projects with
    no init recipe. Any non-zero exit code (a resolved verb failed) is a hard error: stop and surface
    to the user, do not proceed to Step 5.
 
-Example: a JS project declares `verbs.setup: ["mise trust", "just setup-worktree"]`; the executor
-runs them in order so the first commit finds its `commit-msg` hook armed. A project with no hook to
-arm sets `verbs.setup: []` (omitting the key lets the detected default run instead).
+Example: a JS project declares `workflows.setup: ["mise trust", "just setup-worktree"]`; the
+executor runs them in order so the first commit finds its `commit-msg` hook armed. A project with no
+hook to arm sets `workflows.setup: []` (omitting the key lets the detected default run instead).
 
 ## 5. Ensure the task is implementation-ready, then start it
 
 This step is gate-then-start. The readiness gate (`/sdlc:task-ensure-ready`) runs first; only after
 it returns `ENSURE-READY-OK:` does Step 5b move the lease from `claimed` to `working`.
 
-**Neither half writes `status:`.** Under D-S30G-task-state-plane-split the run's phase lives on
-the lease and frontmatter `status:` is a derived cache, so a task in flight reads `open/ready` from
+**Neither half writes `state:`.** Under D-S30G-task-state-plane-split the run's phase lives on
+the lease and frontmatter `state:` is a derived cache, so a task in flight reads `open/ready` from
 pickup to closure. The start commit that used to flip it to `in-progress` is gone, and so is the
 separate verify-stamp commit: 5a's pass writes the lease's `gates` when a lease is held, and
-`sdlc lease reconcile` heals any file that still carries an execution-plane status.
+`sdlc lease reconcile` heals any file that still carries an execution-plane state.
 
-The one commit Step 5 can still land is a PROMOTION — status flip plus readiness stamp, in one
-commit — and only when the task entered at a `planning/*` status. A task picked up at `open/ready`
+The one commit Step 5 can still land is a PROMOTION — state flip plus readiness stamp, in one
+commit — and only when the task entered at a `planning/*` state. A task picked up at `open/ready`
 passes the gate with no commit at all.
 
 **Land any task-body edits on `origin/main` before the gate runs.**
@@ -615,7 +616,7 @@ If `/sdlc:task-ensure-ready` returned `ENSURE-READY-NEEDS-DEFINITION:
 been torn down (via `--cleanup-on-fail`). The script's third stdout
 line carries the cleanup state — `cleaned-up: worktree=<state>
 branch=<state> lease=<state>` — for diagnostic relay. Main correctly
-reports `status: planning/needs-definition` with the
+reports `state: planning/needs-definition` with the
 `definition_gap:` field populated; the consuming orchestrator's
 next pickup pass will see the task as ineligible until a human (or
 a follow-up `/sdlc:task-define` session) fills the gap.
@@ -645,7 +646,7 @@ created from scratch in Step 4 and Step 2a.
 If the marker was `ENSURE-READY-OK: <basename>`, the gate passed;
 proceed to Step 5b. Its `plane:` line says where the result went —
 `lease-gates` on the normal task-work path, `frontmatter-promotion`
-when the task entered at a `planning/*` status, `none` when it was
+when the task entered at a `planning/*` state, `none` when it was
 already promoted and clean.
 
 If the marker was `ENSURE-READY-PARENT-ROLLUP: <basename>`, the task is
@@ -656,7 +657,7 @@ Step 5b is safe to re-run on a resumed session — the lease transition
 is a no-op when the phase is already `working`.
 
 The sub-skill owns every write for the
-`readiness_verified_at:` / `status:` / `definition_gap:` fields, on
+`readiness_verified_at:` / `state:` / `definition_gap:` fields, on
 whichever plane it chose; do not commit them again here.
 
 ### 5b. Start the run — lease transition, reset the task branch
@@ -676,14 +677,14 @@ scripts/sdlc task start \
 ```
 
 The script reads `origin/main`'s copy of `docs/planning/tasks/<basename>.md` and refuses a task that
-is not eligible to start (a `closed/*` status). It then CAS-REPLACEs the lease ref from `claimed` to
+is not eligible to start (a `closed/*` state). It then CAS-REPLACEs the lease ref from `claimed` to
 `working` (owner-preserving — `lease_token` does not rotate), and finally `git reset --hard
 origin/main` inside the worktree so the task branch fast-forwards to the current `origin/main` tip.
 It emits `STARTED: <basename>`.
 
-**What it no longer does, and why.** It used to commit `status: in-progress` + `last_reviewed` + a
+**What it no longer does, and why.** It used to commit `state: in-progress` + `last_reviewed` + a
 `## Post-mortem` stub to `main` — the same fact the lease transition on the next line already
-recorded, written twice (D-S30G-task-state-plane-split). The status flip is gone because the
+recorded, written twice (D-S30G-task-state-plane-split). The state flip is gone because the
 lease is authoritative; the `last_reviewed` bump went with it (review recency is not a per-run
 fact); and the post-mortem stub moved to `close-commit`, which plants it at closure when the body
 lacks one. Frontmatter reads `open/ready` throughout.
@@ -824,7 +825,7 @@ structure; do not collapse the work into a single sprawling change:
 The set of gates is **per-project configurable** via `<project-root>/sdlc.yaml`
 (shape documented at `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md`). This
 skill does not hard-code any specific runner — instead it shells out to the
-shared executor, which reads the project's `verbs.check:` list and runs
+shared executor, which reads the project's `workflows.check:` list and runs
 each verb in order.
 
 In the worktree:
@@ -848,7 +849,7 @@ In the worktree:
    gating on its exit code — see `${CLAUDE_PLUGIN_ROOT}/skills/CLAUDE.md`
    ("Don't pipe commands you gate on").
 
-   If Step 3a skipped baseline capture (no `verbs.check:`
+   If Step 3a skipped baseline capture (no `workflows.check:`
    configured), drop `--diff-against-baseline` from the invocation —
    the executor's missing-config branch handles that case the same
    way it always has.
@@ -870,8 +871,8 @@ In the worktree:
      to populate it, or `/sdlc:setup` to scaffold an empty one"), then
      skip the gate and continue. Do **not** silently substitute hard-coded
      verbs.
-   - **`sdlc.yaml` exists but `verbs.check:` is empty or missing.** The
-     executor prints `warning: no verbs.check configured in <path>` on
+   - **`sdlc.yaml` exists but `workflows.check:` is empty or missing.** The
+     executor prints `warning: no workflows.check configured in <path>` on
      stderr and exits `2`. Same treatment: surface the warning, skip the
      gate, continue.
    - **`sdlc.yaml` declares one or more verbs.** The executor runs each;
@@ -920,8 +921,9 @@ second gate, and Step 7's formal gate (sub-step 1) stays the gate.
 
 If any AC can't be met, do not open a PR. Add a `<blocked></blocked>` section to the task file
 describing what's stuck and why, commit it on the feature branch, transition the lease to the
-`blocked` phase, and report back. Blocked is a phase, not a status: it is execution state, so it
-lives on the lease (D-S30G-task-state-plane-split) and frontmatter stays `open/ready`.
+`blocked` phase, and report back. Blocked is a phase, not a frontmatter state: it is execution
+state, so it lives on the lease (D-S30G-task-state-plane-split) and frontmatter stays
+`open/ready`.
 
 ```text
 scripts/sdlc lease task transition <basename> --phase blocked
@@ -1421,14 +1423,14 @@ silently abandon. Edit the task file in the worktree:
   unblock would need.
 - Commit on the feature branch.
 - Transition the lease to the `blocked` phase
-  (`sdlc lease task transition <basename> --phase blocked`). Do NOT write a status to frontmatter —
+  (`sdlc lease task transition <basename> --phase blocked`). Do NOT write a state to frontmatter —
   blocked is execution state and lives on the lease.
 - Report to the user, including the worktree path so they can pick it up.
 
 ## Notes
 
 - This skill modifies state on `main` at most ONCE, and often not at all: Step 5a's PROMOTION
-  commit, which fires only when the task entered at a `planning/*` status. Everything else about a
+  commit, which fires only when the task entered at a `planning/*` state. Everything else about a
   run — its phase, its gate results, its PR binding — is lease state
   (D-S30G-task-state-plane-split). Only the task file is staged; never sweep in unrelated
   working-tree edits. The matching close-out commit is owned by `/sdlc:task-close-out`, not this
