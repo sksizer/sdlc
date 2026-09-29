@@ -17,12 +17,13 @@
  * frontmatter-only `migrate(fm) -> new_fm` contract. Do not add a second
  * parameter here without also teaching the runner.
  *
- * Each entity type's migrations keep their own local `MigrationError` class
- * (a byte-identical copy per type, per that type's `errors.ts`) rather than
- * sharing one across types, so this factory takes the caller's error
- * constructor instead of importing one — the thrown error is still that
- * type's own `MigrationError`, satisfying `instanceof` checks written
- * against it.
+ * Every entity type's migrations now throw the one shared `MigrationError`
+ * class (`_migration_error.ts`, re-exported per type from that type's own
+ * `errors.ts` — [[T-ZRO1]]). This factory still takes the caller's error
+ * constructor instead of importing `MigrationError` directly, so it stays
+ * free of a dependency on the migrations tree; the thrown error still
+ * satisfies `instanceof` checks written against the caller's re-exported
+ * `MigrationError`, since it is the same class.
  *
  * The returned transform is stamped `appliesToClosed: true`
  * ([#2412](https://github.com/sksizer/dev/pull/2412) review round 1) — the

@@ -178,23 +178,23 @@ function linkTargets(planningDir: string): Set<string> {
   return names
 }
 
-export function buildCapabilityGraph(root: string): CapabilityGraph {
-  const planningDir = join(root, 'docs', 'planning')
-  const warnings: string[] = []
+/** One capability file's raw, not-yet-resolved graph inputs, plus the node it builds. */
+interface CapabilityRow {
+  node: CapabilityGraphNode
+  parentRaw: string | null
+  relatedRaw: string[]
+  /** Raw (already-unwrapped) wikilink targets found in the body prose,
+   *  encounter order, duplicates included — `buildEdges` de-dupes after
+   *  resolution. OKF v0.2 conformance, [[T-I1KJ]]. */
+  bodyWikilinksRaw: string[]
+}
 
-  const targets = linkTargets(planningDir)
-  const resolve = (raw: string): string | null => resolveTarget(linkTarget(raw), targets)
-
-  interface Row {
-    node: CapabilityGraphNode
-    parentRaw: string | null
-    relatedRaw: string[]
-    /** Raw (already-unwrapped) wikilink targets found in the body prose,
-     *  encounter order, duplicates included — `buildEdges` de-dupes after
-     *  resolution. OKF v0.2 conformance, [[T-I1KJ]]. */
-    bodyWikilinksRaw: string[]
-  }
-  const rows: Row[] = []
+/** Scan every `C-*` capability file into a {@link CapabilityRow}, warning on unreadable frontmatter. */
+function scanCapabilityRows(
+  planningDir: string,
+  warnings: string[],
+): { rows: CapabilityRow[]; idByBasename: Map<string, string> } {
+  const rows: CapabilityRow[] = []
   const idByBasename = new Map<string, string>()
 
   for (const row of scanEntityDir(join(planningDir, 'capabilities'), { withText: true })) {
@@ -228,10 +228,16 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
     })
   }
 
-  // Two files carrying one id would collapse every map keyed on it, here and
-  // in the viewer. The first file keeps the id; the second is reported and
-  // left off the map.
-  const byId = new Map<string, Row>()
+  return { rows, idByBasename }
+}
+
+/**
+ * Two files carrying one id would collapse every map keyed on it, here and in
+ * the viewer. The first file keeps the id; the second is reported and left
+ * off the map.
+ */
+function dedupeById(rows: CapabilityRow[], warnings: string[]): Map<string, CapabilityRow> {
+  const byId = new Map<string, CapabilityRow>()
   for (const row of rows) {
     if (byId.has(row.node.id)) {
       warnings.push(`id collision: "${row.node.id}" (${row.node.basename}) already taken`)
@@ -239,11 +245,23 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
     }
     byId.set(row.node.id, row)
   }
-  const kept = [...byId.values()]
+  return byId
+}
+
+/**
+ * Containment: resolve each `parent_key` to an id, minting a ghost for a
+ * target no file answers to. Mutates `row.node.parent` on every row in
+ * `kept`; returns the ghost nodes minted along the way.
+ */
+function resolveContainment(
+  kept: CapabilityRow[],
+  byId: Map<string, CapabilityRow>,
+  idByBasename: Map<string, string>,
+  resolve: (raw: string) => string | null,
+  warnings: string[],
+): Map<string, CapabilityGraphNode> {
   const ghosts = new Map<string, CapabilityGraphNode>()
 
-  // Containment: resolve each parent_key to an id, minting a ghost for a
-  // target no file answers to.
   for (const row of kept) {
     if (row.parentRaw === null) continue
     const target = linkTarget(row.parentRaw)
@@ -285,9 +303,20 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
     row.node.parent = ghostId
   }
 
-  // A parent chain that closes on itself is not a tree. Cut it at its
-  // smallest member so every other edge survives. `findCycles` returns the
-  // cycle rotated to where the traversal closed it, so sort before choosing.
+  return ghosts
+}
+
+/**
+ * A parent chain that closes on itself is not a tree. Cut it at its smallest
+ * member so every other edge survives. `findCycles` returns the cycle
+ * rotated to where the traversal closed it, so sort before choosing. Mutates
+ * the cut row's `node.parent` in place.
+ */
+function cutParentCycles(
+  kept: CapabilityRow[],
+  byId: Map<string, CapabilityRow>,
+  warnings: string[],
+): void {
   const parentEdges = new Map<string, string[]>()
   for (const row of kept) {
     if (row.node.parent !== null) parentEdges.set(row.node.id, [row.node.parent])
@@ -300,9 +329,22 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
     warnings.push(`parent_key cycle: ${cycle.map((id) => `"${id}"`).join(' -> ')}`)
     row.node.parent = null
   }
+}
 
-  // `related`: resolved basenames on the node for every type; an edge only
-  // when the target is itself a capability.
+/**
+ * `related`: resolved basenames on the node for every type; an edge only
+ * when the target is itself a capability. Mutates `row.node.related` on
+ * every row `related.forwardEdges` names. Also returns `relatedPairs` — the
+ * `(from, to)` pairs already carrying a `related` edge — so {@link
+ * buildWikilinkEdges} can skip a body wikilink to the same pair rather than
+ * add it as a second edge.
+ */
+function buildRelatedEdges(
+  byId: Map<string, CapabilityRow>,
+  idByBasename: Map<string, string>,
+  resolve: (raw: string) => string | null,
+  warnings: string[],
+): { edges: CapabilityGraphEdge[]; relatedPairs: Set<string> } {
   const related = buildEdges({
     nodes: byId.keys(),
     targetsOf: (id) => byId.get(id)?.relatedRaw ?? [],
@@ -334,20 +376,35 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
       }
     }
   }
+  return { edges, relatedPairs }
+}
 
-  // Body wikilinks (OKF v0.2 conformance, [[T-I1KJ]]): a `[[...]]` occurrence
-  // in the body prose is ALSO an edge, tagged `kind: 'wikilink'` — but only
-  // when no `related`-array edge already connects the same pair (see
-  // `relatedPairs` above). Resolved and reported exactly like `related`
-  // above: an unresolved link is a warning (deduplicated — the same body
-  // link to a non-entity narrative page, e.g. a mention repeated across a
-  // capability's prose, would otherwise repeat the identical warning line
-  // once per occurrence), a resolved-but-non-capability target is silently
-  // dropped (same "edge only between capabilities" policy `related`
-  // follows). `buildEdges` is the same generic substrate `related` uses
-  // above, called again unmodified with body-text targets — see the module
-  // header note on why this stays a capability-graph-local call rather than
-  // a change to `buildEdges()`'s other callers.
+/**
+ * Body wikilinks (OKF v0.2 conformance, [[T-I1KJ]]): a `[[...]]` occurrence
+ * in the body prose is ALSO an edge, tagged `kind: 'wikilink'` — but only
+ * when no `related`-array edge already connects the same pair (`relatedPairs`,
+ * from {@link buildRelatedEdges} — [#2412](https://github.com/sksizer/dev/pull/2412)
+ * review round 1: the system-graph viewer's `aggregateEdges` groups edges by
+ * pair and can't display two edges between the same two nodes, so an
+ * un-deduplicated `related` + `wikilink` pair rendered as a misleading "2
+ * deps"/count-2 edge). Resolved and reported exactly like `related` above:
+ * an unresolved link is a warning (deduplicated — the same body link to a
+ * non-entity narrative page, e.g. a mention repeated across a capability's
+ * prose, would otherwise repeat the identical warning line once per
+ * occurrence), a resolved-but-non-capability target is silently dropped
+ * (same "edge only between capabilities" policy `related` follows).
+ * `buildEdges` is the same generic substrate `related` uses, called again
+ * unmodified with body-text targets — see the module header note on why
+ * this stays a capability-graph-local call rather than a change to
+ * `buildEdges()`'s other callers.
+ */
+function buildWikilinkEdges(
+  byId: Map<string, CapabilityRow>,
+  idByBasename: Map<string, string>,
+  resolve: (raw: string) => string | null,
+  warnings: string[],
+  relatedPairs: Set<string>,
+): CapabilityGraphEdge[] {
   const wikilinks = buildEdges({
     nodes: byId.keys(),
     targetsOf: (id) => byId.get(id)?.bodyWikilinksRaw ?? [],
@@ -360,6 +417,7 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
     warnedUnresolvedWikilinks.add(key)
     warnings.push(`unresolved wikilink: "${source}" -> ${linkTarget(raw)}`)
   }
+  const edges: CapabilityGraphEdge[] = []
   for (const [id, targets] of wikilinks.forwardEdges) {
     for (const target of targets) {
       const to = idByBasename.get(target)
@@ -368,6 +426,28 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
       }
     }
   }
+  return edges
+}
+
+export function buildCapabilityGraph(root: string): CapabilityGraph {
+  const planningDir = join(root, 'docs', 'planning')
+  const warnings: string[] = []
+
+  const targets = linkTargets(planningDir)
+  const resolve = (raw: string): string | null => resolveTarget(linkTarget(raw), targets)
+
+  const { rows, idByBasename } = scanCapabilityRows(planningDir, warnings)
+  const byId = dedupeById(rows, warnings)
+  const kept = [...byId.values()]
+
+  const ghosts = resolveContainment(kept, byId, idByBasename, resolve, warnings)
+  cutParentCycles(kept, byId, warnings)
+
+  const relatedResult = buildRelatedEdges(byId, idByBasename, resolve, warnings)
+  const edges: CapabilityGraphEdge[] = [
+    ...relatedResult.edges,
+    ...buildWikilinkEdges(byId, idByBasename, resolve, warnings, relatedResult.relatedPairs),
+  ]
 
   const nodes = [...kept.map((r) => r.node), ...ghosts.values()].sort((a, b) => cmpStr(a.id, b.id))
   edges.sort((a, b) => cmpStr(a.from, b.from) || cmpStr(a.to, b.to))

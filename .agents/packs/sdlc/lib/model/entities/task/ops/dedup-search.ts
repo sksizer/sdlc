@@ -41,7 +41,7 @@ import { defineOp, type OpCtx } from '@lib/registry'
 import { scanEntityDir } from '@lib/model/read'
 import { splitFrontmatter } from '@lib/util/frontmatter'
 import { isDir } from '@lib/util/fs'
-import { pyJsonString } from '@lib/util/python-json'
+import { PyFloat, pyJsonDumps } from '@lib/util/python-json'
 import { escapeRegExp } from '@lib/util/strings'
 
 import { legacyCliContext } from '@lib/util/legacy-cli.ts'
@@ -440,75 +440,13 @@ export function emitTelemetry(
     link_to: result.linkTo,
     top_score: topScore,
     keyword_count: keywordCount,
-    ratio: new FloatValue(ratio),
+    ratio: new PyFloat(ratio),
     worktree: worktree !== null ? String(worktree) : null,
     excluded: [...excludedBasenames],
   }
   const parent = dirname(path)
   mkdirSync(parent, { recursive: true })
-  appendFileSync(path, pyJsonCompact(payload) + '\n', 'utf-8')
-}
-
-// ---------------------------------------------------------------------------
-// Python-faithful JSON serialization
-// ---------------------------------------------------------------------------
-
-/**
- * Match Python's `json.dumps(obj)` (compact form): `", "` and `": "`
- * separators, and floats that are whole numbers render as `N.0`.
- */
-function pyJsonCompact(obj: unknown): string {
-  return pyJson(obj, null, 0)
-}
-
-/** Match Python's `json.dumps(obj, indent=2)`. */
-function pyJsonIndent2(obj: unknown): string {
-  return pyJson(obj, 2, 0)
-}
-
-function pyFloat(n: number): string {
-  // Python json renders integral floats produced by division as e.g. "0.0".
-  // We only carry one float field (ratio); track its float-ness explicitly
-  // via the FloatValue wrapper below. Plain integers stay bare.
-  if (Number.isInteger(n)) {
-    return `${n}.0`
-  }
-  return String(n)
-}
-
-/** Wrapper marking a number that must serialize as a Python float. */
-class FloatValue {
-  constructor(readonly value: number) {}
-}
-
-function pyJson(obj: unknown, indent: number | null, depth: number): string {
-  const nl = indent === null ? '' : '\n'
-  const pad = indent === null ? '' : ' '.repeat(indent * (depth + 1))
-  const padClose = indent === null ? '' : ' '.repeat(indent * depth)
-  const itemSep = indent === null ? ', ' : ','
-  const kvSep = ': '
-
-  if (obj === null) return 'null'
-  if (obj instanceof FloatValue) return pyFloat(obj.value)
-  if (typeof obj === 'boolean') return obj ? 'true' : 'false'
-  if (typeof obj === 'number') {
-    return Number.isInteger(obj) ? String(obj) : String(obj)
-  }
-  if (typeof obj === 'string') return pyJsonString(obj)
-  if (Array.isArray(obj)) {
-    if (obj.length === 0) return '[]'
-    const items = obj.map((v) => pad + pyJson(v, indent, depth + 1))
-    return '[' + nl + items.join(itemSep + nl) + nl + padClose + ']'
-  }
-  if (typeof obj === 'object') {
-    const entries = Object.entries(obj as Record<string, unknown>)
-    if (entries.length === 0) return '{}'
-    const items = entries.map(
-      ([k, v]) => pad + JSON.stringify(k) + kvSep + pyJson(v, indent, depth + 1),
-    )
-    return '{' + nl + items.join(itemSep + nl) + nl + padClose + '}'
-  }
-  return 'null'
+  appendFileSync(path, pyJsonDumps(payload) + '\n', 'utf-8')
 }
 
 // ---------------------------------------------------------------------------
@@ -695,19 +633,22 @@ export function main(argv: readonly string[], ctx: CliContext): number {
 
   if (flags.json) {
     ctx.io.stdout(
-      pyJsonIndent2({
-        bullet: result.bullet,
-        keywords: result.keywords,
-        candidates: result.candidates.map((c) => ({
-          basename: c.basename,
-          score: c.score,
-          state: c.state,
-          headline: c.headline,
-        })),
-        decision: result.decision,
-        link_to: result.linkTo,
-        block: result.block,
-      }) + '\n',
+      pyJsonDumps(
+        {
+          bullet: result.bullet,
+          keywords: result.keywords,
+          candidates: result.candidates.map((c) => ({
+            basename: c.basename,
+            score: c.score,
+            state: c.state,
+            headline: c.headline,
+          })),
+          decision: result.decision,
+          link_to: result.linkTo,
+          block: result.block,
+        },
+        2,
+      ) + '\n',
     )
   } else {
     // Default to --block. The decision summary goes to stderr so the caller

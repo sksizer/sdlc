@@ -6,7 +6,7 @@
  * `LintError` from it. The lefthook pre-commit gate invokes this verb.
  *
  * Per
- * [[2026-05-28-task-state-frontmatter-commits-on-main-not-worktree-branch]],
+ * [[T-SIHV-task-state-frontmatter-commits-on-main-not-worktree-branch]],
  * changes to a task file's task-state frontmatter fields (`state:`,
  * `readiness_verified_at:`, `last_reviewed:`, `definition_gap:`,
  * `completion_note:`, `prs:`) must commit on `main` — never on a
@@ -56,7 +56,7 @@ function renderLintStateOrigin(out: Output, io: OpIo): number {
       `${out.totalViolations} task-state-only commit(s) found on task branches. ` +
         `State-tracking work belongs on \`main\`, not on the implementation ` +
         `branch — see ` +
-        `docs/planning/tasks/2026-05-28-task-state-frontmatter-commits-` +
+        `docs/planning/tasks/T-SIHV-task-state-frontmatter-commits-` +
         `on-main-not-worktree-branch.md.\n`,
     )
     return 1

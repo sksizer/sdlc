@@ -159,17 +159,15 @@ function subtreeOf(rootId: string, nodes: CapabilityGraphNode[]): Set<string> {
   return out
 }
 
-export async function buildCapabilityCoverage(
-  root: string,
-  opts: { scope?: string | null } = {},
-): Promise<CapabilityCoverage> {
-  const scope = opts.scope ?? null
-  const planningDir = join(root, 'docs', 'planning')
-  const graph = buildCapabilityGraph(root)
-  const structure = await buildSystemGraph(root, { includeExternal: false })
-
-  // Units: every on-disk package or crate. The repo root and directory
-  // groups are scaffolding, not places a capability is realized.
+/**
+ * Every on-disk package or crate as a coverage unit, plus a path→unit lookup
+ * (deepest directory wins). The repo root and directory groups are
+ * scaffolding, not places a capability is realized.
+ */
+function buildCoverageUnits(structure: Awaited<ReturnType<typeof buildSystemGraph>>): {
+  units: CoverageUnit[]
+  unitFor: (path: string) => CoverageUnit | null
+} {
   const units: CoverageUnit[] = structure.nodes
     .filter(
       (n) =>
@@ -187,13 +185,28 @@ export async function buildCapabilityCoverage(
   const byDepth = [...units].sort((a, b) => b.dir.length - a.dir.length || cmpStr(a.dir, b.dir))
   const unitFor = (path: string): CoverageUnit | null =>
     byDepth.find((u) => within(path, u.dir)) ?? null
+  return { units, unitFor }
+}
 
-  const real = graph.nodes.filter((n) => !n.ghost)
-  const selfPaths = new Map(
-    real.map((n) => [n.id, join(planningDir, 'capabilities', `${n.basename}.md`)]),
-  )
-  const inbound = inboundCounts(planningDir, selfPaths)
+/** Per-capability rollup built while walking every real (non-ghost) node. */
+interface CapabilityRollup {
+  capabilities: CoverageCapability[]
+  anchorRot: AnchorRot[]
+  unitIdsOf: Map<string, Set<string>>
+  pathsOf: Map<string, string[]>
+}
 
+/**
+ * Attach each real capability to the units its `locations[]` resolve onto,
+ * tally resolved-vs-rotted locations, and fold in inbound wikilink counts to
+ * produce the attachment score.
+ */
+function buildCapabilityRollup(
+  root: string,
+  real: CapabilityGraphNode[],
+  unitFor: (path: string) => CoverageUnit | null,
+  inbound: Map<string, number>,
+): CapabilityRollup {
   const anchorRot: AnchorRot[] = []
   const capabilities: CoverageCapability[] = []
   const unitIdsOf = new Map<string, Set<string>>()
@@ -229,27 +242,55 @@ export async function buildCapabilityCoverage(
       attachments: inboundCount + resolved,
     })
   }
+  return { capabilities, anchorRot, unitIdsOf, pathsOf }
+}
 
-  // Scope: a capability id keeps its subtree and the units that subtree
-  // anchors; a directory keeps the units under it and the capabilities that
-  // touch it, plus every unanchored capability.
-  let keepCap: (c: CoverageCapability) => boolean = () => true
-  let keepUnit: (u: CoverageUnit) => boolean = () => true
-  if (scope !== null && CAPABILITY_ID.test(scope.toUpperCase())) {
+/**
+ * The keep-predicates `--scope` applies: a capability id keeps its subtree
+ * and the units that subtree anchors; a directory keeps the units under it
+ * and the capabilities that touch it, plus every unanchored capability. No
+ * scope keeps everything.
+ */
+function scopeFilters(
+  scope: string | null,
+  root: string,
+  real: CapabilityGraphNode[],
+  unitIdsOf: Map<string, Set<string>>,
+  pathsOf: Map<string, string[]>,
+): { keepCap: (c: CoverageCapability) => boolean; keepUnit: (u: CoverageUnit) => boolean } {
+  if (scope === null) {
+    return { keepCap: () => true, keepUnit: () => true }
+  }
+  if (CAPABILITY_ID.test(scope.toUpperCase())) {
     const subtree = subtreeOf(scope.toUpperCase(), real)
-    keepCap = (c) => subtree.has(c.id)
     const touched = new Set<string>()
     for (const id of subtree) for (const u of unitIdsOf.get(id) ?? []) touched.add(u)
-    keepUnit = (u) => touched.has(u.id)
-  } else if (scope !== null) {
-    // Units under the directory, plus the unit the directory sits inside.
-    const dir = scopeDir(root, scope)
-    keepUnit = (u) => within(u.dir, dir) || within(dir, u.dir)
-    keepCap = (c) => c.location_count === 0 || (pathsOf.get(c.id) ?? []).some((p) => within(p, dir))
+    return { keepCap: (c) => subtree.has(c.id), keepUnit: (u) => touched.has(u.id) }
   }
+  // Units under the directory, plus the unit the directory sits inside.
+  const dir = scopeDir(root, scope)
+  return {
+    keepUnit: (u) => within(u.dir, dir) || within(dir, u.dir),
+    keepCap: (c) => c.location_count === 0 || (pathsOf.get(c.id) ?? []).some((p) => within(p, dir)),
+  }
+}
 
-  const keptCaps = capabilities.filter(keepCap).sort((a, b) => cmpStr(a.id, b.id))
-  const keptUnits = units.filter(keepUnit).sort((a, b) => cmpStr(a.dir, b.dir))
+/** Apply the scope's keep-predicates, cross-populate unit<->capability lists, and shape the final report. */
+function assembleCoverage(opts: {
+  root: string
+  scope: string | null
+  units: CoverageUnit[]
+  capabilities: CoverageCapability[]
+  unitIdsOf: Map<string, Set<string>>
+  anchorRot: AnchorRot[]
+  warnings: string[]
+  scanned: number
+  keepCap: (c: CoverageCapability) => boolean
+  keepUnit: (u: CoverageUnit) => boolean
+}): CapabilityCoverage {
+  const { root, scope, units, capabilities, unitIdsOf, anchorRot, warnings, scanned } = opts
+  const keptCaps = capabilities.filter(opts.keepCap).sort((a, b) => cmpStr(a.id, b.id))
+  const keptUnits = units.filter(opts.keepUnit).sort((a, b) => cmpStr(a.dir, b.dir))
   const keptUnitIds = new Set(keptUnits.map((u) => u.id))
   // A unit's anchors come from EVERY capability, not only the ones the scope
   // keeps: a unit the scope sits inside is anchored by a capability whose
@@ -275,9 +316,48 @@ export async function buildCapabilityCoverage(
     anchor_rot: anchorRot
       .filter((r) => keptCapIds.has(r.capability))
       .sort((a, b) => cmpStr(a.capability, b.capability) || cmpStr(a.location, b.location)),
+    warnings,
+    scanned,
+  }
+}
+
+export async function buildCapabilityCoverage(
+  root: string,
+  opts: { scope?: string | null } = {},
+): Promise<CapabilityCoverage> {
+  const scope = opts.scope ?? null
+  const planningDir = join(root, 'docs', 'planning')
+  const graph = buildCapabilityGraph(root)
+  const structure = await buildSystemGraph(root, { includeExternal: false })
+
+  const { units, unitFor } = buildCoverageUnits(structure)
+
+  const real = graph.nodes.filter((n) => !n.ghost)
+  const selfPaths = new Map(
+    real.map((n) => [n.id, join(planningDir, 'capabilities', `${n.basename}.md`)]),
+  )
+  const inbound = inboundCounts(planningDir, selfPaths)
+
+  const { capabilities, anchorRot, unitIdsOf, pathsOf } = buildCapabilityRollup(
+    root,
+    real,
+    unitFor,
+    inbound,
+  )
+  const { keepCap, keepUnit } = scopeFilters(scope, root, real, unitIdsOf, pathsOf)
+
+  return assembleCoverage({
+    root,
+    scope,
+    units,
+    capabilities,
+    unitIdsOf,
+    anchorRot,
     warnings: graph.warnings,
     scanned: graph.scanned,
-  }
+    keepCap,
+    keepUnit,
+  })
 }
 
 function renderCoverage(out: CapabilityCoverage, io: OpIo): number {

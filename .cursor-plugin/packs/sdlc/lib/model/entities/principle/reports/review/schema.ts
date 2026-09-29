@@ -10,6 +10,9 @@
  *
  * The general report machinery (engine, registry, ops) stays in
  * `lib/services/report/`; this kind is the principle entity's own shape.
+ * `finding`/`proseIssue` themselves come from that package's
+ * `reviewFindingSchemas('principle')` factory, shared with standard-review
+ * ([[T-ZRO1]]).
  *
  * zod/v4 — see `lib/services/report/schema.ts` for why payload contracts
  * use the v4 subpath while op contracts stay v3.
@@ -22,39 +25,15 @@ import { z } from 'zod/v4'
 import {
   baseReport,
   extraSections,
+  reviewFindingSchemas,
   reviewProposal,
   type ReportKind,
 } from '@lib/services/report/schema'
 import { pluginLibDir } from '@lib/util/plugin-root'
 
-export const findingSeverity = z.enum(['clear-violation', 'tension', 'drift'])
+export { findingSeverity } from '@lib/services/report/schema'
 
-export const finding = z.object({
-  principleId: z.string().describe('e.g. `P-0001`.'),
-  principleSlug: z.string().describe('e.g. `prefer-deterministic-over-llm`.'),
-  where: z.string().describe('Real location: `path` or `path:line`.'),
-  evidence: z.string().describe('Short quote or concrete reference at that location.'),
-  why: z.string().describe('Why it contradicts or undercuts the principle.'),
-  severity: findingSeverity,
-  trackedBy: z
-    .array(z.string())
-    .default([])
-    .describe('Open task ids whose completion would resolve this; empty = untracked gap.'),
-})
-
-/** A descriptive-yet-succinct finding on a principle's own prose. */
-export const proseIssue = z.object({
-  principleId: z.string().describe('e.g. `P-0001`.'),
-  principleSlug: z.string().describe('e.g. `prefer-deterministic-over-llm`.'),
-  section: z.string().describe('Body H2 the issue sits in, e.g. `Why`.'),
-  direction: z
-    .enum(['under-described', 'over-long'])
-    .describe(
-      'under-described: a reader cannot apply the section without guessing; over-long: text that adds no meaning.',
-    ),
-  evidence: z.string().describe('Short quote, or what is missing.'),
-  fix: z.string().describe('The concrete rewrite, addition, or cut.'),
-})
+export const { finding, proseIssue } = reviewFindingSchemas('principle')
 
 export const principleReviewReport = baseReport.extend({
   principlesReviewed: z

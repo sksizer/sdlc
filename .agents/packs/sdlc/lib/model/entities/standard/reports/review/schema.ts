@@ -7,6 +7,9 @@
  *
  * Same shape as the principle-review kind with standard ids: severity
  * tallies and the findings total are derived by `template.eta`.
+ * `finding`/`proseIssue` come from that package's
+ * `reviewFindingSchemas('standard')` factory, shared with principle-review
+ * ([[T-ZRO1]]).
  *
  * zod/v4 — see `lib/services/report/schema.ts`.
  */
@@ -18,39 +21,15 @@ import { z } from 'zod/v4'
 import {
   baseReport,
   extraSections,
+  reviewFindingSchemas,
   reviewProposal,
   type ReportKind,
 } from '@lib/services/report/schema'
 import { pluginLibDir } from '@lib/util/plugin-root'
 
-export const findingSeverity = z.enum(['clear-violation', 'tension', 'drift'])
+export { findingSeverity } from '@lib/services/report/schema'
 
-export const finding = z.object({
-  standardId: z.string().describe('e.g. `S-0006`.'),
-  standardSlug: z.string().describe('e.g. `skill-md-is-direct-instruction`.'),
-  where: z.string().describe('Real location: `path` or `path:line`.'),
-  evidence: z.string().describe('Short quote or concrete reference at that location.'),
-  why: z.string().describe('Why it breaks the rule, or why the rule is stale there.'),
-  severity: findingSeverity,
-  trackedBy: z
-    .array(z.string())
-    .default([])
-    .describe('Open task ids whose completion would resolve this; empty = untracked gap.'),
-})
-
-/** A descriptive-yet-succinct finding on a standard's own prose. */
-export const proseIssue = z.object({
-  standardId: z.string().describe('e.g. `S-0006`.'),
-  standardSlug: z.string().describe('e.g. `skill-md-is-direct-instruction`.'),
-  section: z.string().describe('Body H2 the issue sits in, e.g. `How to apply`.'),
-  direction: z
-    .enum(['under-described', 'over-long'])
-    .describe(
-      'under-described: a reader cannot apply the section without guessing; over-long: text that adds no meaning.',
-    ),
-  evidence: z.string().describe('Short quote, or what is missing.'),
-  fix: z.string().describe('The concrete rewrite, addition, or cut.'),
-})
+export const { finding, proseIssue } = reviewFindingSchemas('standard')
 
 export const standardReviewReport = baseReport.extend({
   standardsReviewed: z

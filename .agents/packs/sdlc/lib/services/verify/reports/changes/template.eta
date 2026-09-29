@@ -8,6 +8,10 @@
   const floorRank = order.indexOf(it.severityFloor);
   const atOrAboveFloor = it.findings.filter(f => order.indexOf(f.severity) <= floorRank).length;
 
+  // `resolvedBase` differs from `base` when a branch name resolved to its
+  // remote copy or was kept local ahead of/diverged from it (T-PEUC).
+  const baseLabel = it.resolvedBase === it.base ? it.base : `${it.base} (resolved to ${it.resolvedBase})`;
+
   const sourceOrder = [];
   const bySource = new Map();
   it.findings.forEach(f => {
@@ -52,7 +56,7 @@
 </head>
 <body>
 <h1><%= it.meta.title %></h1>
-<p class="meta"><%= it.meta.date %> · branch <code><%= it.meta.branch %></code> · <%= it.meta.generator %> · <%= it.changedFiles.length %> changed file<%= it.changedFiles.length === 1 ? "" : "s" %> vs <code><%= it.base %></code> · <%= it.judged.length %> rule source<%= it.judged.length === 1 ? "" : "s" %> judged · <strong><%= it.findings.length %> finding<%= it.findings.length === 1 ? "" : "s" %></strong> (<%= bySeverity.violation %> violation, <%= bySeverity.tension %> tension, <%= bySeverity.drift %> drift)</p>
+<p class="meta"><%= it.meta.date %> · branch <code><%= it.meta.branch %></code> · <%= it.meta.generator %> · <%= it.changedFiles.length %> changed file<%= it.changedFiles.length === 1 ? "" : "s" %> vs <code><%= baseLabel %></code> · <%= it.judged.length %> rule source<%= it.judged.length === 1 ? "" : "s" %> judged · <strong><%= it.findings.length %> finding<%= it.findings.length === 1 ? "" : "s" %></strong> (<%= bySeverity.violation %> violation, <%= bySeverity.tension %> tension, <%= bySeverity.drift %> drift)</p>
 <p class="meta"><%= it.meta.summary %></p>
 
 <% if (oversized.length > 0) { %>

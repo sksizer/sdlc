@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-28
+
+Phase 13 of the sdlc plan (M-I6NE,
+[#2421](https://github.com/sksizer/dev/pull/2421)) — the last phase of the
+sdlc 0.8 roadmap (RM-E2L0), which now completes.
+
+### Added
+
+- `sdlc tui`: an Ink terminal UI over the op registry. A PR page shows real
+  `pr survey` data with sort, filter and multi-select, and `u` dispatches a
+  real `pr update --apply`; a Tasks page joins `task next` and `task
+  inflight`. Respond, open-session, work and orchestrate are labelled stubs
+  pending the session/router layer.
+  ([#2421](https://github.com/sksizer/dev/pull/2421))
+- `@sksizer/command-seam` gains streaming and managed-process doors
+  (T-TOFK); every `@sdlc:ignore-spawn` call site (`supervise`,
+  `release-lib`, `install-desktop-apps`, the docs-site build, `quality
+  run`'s log mode, session-attach, the terminal host) moves onto them, and
+  `check_command_seam.sh` is now import-aware so an injected dependency no
+  longer false-positives. ([#2421](https://github.com/sksizer/dev/pull/2421))
+
+### Changed
+
+- The audit-driven refactors: lease-payload mint-site consolidation, with
+  transition/reconcile now delegating; oversized functions split across
+  capability/task/migrate/validate and the dashboard; the `MigrationError`
+  hoist; a shared `plugin/registry.ts` for info-report/resolve; and a
+  util/config single-home sweep. ([#2421](https://github.com/sksizer/dev/pull/2421))
+- The session-attach spawn, moved onto the streaming door, now reports the
+  exit code instead of throwing.
+  ([#2421](https://github.com/sksizer/dev/pull/2421))
+
+### Removed
+
+- **BREAKING:** the `sdlc quality baseline prune` CLI op — defined as a
+  command but never invoked from production code, a skill, or another op;
+  the underlying `prune()` helper remains in `baseline.ts` for future use.
+  ([#2421](https://github.com/sksizer/dev/pull/2421))
+- Dead code and exports: the `lib/model/index.ts` barrel and its dangling
+  `frontmatterOf`/`readFrontmatter` re-exports, dead default exports from
+  the claims resolvers, the `projectSeedSet` re-export, the dashboard's
+  `tcpProbe` helper, and the `projectRegistry()` singleton wrapper.
+  ([#2421](https://github.com/sksizer/dev/pull/2421))
+
+### Fixed
+
+- `verify changes --base <branch>` preferring a local branch ahead of
+  origin (T-PEUC). ([#2421](https://github.com/sksizer/dev/pull/2421))
+- The empty-registry CLI help summary, which now falls back to lifecycle
+  phases instead of showing nothing (T-H0SB).
+  ([#2421](https://github.com/sksizer/dev/pull/2421))
+- Stale-comment and stale-doc sweeps across `lib/model`, `quality`, and the
+  docs/tests trees. ([#2421](https://github.com/sksizer/dev/pull/2421))
+- The packaged Node CLI's `sdlc dashboard start`, which timed out
+  ("dashboard did not confirm startup within 5s") because bundling collapsed
+  every module's `import.meta.url` to `cli/sdlc.js`, so the detached child
+  re-ran the whole CLI with `--host` as a bogus top-level flag; the child now
+  re-enters through a real `dashboard start --foreground` CLI route. Also
+  stops the packaged CLI printing `MODULE_TYPELESS_PACKAGE_JSON` on every
+  invocation.
+  ([#2434](https://github.com/sksizer/dev/pull/2434))
+- The same self-invocation bug in the compiled binary (`bun build
+  --compile`): `dashboard start`'s detached child and `backlog create`'s
+  validation shell-out both re-invoked a `cli/sdlc.{js,ts}` path the
+  binary's asset tar never ships, and a standalone binary has no argv slot
+  for an entry path anyway (`argument NOUN: invalid choice: <path>`). Both
+  now build their subprocess argv through one `sdlcSelfInvocation()` helper
+  that resolves to `[binary]`, `[node, cli/sdlc.js]`, or `[bun,
+  cli/sdlc.ts]` depending on how sdlc is running.
+  ([#2434](https://github.com/sksizer/dev/pull/2434))
+
 ## [0.7.0] - 2026-09-28
 
 v0.5.0 and v0.6.0 were never cut — this release rolls both up, covering

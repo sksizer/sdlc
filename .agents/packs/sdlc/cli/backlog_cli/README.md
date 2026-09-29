@@ -18,7 +18,8 @@ solutions/ontological/cli/backlog_cli/
   create.ts     # the deterministic tail
   capture.ts    # the LLM head (claude -p → create); the ONLY module here that
                 # invokes claude
-  tests/        # capture.test.ts, create.test.ts, dispatch.test.ts
+  capture.test.ts  # tests for the capture verb
+  tests/        # create.test.ts, dispatch.test.ts
 ```
 
 `backlog` is a **visible** noun (`hidden=False`) — it appears in
@@ -155,7 +156,7 @@ If the model **must** run but the boundary fails — the `claude` binary is not
 found on `PATH`, it exits nonzero, the envelope is not JSON, the
 inner reply is not the contract JSON, or `headline` is missing/blank — `capture`
 prints a clear stderr message and exits with the distinct code
-`EXIT_MODEL_ERROR` (`8`). It never silently falls back to an empty headline; the
+`EXIT_MODEL_ERROR` (`16`). It never silently falls back to an empty headline; the
 message points the user at `--headline …` / `--no-llm` to proceed without the
 model.
 

@@ -6,7 +6,7 @@ five canonical questions below in its spec — concretely, before
 `/sdlc:task-work` picks the task up.
 
 The actual `schema_version` write happens in `/sdlc:entities-migrate`
-(via `audit_entities.ts` / `migrate_entities.ts`), NOT in
+(via `solutions/ontological/lib/model/ops/migrate.ts`), NOT in
 `/sdlc:task-work` or `/sdlc:task-new`. `task-work` is the orchestrating
 skill that implements the bump task by either (a) invoking
 `/sdlc:entities-migrate` as part of the implementation, or (b)

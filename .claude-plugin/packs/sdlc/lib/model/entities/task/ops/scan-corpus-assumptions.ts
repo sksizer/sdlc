@@ -20,14 +20,14 @@
  * False positives are expected here and are resolved by the LLM step — a pure
  * regex cannot be the gate, because a corpus may legitimately be uniform.
  *
- * Modelled structurally on scan_placeholders.ts: the section boundaries and
+ * Modelled structurally on scan-placeholders.ts: the section boundaries and
  * fenced-code spans come from a single markdown-contract `parse` (the same
- * projection scan_placeholders.ts / parse-touchpoints.ts read), with the same
+ * projection scan-placeholders.ts / parse-touchpoints.ts read), with the same
  * inline-code masking and the same JSON-line output contract. The one
  * behavioural difference is section scope (this scanner restricts itself to
  * Approach/Proposed) and the heuristic itself (see below).
  *
- * Output contract (byte-compatible with scan_placeholders.ts):
+ * Output contract (byte-compatible with scan-placeholders.ts):
  *   - exit 0 with empty stdout when no candidates are found.
  *   - exit 0 with one JSON line per candidate (keys in order
  *     section/signal/line/snippet) when candidates are found.
@@ -53,7 +53,7 @@
  *   human reading the Approach would resolve the assumption — the relevant
  *   context is the whole section, not the single sentence.
  *
- * Masking matches scan_placeholders.ts: phrasing inside fenced code blocks
+ * Masking matches scan-placeholders.ts: phrasing inside fenced code blocks
  * (``` / ~~~) and inline-code spans (`...`) is not a signal, so a task can
  * discuss "the corpus" as subject matter in code/examples without tripping
  * the heuristic. Both the uniform-corpus and the tolerance scans run against
@@ -70,7 +70,7 @@ import { parse, sectionSpans, codeBlockLines } from 'markdown-contract'
 
 import { defineOp, type OpCtx } from '@lib/registry'
 import { isFile } from '@lib/util/fs'
-import { pyJsonString } from '@lib/util/python-json'
+import { pyJsonDumps } from '@lib/util/python-json'
 
 import { legacyCliContext } from '@lib/util/legacy-cli.ts'
 import { readTask } from '../read.ts'
@@ -78,10 +78,10 @@ import { readTask } from '../read.ts'
 // Inline code spans: `...`. Mask matches inside backticks so legitimate prose
 // mentions wrapped in code do not count as signals. Allow at most a single
 // embedded newline inside the span and forbid blank lines (matches
-// scan_placeholders.ts).
+// scan-placeholders.ts).
 const INLINE_CODE_RE = /`[^`\n]*(?:\n[^`\n]*)?`/g
 
-// Sections this scanner inspects. Unlike scan_placeholders.ts (which walks all
+// Sections this scanner inspects. Unlike scan-placeholders.ts (which walks all
 // required sections), the corpus-assumption heuristic is only meaningful where
 // the implementation design lives: Approach (a.k.a. Plan) and Proposed.
 const SCOPED_SECTIONS: Record<string, string> = {
@@ -260,22 +260,19 @@ export function main(argv: readonly string[], ctx: CliContext): number {
 }
 
 /**
- * Serialize a candidate the way Python `json.dumps` does by default —
- * `, ` between items and `: ` after keys, key order section/signal/line/snippet.
- * Mirrors scan_placeholders.ts's pyJsonLine so the two scanners share an
- * output shape (only the second key name differs: phrase → signal). String
- * fields go through the shared `pyJsonString` (`@lib/util/python-json`) for
- * Python-`ensure_ascii`-compatible escaping.
+ * Serialize a candidate the way Python `json.dumps` does by default — key
+ * order section/signal/line/snippet, via the shared `pyJsonDumps`
+ * (`@lib/util/python-json`), the single home for what used to be this
+ * function's own hand-rolled `, `/`: ` string-building plus dedup-search.ts's
+ * near-identical `pyJsonCompact`/`pyJsonIndent2`/`pyJson` ([[T-RFUT]]).
  */
 function jsonLine(c: Candidate): string {
-  return (
-    '{' +
-    `"section": ${pyJsonString(c.section)}, ` +
-    `"signal": ${pyJsonString(c.signal)}, ` +
-    `"line": ${c.line}, ` +
-    `"snippet": ${pyJsonString(c.snippet)}` +
-    '}'
-  )
+  return pyJsonDumps({
+    section: c.section,
+    signal: c.signal,
+    line: c.line,
+    snippet: c.snippet,
+  })
 }
 
 export { scanBody, maskInlineCode, hasToleranceSignal }

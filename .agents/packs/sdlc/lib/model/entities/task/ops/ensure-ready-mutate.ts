@@ -744,13 +744,20 @@ function exists(path: string): boolean {
   return existsSync(path)
 }
 
-async function applyVerdict(argv: readonly string[], ctx: CliContext): Promise<number> {
-  const io = ctx.io
+// ---------------------------------------------------------------------------
+// applyVerdict, split into named stages ([[T-IL6K]]): argument parsing, the
+// two top-level dispatch branches (--commit-on's worktree-mediated commit to
+// main, and the default/--commit path acting on the file as-given), and the
+// smaller pieces each of those branches is built from.
+// ---------------------------------------------------------------------------
+
+/** Parse and validate `applyVerdict`'s argv. Never throws; every failure is an exit code. */
+function parseVerdictArgs(argv: readonly string[], io: CliIo) {
   const parsed = cli.parse(argv, io)
-  if (parsed.status === 'help') return EXIT.ok
+  if (parsed.status === 'help') return { exit: EXIT.ok }
   if (parsed.status === 'error') {
     io.stderr(`${parsed.message}\n`)
-    return EXIT.usage
+    return { exit: EXIT.usage }
   }
   const args = {
     ...parsed.values,
@@ -762,17 +769,17 @@ async function applyVerdict(argv: readonly string[], ctx: CliContext): Promise<n
 
   if (args.commit && args.commitOn) {
     io.stderr('--commit and --commit-on are mutually exclusive\n')
-    return EXIT.usage
+    return { exit: EXIT.usage }
   }
 
   if (args.mode === 'fail' && (args.gap === null || !args.gap.trim())) {
     io.stderr('--gap is required for --mode fail\n')
-    return EXIT.usage
+    return { exit: EXIT.usage }
   }
 
   if (args.cleanupOnFail && args.mode !== 'fail') {
     io.stderr('--cleanup-on-fail is only meaningful with --mode fail\n')
-    return EXIT.usage
+    return { exit: EXIT.usage }
   }
 
   if (args.cleanupOnFail && !(args.commit || args.commitOn)) {
@@ -780,152 +787,204 @@ async function applyVerdict(argv: readonly string[], ctx: CliContext): Promise<n
       '--cleanup-on-fail requires --commit or --commit-on ' +
         '(the teardown only fires after the downshift commit lands)\n',
     )
-    return EXIT.usage
+    return { exit: EXIT.usage }
   }
 
-  const now = args.now || nowIsoUtc()
-  const basename = pathStem(path)
-  const start = exists(path) ? dirname(path) : ctx.cwd
-  // Outside a repo there is no primary checkout to find; `start` itself is the
-  // closest thing, and every git-touching path below then fails on its own.
-  const projectRoot = mainCheckoutFrom(start) ?? resolve(start)
+  return { args, path }
+}
 
-  // Lease discovery is one authority round-trip; only the paths that branch on
-  // it pay for it.
-  let leaseProbed = false
-  let leaseCache: ActiveLease | null = null
-  const activeLease = (): ActiveLease | null => {
-    if (!leaseProbed) {
-      leaseProbed = true
-      leaseCache = discoverActiveLease(io, projectRoot, basename)
+/** The parsed-and-validated argument shape `parseVerdictArgs` produces on success. */
+type VerdictArgs = Extract<ReturnType<typeof parseVerdictArgs>, { path: string }>['args']
+
+/**
+ * Leased pass: write the EXECUTION plane's `gates` field only. Zero commits
+ * land on main, and the task file itself is not touched.
+ */
+function applyLeasedPass(
+  io: CliIo,
+  basename: string,
+  now: string,
+  projectRoot: string,
+  held: ActiveLease,
+): number {
+  try {
+    updateLeaseGates(
+      basename,
+      { readinessVerifiedAt: now },
+      { cwd: projectRoot, authority: held.authority },
+    )
+  } catch (e) {
+    io.stderr(
+      `lease gates write failed for ${basename}: ` +
+        `${e instanceof Error ? e.message : String(e)}\n`,
+    )
+    return EXIT_WRITE_REFUSED
+  }
+  emitPassMarker(io, basename, now, 'lease-gates')
+  return EXIT.ok
+}
+
+/**
+ * Unleased pass: decide off origin/main's copy — the tree the commit will be
+ * built on — so the no-op case never spins up a worktree at all. An `exit` in
+ * the result means the whole command is already resolved (not-found, or the
+ * already-`open/ready`-and-clean no-op); otherwise `stamp` is what the
+ * eventual worktree commit should write.
+ */
+async function planUnleasedPass(
+  io: CliIo,
+  git: ReturnType<typeof spawnRunner>,
+  projectRoot: string,
+  basename: string,
+  now: string,
+): Promise<{ exit: number } | { stamp: string | null }> {
+  // Best-effort: an offline or misconfigured remote leaves the local
+  // `origin/main` where it was, and the `readTask` below then decides off
+  // that ref — a stale read is recoverable, a crashed gate is not.
+  new Git(projectRoot, { runner: git }).try.fetch('origin', 'main', { quiet: true })
+  const originRead = readTask(basename, { projectRoot, at: 'origin/main', git })
+  if (originRead === null || originRead.fm === null) {
+    io.stderr(`task file not found on origin/main: ${basename}.md\n`)
+    return { exit: EXIT.error }
+  }
+  const plan = planPassEdits(originRead.fm, now)
+  if (plan.edits.length === 0) {
+    // Already `open/ready` and clean: the readiness claim is already on main
+    // and the stamp is never refreshed. No commit, no write.
+    emitPassMarker(io, basename, null, 'none')
+    return { exit: EXIT.ok }
+  }
+  return { stamp: plan.stamp }
+}
+
+/**
+ * Build and land the promotion / needs-definition commit through an
+ * ephemeral worktree off origin/main, then emit the terminal marker (and, on
+ * a `--cleanup-on-fail` downshift, tear down the worktree/branch/lease).
+ */
+async function commitVerdictToMain(
+  io: CliIo,
+  git: ReturnType<typeof spawnRunner>,
+  start: string,
+  basename: string,
+  args: VerdictArgs,
+  now: string,
+  held: ActiveLease | null,
+  passStamp: string | null,
+): Promise<number> {
+  let result
+  try {
+    result = await commitToMainViaWorktree({
+      projectRoot: start,
+      git,
+      label: basename,
+      mutate: (wt) => {
+        const wtTaskPath = resolve(join(wt, 'docs', 'planning', 'tasks', `${basename}.md`))
+        if (!isFile(wtTaskPath)) {
+          io.stderr(`task file not found on origin/main: ${basename}.md\n`)
+          throw new ExitError(EXIT.error)
+        }
+        // Re-plan against the clean off-origin tree so a push-race retry
+        // re-applies identically (pass: promotion / gap clear; fail:
+        // downshift + definition_gap), then validate before it commits.
+        const outcome = applyMutation(io, wtTaskPath, args.mode, args.gap, now, {
+          leased: held !== null,
+        })
+        // The pass arm decided up front (off this same tree) that an edit was
+        // due, so "no change" here means origin/main moved underneath. The
+        // fail arm always has a gap to write, so a re-fail with an
+        // identical gap still surfaces as the empty commit git refuses.
+        if (args.mode === 'pass' && !outcome.changed) {
+          io.stderr(
+            `nothing to commit for ${basename}: origin/main moved under the ` +
+              `readiness gate. Re-run.\n`,
+          )
+          throw new ExitError(EXIT_WRITE_REFUSED)
+        }
+        if (!validateOrRefuse(io, wtTaskPath)) {
+          io.stderr(`validator rejected ${wtTaskPath}; refusing to commit\n`)
+          throw new ExitError(EXIT_WRITE_REFUSED)
+        }
+        const [subject, body] = commitSubject(args.mode, basename, args.gap)
+        const rel = relativeTo(wtTaskPath, wt) ?? wtTaskPath
+        const message = body ? `${subject}\n\n${body}` : subject
+        return { stagePaths: [rel], message }
+      },
+    })
+  } catch (e) {
+    if (e instanceof CommitToMainError) {
+      io.stderr(`${e.message}\n`)
+      return EXIT_WRITE_REFUSED
     }
-    return leaseCache
+    throw e
   }
 
-  if (args.commitOn) {
-    // The promotion / needs-definition commit lands on origin/main through an
-    // ephemeral worktree off origin/main — NEVER the primary checkout
-    // ([[D-WK7T-agent-git-writes-worktree-isolated]]). The off-origin tree is
-    // clean, so the body-edit precondition does not apply: the author's body
-    // edits stay in their own task worktree, untouched.
-    // The runner both the entity read layer's `at:` seam and the
-    // commit-to-main worktree primitive take.
-    const git = spawnRunner('git')
-
-    const held = activeLease()
-
-    // A leased pass writes the EXECUTION plane and nothing else: the run's gate
-    // result goes on the lease's `gates`, zero commits land on main, and the
-    // task file is not touched.
-    if (args.mode === 'pass' && held !== null) {
-      try {
-        updateLeaseGates(
-          basename,
-          { readinessVerifiedAt: now },
-          { cwd: projectRoot, authority: held.authority },
-        )
-      } catch (e) {
-        io.stderr(
-          `lease gates write failed for ${basename}: ` +
-            `${e instanceof Error ? e.message : String(e)}\n`,
-        )
-        return EXIT_WRITE_REFUSED
-      }
-      emitPassMarker(io, basename, now, 'lease-gates')
-      return EXIT.ok
+  if (args.mode === 'pass') {
+    // The stamp rides the promotion commit; a gap-clearing pass on an
+    // already-promoted task writes no stamp.
+    emitPassMarker(io, basename, passStamp, 'frontmatter-promotion')
+  } else {
+    emitFailMarker(io, basename, args.gap ?? '')
+    if (args.cleanupOnFail) {
+      const wtState = cleanupWorktree(io, result.mainCheckout, basename)
+      const brState = cleanupBranch(io, result.mainCheckout, basename)
+      const leaseState = cleanupLease(io, result.mainCheckout, basename)
+      io.stdout(`cleaned-up: worktree=${wtState} ` + `branch=${brState} lease=${leaseState}\n`)
     }
+  }
+  return EXIT.ok
+}
 
-    // Unleased pass: decide off origin/main's copy — the tree the commit will
-    // be built on — so the no-op case never spins up a worktree at all.
-    let passStamp: string | null = null
-    if (args.mode === 'pass') {
-      // Best-effort: an offline or misconfigured remote leaves the local
-      // `origin/main` where it was, and the `readTask` below then decides off
-      // that ref — a stale read is recoverable, a crashed gate is not.
-      new Git(projectRoot, { runner: git }).try.fetch('origin', 'main', { quiet: true })
-      const originRead = readTask(basename, {
-        projectRoot,
-        at: 'origin/main',
-        git,
-      })
-      if (originRead === null || originRead.fm === null) {
-        io.stderr(`task file not found on origin/main: ${basename}.md\n`)
-        return EXIT.error
-      }
-      const plan = planPassEdits(originRead.fm, now)
-      if (plan.edits.length === 0) {
-        // Already `open/ready` and clean: the readiness claim is already on
-        // main and the stamp is never refreshed. No commit, no write.
-        emitPassMarker(io, basename, null, 'none')
-        return EXIT.ok
-      }
-      passStamp = plan.stamp
-    }
+/**
+ * The `--commit-on` branch: the promotion / needs-definition commit lands on
+ * origin/main through an ephemeral worktree off origin/main — NEVER the
+ * primary checkout ([[D-WK7T-agent-git-writes-worktree-isolated]]). The
+ * off-origin tree is clean, so the body-edit precondition does not apply: the
+ * author's body edits stay in their own task worktree, untouched.
+ */
+async function applyVerdictOnMain(
+  io: CliIo,
+  args: VerdictArgs,
+  basename: string,
+  start: string,
+  projectRoot: string,
+  now: string,
+  activeLease: () => ActiveLease | null,
+): Promise<number> {
+  // The runner both the entity read layer's `at:` seam and the
+  // commit-to-main worktree primitive take.
+  const git = spawnRunner('git')
+  const held = activeLease()
 
-    let result
-    try {
-      result = await commitToMainViaWorktree({
-        projectRoot: start,
-        git,
-        label: basename,
-        mutate: (wt) => {
-          const wtTaskPath = resolve(join(wt, 'docs', 'planning', 'tasks', `${basename}.md`))
-          if (!isFile(wtTaskPath)) {
-            io.stderr(`task file not found on origin/main: ${basename}.md\n`)
-            throw new ExitError(EXIT.error)
-          }
-          // Re-plan against the clean off-origin tree so a push-race retry
-          // re-applies identically (pass: promotion / gap clear; fail:
-          // downshift + definition_gap), then validate before it commits.
-          const outcome = applyMutation(io, wtTaskPath, args.mode, args.gap, now, {
-            leased: held !== null,
-          })
-          // The pass arm decided up front (off this same tree) that an edit was
-          // due, so "no change" here means origin/main moved underneath. The
-          // fail arm always has a gap to write, so a re-fail with an
-          // identical gap still surfaces as the empty commit git refuses.
-          if (args.mode === 'pass' && !outcome.changed) {
-            io.stderr(
-              `nothing to commit for ${basename}: origin/main moved under the ` +
-                `readiness gate. Re-run.\n`,
-            )
-            throw new ExitError(EXIT_WRITE_REFUSED)
-          }
-          if (!validateOrRefuse(io, wtTaskPath)) {
-            io.stderr(`validator rejected ${wtTaskPath}; refusing to commit\n`)
-            throw new ExitError(EXIT_WRITE_REFUSED)
-          }
-          const [subject, body] = commitSubject(args.mode, basename, args.gap)
-          const rel = relativeTo(wtTaskPath, wt) ?? wtTaskPath
-          const message = body ? `${subject}\n\n${body}` : subject
-          return { stagePaths: [rel], message }
-        },
-      })
-    } catch (e) {
-      if (e instanceof CommitToMainError) {
-        io.stderr(`${e.message}\n`)
-        return EXIT_WRITE_REFUSED
-      }
-      throw e
-    }
-
-    if (args.mode === 'pass') {
-      // The stamp rides the promotion commit; a gap-clearing pass on an
-      // already-promoted task writes no stamp.
-      emitPassMarker(io, basename, passStamp, 'frontmatter-promotion')
-    } else {
-      emitFailMarker(io, basename, args.gap ?? '')
-      if (args.cleanupOnFail) {
-        const wtState = cleanupWorktree(io, result.mainCheckout, basename)
-        const brState = cleanupBranch(io, result.mainCheckout, basename)
-        const leaseState = cleanupLease(io, result.mainCheckout, basename)
-        io.stdout(`cleaned-up: worktree=${wtState} ` + `branch=${brState} lease=${leaseState}\n`)
-      }
-    }
-    return EXIT.ok
+  // A leased pass writes the EXECUTION plane and nothing else: the run's gate
+  // result goes on the lease's `gates`, zero commits land on main, and the
+  // task file is not touched.
+  if (args.mode === 'pass' && held !== null) {
+    return applyLeasedPass(io, basename, now, projectRoot, held)
   }
 
-  // Default / --commit path: act on the file as-given.
+  let passStamp: string | null = null
+  if (args.mode === 'pass') {
+    const outcome = await planUnleasedPass(io, git, projectRoot, basename, now)
+    if ('exit' in outcome) return outcome.exit
+    passStamp = outcome.stamp
+  }
+
+  return await commitVerdictToMain(io, git, start, basename, args, now, held, passStamp)
+}
+
+/**
+ * Default / `--commit` path: act on the file as-given (the current checkout
+ * and branch), rather than routing through a worktree off origin/main.
+ */
+function applyVerdictOnCurrentCheckout(
+  io: CliIo,
+  args: VerdictArgs,
+  path: string,
+  basename: string,
+  now: string,
+  activeLease: () => ActiveLease | null,
+): number {
   if (!isFile(path)) {
     io.stderr(`task file not found: ${path}\n`)
     return EXIT.error
@@ -982,6 +1041,38 @@ async function applyVerdict(argv: readonly string[], ctx: CliContext): Promise<n
   })
 
   return EXIT.ok
+}
+
+async function applyVerdict(argv: readonly string[], ctx: CliContext): Promise<number> {
+  const io = ctx.io
+  const parsed = parseVerdictArgs(argv, io)
+  if ('exit' in parsed) return parsed.exit
+  const { args, path } = parsed
+
+  const now = args.now || nowIsoUtc()
+  const basename = pathStem(path)
+  const start = exists(path) ? dirname(path) : ctx.cwd
+  // Outside a repo there is no primary checkout to find; `start` itself is the
+  // closest thing, and every git-touching path below then fails on its own.
+  const projectRoot = mainCheckoutFrom(start) ?? resolve(start)
+
+  // Lease discovery is one authority round-trip; only the paths that branch on
+  // it pay for it.
+  let leaseProbed = false
+  let leaseCache: ActiveLease | null = null
+  const activeLease = (): ActiveLease | null => {
+    if (!leaseProbed) {
+      leaseProbed = true
+      leaseCache = discoverActiveLease(io, projectRoot, basename)
+    }
+    return leaseCache
+  }
+
+  if (args.commitOn) {
+    return await applyVerdictOnMain(io, args, basename, start, projectRoot, now, activeLease)
+  }
+
+  return applyVerdictOnCurrentCheckout(io, args, path, basename, now, activeLease)
 }
 
 /** Python pathlib `.stem`: filename without the final extension. */

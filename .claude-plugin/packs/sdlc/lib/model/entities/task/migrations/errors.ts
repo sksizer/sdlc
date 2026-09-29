@@ -1,15 +1,8 @@
 /**
- * Shared error for the task schema migrations.
- *
- * Every `vN-to-vN+1` migration throws `MigrationError` for malformed input
- * (non-object frontmatter, unrecognized enum values, and the like). It lived
- * as a byte-identical private copy in each migration module; this is the
- * single home. Each module re-exports it, so callers and tests keep importing
- * it from `./vN-to-vN+1.ts`.
+ * Re-exports the shared `MigrationError` for the task schema migrations
+ * ([[T-ZRO1]]). The class itself now lives in a single home,
+ * `lib/model/entities/_migration_error.ts`, shared by every entity type;
+ * this file exists so `./vN-to-vN+1.ts` modules and their tests keep
+ * importing it from `./errors.ts` unchanged.
  */
-export class MigrationError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'MigrationError'
-  }
-}
+export { MigrationError } from '../../_migration_error.ts'

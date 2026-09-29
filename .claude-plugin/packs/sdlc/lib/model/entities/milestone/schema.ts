@@ -27,7 +27,7 @@ import { titleMirrorsH1 } from '../_rules.ts'
 export const SCHEMA_VERSION = '2'
 
 /** Product-release semver, optional leading `v`, optional pre-release/build. */
-export const MILESTONE_VERSION_PATTERN = /^v?\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/
+const MILESTONE_VERSION_PATTERN = /^v?\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/
 
 export const MilestoneSchema = CommonFrontmatter.extend({
   type: z.literal('milestone').describe('Dispatch tag for the validator framework.'),

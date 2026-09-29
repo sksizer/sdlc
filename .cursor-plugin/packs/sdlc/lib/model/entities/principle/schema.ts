@@ -22,7 +22,7 @@ import { titleMirrorsH1 } from '../_rules.ts'
 export const SCHEMA_VERSION = '2'
 
 /** The required category tag shape: `principle/<one-of>`. */
-export const PRINCIPLE_CATEGORY_PATTERN = /^principle\/(product|technical|project|llm-ai)$/
+const PRINCIPLE_CATEGORY_PATTERN = /^principle\/(product|technical|project|llm-ai)$/
 
 /**
  * Principle `related`: links to other Principles or Standards only (slug
