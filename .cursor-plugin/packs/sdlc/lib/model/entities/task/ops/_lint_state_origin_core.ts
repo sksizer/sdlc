@@ -3,7 +3,7 @@
  * (`lint-state-origin.ts`) imports `lint` / `LintError` from here.
  *
  * Per
- * [[2026-05-28-task-state-frontmatter-commits-on-main-not-worktree-branch]],
+ * [[T-SIHV-task-state-frontmatter-commits-on-main-not-worktree-branch]],
  * changes to a task file's *task-state* frontmatter fields
  * (`state:`, `readiness_verified_at:`, `last_reviewed:`,
  * `definition_gap:`, `completion_note:`, `prs:`) must commit on
@@ -66,7 +66,7 @@ function lintRead<T>(label: string, read: () => T): T {
  *
  * The trunk is addressable as local `main` and remote `origin/main`. Under
  * parallel WIP these diverge: task-state commits land on local `main`
- * ([[2026-05-28-task-state-frontmatter-commits-on-main-not-worktree-branch]])
+ * ([[T-SIHV-task-state-frontmatter-commits-on-main-not-worktree-branch]])
  * but `origin/main` lags until they're pushed. A commit reachable from
  * EITHER ref is on the trunk, not exclusive to the task branch — so the lint
  * must exclude both. Excluding only the single candidate `origin/main` misread

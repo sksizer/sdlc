@@ -1,14 +1,8 @@
 /**
- * Shared error for the backlog schema migrations.
- *
- * Every `vN-to-vN+1` migration throws `MigrationError` for input it cannot
- * mechanically migrate (non-object frontmatter, and the like). Mirrors the
- * task/capability migrations' `errors.ts`; each migration module re-exports
- * it so callers and tests keep importing from `./vN-to-vN+1.ts`.
+ * Re-exports the shared `MigrationError` for the backlog schema migrations
+ * ([[T-ZRO1]]). The class itself now lives in a single home,
+ * `lib/model/entities/_migration_error.ts`, shared by every entity type;
+ * this file exists so `./vN-to-vN+1.ts` modules and their tests keep
+ * importing it from `./errors.ts` unchanged.
  */
-export class MigrationError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'MigrationError'
-  }
-}
+export { MigrationError } from '../../_migration_error.ts'

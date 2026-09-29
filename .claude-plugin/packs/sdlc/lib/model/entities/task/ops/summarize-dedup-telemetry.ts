@@ -31,20 +31,14 @@ import { defineCli, EXIT, type CliContext } from '@sksizer/cli-tool'
 
 import { defineOp, type OpCtx } from '@lib/registry'
 import { isFile } from '@lib/util/fs'
+import { cmpStr } from '@lib/util/strings'
 
 import { legacyCliContext } from '@lib/util/legacy-cli.ts'
 
 // --- Python-compatible formatting helpers -----------------------------------
-
-/** Python `{value:>width}` for integers (right-justified, space-padded). */
-function rjust(value: string, width: number): string {
-  return value.length >= width ? value : ' '.repeat(width - value.length) + value
-}
-
-/** Python `{value:<width}` (left-justified, space-padded). */
-function ljust(value: string, width: number): string {
-  return value.length >= width ? value : value + ' '.repeat(width - value.length)
-}
+//
+// Python's `{value:>width}` / `{value:<width}` (space-padded) are exactly
+// `String.prototype.padStart`/`padEnd` — no wrapper needed ([[T-RFUT]]).
 
 /**
  * Python `format(value, f">{width}.{prec}f")`. Rounds half-to-even (Python's
@@ -52,7 +46,7 @@ function ljust(value: string, width: number): string {
  */
 function fmtFloat(value: number, width: number, prec: number): string {
   const body = roundHalfEven(value, prec).toFixed(prec)
-  return rjust(body, width)
+  return body.padStart(width)
 }
 
 /** Round to `prec` decimals using round-half-to-even, matching Python. */
@@ -137,7 +131,7 @@ function jsonErrMsg(exc: unknown): string {
 function bucketLabel(score: number, bucketSize: number): string {
   const lo = Math.floor(score / bucketSize) * bucketSize
   const hi = lo + bucketSize - 1
-  return `${rjust(String(lo), 3)}-${ljust(String(hi), 3)}`
+  return `${String(lo).padStart(3)}-${String(hi).padEnd(3)}`
 }
 
 function toInt(value: unknown, fallback: number): number {
@@ -222,36 +216,30 @@ export function summarize(
   lines.push(`entries: ${total}`)
   lines.push('')
   lines.push('decision counts:')
-  for (const d of [...byDecision.keys()].sort(pyStrCompare)) {
+  for (const d of [...byDecision.keys()].sort(cmpStr)) {
     lines.push(`  ${d}: ${byDecision.get(d)}`)
   }
   lines.push('')
   lines.push(`histogram by top-candidate score (bucket size ${opts.bucketSize}):`)
   lines.push('  range    linked  spawned  other')
-  for (const label of [...buckets.keys()].sort(pyStrCompare)) {
+  for (const label of [...buckets.keys()].sort(cmpStr)) {
     const b = buckets.get(label) as { [k: string]: number }
     lines.push(
-      `  ${label}    ${rjust(String(b['LINKED-EXISTING']), 6)}   ` +
-        `${rjust(String(b['SPAWNED']), 6)}   ${rjust(String(b['OTHER']), 4)}`,
+      `  ${label}    ${String(b['LINKED-EXISTING']).padStart(6)}   ` +
+        `${String(b['SPAWNED']).padStart(6)}   ${String(b['OTHER']).padStart(4)}`,
     )
   }
   lines.push('')
   lines.push('percentiles:')
   for (const p of opts.percentiles) {
     lines.push(
-      `  p${ljust(String(Math.trunc(p)), 2)}  ` +
+      `  p${String(Math.trunc(p)).padEnd(2)}  ` +
         `top_score=${fmtFloat(percentile(scores, p), 5, 1)}  ` +
         `ratio=${fmtFloat(percentile(ratios, p), 5, 2)}  ` +
         `keyword_count=${fmtFloat(percentile(keywordCounts, p), 5, 1)}`,
     )
   }
   return lines.join('\n')
-}
-
-/** Python's default str sort: lexicographic by UTF-16 code unit (matches
- * Python's codepoint order for the ASCII labels these summaries produce). */
-function pyStrCompare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0
 }
 
 // --- CLI --------------------------------------------------------------------

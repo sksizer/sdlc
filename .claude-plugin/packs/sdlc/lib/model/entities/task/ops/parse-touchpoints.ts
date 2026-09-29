@@ -323,4 +323,3 @@ export default defineOp({
 })
 
 export { splitSections, parseAreas }
-export type { Section }

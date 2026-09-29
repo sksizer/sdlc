@@ -173,5 +173,3 @@ export const pathsResolver: ClaimResolver = {
     return findings
   },
 }
-
-export default pathsResolver

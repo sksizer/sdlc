@@ -23,8 +23,6 @@
  * caps_reached, tasks[]).
  */
 
-import { existsSync } from 'node:fs'
-
 import { z } from 'zod'
 
 import { defineOp } from '@lib/registry'
@@ -160,8 +158,6 @@ export default defineOp({
   },
   handler: (args, ctx) => {
     const projectRoot = realResolve(ctx.projectRoot)
-    // A git worktree carries .git as a file; accept either (scan degrades gracefully).
-    void existsSync
 
     // ctx.sdlcConfig is hydrated by createCtx; degrade-to-defaults on any error.
     const maxImpl = ctx.sdlcConfig.orchestrator?.max_implementations ?? DEFAULT_MAX_IMPLEMENTATIONS
