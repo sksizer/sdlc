@@ -10,7 +10,7 @@
  * order) and **Target date** (the aspirational landing date). Both render a
  * blank cell when unset (a milestone may be deferred/unpositioned). Everything
  * else — child pages, bucketing, wikilink resolution, the default
- * `**Status:**` child meta — is the generic behaviour.
+ * `**State:**` child meta — is the generic behaviour.
  *
  * The two cell accessors (`milestoneVersion`, `milestoneTargetDate`) are
  * exported so the generated roadmap ([[T-9LHH-site-roadmap-generated]]) reads
@@ -53,7 +53,7 @@ export const milestoneProjection: SiteProjection = {
   childPages: true,
   childBackLabel: 'Back to Milestones',
   childMeta: (e) => [
-    e.status ? `**Status:** \`${e.status}\`` : '',
+    e.state ? `**State:** \`${e.state}\`` : '',
     milestoneVersion(e) ? `**Version:** \`${milestoneVersion(e)}\`` : '',
     milestoneTargetDate(e) ? `**Target date:** ${milestoneTargetDate(e)}` : '',
   ],

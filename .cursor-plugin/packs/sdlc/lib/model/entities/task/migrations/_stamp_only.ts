@@ -5,8 +5,8 @@
  * version only ADDS an optional field or tightens a field description, so
  * every existing instance is already valid under it and migrating is just
  * restamping `schema_version`. `v3-to-v4` (adds `prs:`), `v4-to-v5` (adds
- * `priority:`) and `v5-to-v6` (adds `scope:` / `scheduling:`) are all that
- * shape; this is their shared body.
+ * `priority:`), `v5-to-v6` (adds `scope:` / `scheduling:`) and `v7-to-v8`
+ * (adds `issue:`) are all that shape; this is their shared body.
  *
  * Arity matters. The migrate runner routes on `transform.length >= 2`
  * ([`ops/migrate.ts`](../../../ops/migrate.ts) `transformWantsBody`), so the

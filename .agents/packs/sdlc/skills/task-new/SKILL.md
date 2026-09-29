@@ -1,7 +1,7 @@
 ---
 name: task-new
 description: |
-  Interactively define a new task. Walk the user through headline, slug, status,
+  Interactively define a new task. Walk the user through headline, slug, state,
   impact, and complexity; create the file via `sdlc task create`; validate the
   frontmatter; report the path. Optionally also capture prose for the body
   sections and Edit them into the file before reporting.
@@ -64,7 +64,7 @@ Send a single AskUserQuestion with these four questions:
    names the slug with that context in hand — e.g. "heads up: an existing task already uses this
    slug" or "similar existing slugs: `<…>`". This skill deliberately lets the user name the slug, so
    surface the collision rather than auto-resolving it.
-2. **Status** — options: planning/draft, planning/proposed, planning/backlog, open/ready. Recommend
+2. **State** — options: planning/draft, planning/proposed, planning/backlog, open/ready. Recommend
    `planning/draft` for fresh capture; `open/ready` only if the spec is complete enough for
    `/sdlc:task-work` to start.
 3. **Impact** — options: high, medium, low.
@@ -100,7 +100,7 @@ Run:
 ```text
 scripts/sdlc task create <slug> \
   --headline "<headline>" \
-  --status <status> \
+  --state <state> \
   --impact <impact> \
   --complexity <complexity> \
   [--autonomy human-only|supervised|autonomous/pr] \
@@ -166,18 +166,18 @@ no further filtering.
 Tell the user:
 
 - The absolute path of the new file.
-- One line: `<status> · <impact> · <complexity> — <headline>`.
+- One line: `<state> · <impact> · <complexity> — <headline>`.
 - Next step (first matching branch wins):
   - **If the scanner reported any match** (placeholders remain in a required body section): the task
     is NOT implementation-ready (per
     `${CLAUDE_PLUGIN_ROOT}/lib/model/entities/task/implementation-ready.md`). Say so,
     and suggest `/sdlc:task-define <slug>` to fill the gaps. Do NOT suggest `/sdlc:task-work` even
-    if the user picked `status: open/ready` — task-work's Step 5 will invoke
+    if the user picked `state: open/ready` — task-work's Step 5 will invoke
     `/sdlc:task-ensure-ready`, which will immediately downshift the task to
     `planning/needs-definition` and clear any `readiness_verified_at:` stamp.
-  - **Else if status is `open/ready`**: suggest `/sdlc:task-work <slug>`.
-  - **Else** (no placeholders but status not yet `open/ready`): suggest opening the file to bump
-    status when the spec is solid.
+  - **Else if state is `open/ready`**: suggest `/sdlc:task-work <slug>`.
+  - **Else** (no placeholders but state not yet `open/ready`): suggest opening the file to bump
+    state when the spec is solid.
 
 ## Acceptance criteria
 

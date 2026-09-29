@@ -56,7 +56,8 @@ const SPEC_SECTIONS = taskSectionLookup(specBearingTaskSections(), (s) => s.name
 // surfaces; the regex is matched against the line (with inline code stripped).
 // All patterns are global so finditer-style iteration works.
 const PHRASE_PATTERNS: Array<[string, RegExp]> = [
-  ['TBD', /\bTBD\b/gi],
+  // Letter/digit bounds, not `\b`: `_` is a word char, so `\b` missed `_TBD_`.
+  ['TBD', /(?<![a-z0-9])TBD(?![a-z0-9])/gi],
   ['(final name ...)', /\(\s*final\s+name[^)]*\)/gi],
   ['(or final ...)', /\(\s*or\s+final[^)]*\)/gi],
   ['(pick one)', /\(\s*pick\s+one\s*\)/gi],
@@ -206,6 +207,8 @@ export default defineOp({
   summary: "Scan a task doc's spec-bearing sections for unresolved spec-drift placeholders.",
   // Hidden plumbing ([[D-H7FS-op-substrate-surface]] §2: `scan-placeholders*`).
   hidden: true,
+  // Read-only: scans the task doc body and reports matches; writes nothing.
+  mutating: false,
   input,
   output,
   cli: {

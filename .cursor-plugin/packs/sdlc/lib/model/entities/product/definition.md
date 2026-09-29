@@ -37,7 +37,7 @@ A Product is *not*:
 | `type` | required | `product` |  | Validator-dispatch tag |
 | `schema_version` | optional | numeric string | `"1"` |  |
 | `id` | required | `PR-NNNN` |  | Immutable; matches filename prefix |
-| `status` | required | `open/draft \| open/active \| closed/sunset` | `open/draft` | See Lifecycle |
+| `state` | required | `open/draft \| open/active \| closed/sunset` | `open/draft` | See Lifecycle |
 | `title` | required | string |  | Product name |
 | `created` | required | ISO date |  | First-authored date |
 | `last_reviewed` | optional | ISO date |  |  |
@@ -66,7 +66,7 @@ Pinned framing sections, in order; the middle is free-form
 
 ## Lifecycle
 
-| Status | Meaning |
+| State | Meaning |
 |---|---|
 | `open/draft` | Boundary still being defined; Drivers may be provisional. |
 | `open/active` | Built and operated; the steady state for a shipping product. |

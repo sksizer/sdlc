@@ -11,20 +11,20 @@
  *     frontmatter that omits `tags:` still validates;
  *   - `tags` is the one common-level required field, expressed as a
  *     defaulted-required array (the default makes the omission valid);
- *   - key declaration order (`type` → `schema_version` → `id` → `status` →
+ *   - key declaration order (`type` → `schema_version` → `id` → `state` →
  *     `title` → `created` → `last_reviewed` → `related` → `tags` →
- *     `need_human_review` → `created_at` → `provenance`) IS the canonical
- *     frontmatter key order, which
+ *     `need_human_review` → `created_at` → `provenance` → `status`) IS the
+ *     canonical frontmatter key order, which
  *     `entities migrate` derives from `Object.keys(shape)`.
  *
  * Per-type schemas SPECIALIZE `type` (literal), `id` (prefix pattern),
- * `status` (enum), `related.items` (pattern), and — for Principle — `tags`
+ * `state` (enum), `related.items` (pattern), and — for Principle — `tags`
  * (a one-of-`principle/<category>` constraint), by passing a narrower field of
  * the same name to `.extend()`. Zod's `.extend()` REPLACES a key in place
  * (keeping its original position), so the override wins without disturbing key
  * order.
  *
- * Common-level fields here carry NO pattern on `id`/`status`/`type` — the bare
+ * Common-level fields here carry NO pattern on `id`/`state`/`type` — the bare
  * base, deferring the prefix pattern / enum / const to each per-type schema. A
  * type that forgets to override them would accept any string; every shipped
  * per-type schema overrides all three.
@@ -128,7 +128,7 @@ export function entityWikilinkPattern(
 }
 
 // ---------------------------------------------------------------------------
-// Status-conditional requireds
+// State-conditional requireds
 // ---------------------------------------------------------------------------
 
 /**
@@ -136,7 +136,7 @@ export function entityWikilinkPattern(
  * caller-computed condition holds.
  *
  * The predicate is a caller-computed BOOLEAN rather than a field name plus a
- * status value, deliberately: the nine sites test `status` three different ways
+ * state value, deliberately: the nine sites test `state` three different ways
  * (`===`, `startsWith("closed/")`, `startsWith("promoted/")`), and computing it
  * at the call site is what keeps the collapse behaviour-preserving while
  * retaining each schema's narrowed `z.enum` literal typing.
@@ -161,9 +161,34 @@ export function requiredWhen(ctx: z.RefinementCtx, when: boolean, field: string)
  * `closed/deprecated` one must explain why.
  */
 export const SUPERSESSION_RULES = [
-  { status: 'closed/superseded', field: 'superseded_by' },
-  { status: 'closed/deprecated', field: 'deprecation_note' },
+  { state: 'closed/superseded', field: 'superseded_by' },
+  { state: 'closed/deprecated', field: 'deprecation_note' },
 ] as const
+
+// ---------------------------------------------------------------------------
+// OKF v0.2 `status` (document maturity) — see the field doc comment below.
+// ---------------------------------------------------------------------------
+
+/** The only values OKF v0.2's document-maturity `status` key admits. */
+export const OKF_STATUS_VALUES = ['draft', 'stable', 'deprecated'] as const
+
+/**
+ * Whether a `status:` value is shaped like this product's own entity
+ * lifecycle `state` value rather than an OKF document-maturity value — the
+ * signal used to pick a helpful "you probably meant `state:`" message over a
+ * generic enum-mismatch one. Matches the lifecycle bands every entity type's
+ * `state` enum draws from (`open/*`, `closed/*`, `planning/*`,
+ * `in-progress*`); a value outside all four bands (and not a recognized OKF
+ * value) gets the generic message instead.
+ */
+function looksLikeLifecycleValue(value: string): boolean {
+  return (
+    value.startsWith('open/') ||
+    value.startsWith('closed/') ||
+    value.startsWith('planning/') ||
+    value.startsWith('in-progress')
+  )
+}
 
 /**
  * The shared frontmatter base. Built as a plain `z.object` whose `.shape`
@@ -203,7 +228,7 @@ export const CommonFrontmatter = z.object({
         'Each per-type schema overrides this with its prefix-specific `pattern`. ' +
         'Never renamed once assigned.',
     ),
-  status: z
+  state: z
     .string()
     .describe(
       'Lifecycle state, prefixed `open/*` (active) or `closed/*` (terminal). ' +
@@ -258,6 +283,62 @@ export const CommonFrontmatter = z.object({
         'tool, or import source (e.g. `sdlc:capability-map packages/ts`). Optional: ' +
         'absent means hand-authored.',
     ),
+  /**
+   * OKF v0.2's OWN optional document-maturity key — NOT the entity's own
+   * lifecycle `state` field (see [[T-P7F7]], which renamed `status`→`state`
+   * for exactly that concept). The two are unrelated and coexist: `state`
+   * tracks WHERE an entity sits in its own lifecycle (`planning/draft`,
+   * `closed/done`, …); OKF's `status` tracks the MATURITY of the document's
+   * content itself (`draft`, `stable`, `deprecated`), independent of
+   * lifecycle. Admitted here with a value check (not a bare passthrough — see
+   * `OKF_STATUS_VALUES` below) — no per-type schema needs to declare it,
+   * since every per-type schema extends this base ([[M-LBU2]] / [[T-I1KJ]]).
+   *
+   * The check is a `superRefine`, not a plain `z.enum`, so a leftover
+   * lifecycle-shaped value (a pre-[[T-P7F7]] `status: open/ready` that was
+   * never renamed to `state:`) gets a custom `code: 'custom'` issue whose
+   * message says to rename it and run `entities migrate`, instead of the
+   * generic enum-mismatch message `markdown-contract`'s formatter would
+   * otherwise build from the raw `invalid_value` issue — a `custom` issue is
+   * the only code whose `message` it renders verbatim
+   * ([#2412](https://github.com/sksizer/dev/pull/2412) review round 1). This is
+   * a better error message for the OKF key, not a compat alias: the value
+   * still fails validation either way.
+   *
+   * The `.meta({ enum: [...] })` is NOT redundant with the `superRefine`
+   * above: a `superRefine`-only field has no `enum` in its own right, so
+   * `z.toJSONSchema()`'s projection (`_json_schema.ts`, consumed by
+   * `check_entities.ts` among others) would otherwise show `status` as a
+   * bare `{ type: 'string' }` with no allowed-values list — the JSON-Schema
+   * projection and the runtime parse are two separate readers of this same
+   * field and each needs its own way to see the enum.
+   */
+  status: z
+    .string()
+    .optional()
+    .superRefine((value, ctx) => {
+      if (value === undefined) return
+      if ((OKF_STATUS_VALUES as readonly string[]).includes(value)) return
+      if (looksLikeLifecycleValue(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            `'${value}' looks like this entity's lifecycle value, not an OKF document-maturity ` +
+            "value — put it under 'state:' instead of 'status:', then run 'entities migrate'.",
+        })
+        return
+      }
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `must be one of ${OKF_STATUS_VALUES.map((v) => `'${v}'`).join(',')}`,
+      })
+    })
+    .meta({ enum: [...OKF_STATUS_VALUES] })
+    .describe(
+      "OKF v0.2's own document-maturity key — DISTINCT from the entity's own lifecycle " +
+        '`state` field (do not confuse the two). Optional: absent means OKF makes no ' +
+        'maturity claim about this document.',
+    ),
 })
 
 /** The inferred TS type of the shared base (rarely used directly — per-type
@@ -276,7 +357,7 @@ export const BaseEntity = z.object({
   /** File stem — the handle an entity detail route takes. */
   basename: z.string(),
   title: z.string(),
-  status: z.string(),
+  state: z.string(),
 })
 
 export type BaseEntity = z.infer<typeof BaseEntity>

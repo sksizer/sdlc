@@ -40,15 +40,15 @@ Two parts:
 - **Reference (generated)** — one `##` section per entity type, read
   from `docs/planning/`. Each section splits its entities into an
   **Active** table and, when non-empty, a follow-up
-  **Emerging / obsoleted** table carrying an explicit `Status` column.
-  Summary cells transclude each entity's `^summary` block. A status
+  **Emerging / obsoleted** table carrying an explicit `State` column.
+  Summary cells transclude each entity's `^summary` block. A state
   value not covered by the bucket table is routed to the follow-up
-  table with its status shown — never dropped.
+  table with its state shown — never dropped.
 - **Appendix (generated)** — the Glossary and References tables (the
   same data the standalone artifacts render — one pass, second
   projection) ahead of the fixed Conventions block.
 
-| Bucket | Status values |
+| Bucket | State values |
 |---|---|
 | Active (in effect) | `open/active`, `open/accepted`, `open/published`, `open/verified`, `open/validated` |
 | Emerging | `open/draft`, `open/proposed`, `open/planned` |

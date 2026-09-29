@@ -124,7 +124,7 @@ const STOPWORDS: ReadonlySet<string> = new Set([
 export interface Candidate {
   basename: string
   score: number
-  status: string
+  state: string
   headline: string
   /**
    * Set when the candidate came from an UNMERGED PR head rather than the
@@ -141,7 +141,7 @@ export interface Candidate {
  */
 export interface UnmergedRow {
   basename: string
-  status: string | null
+  state: string | null
   headline: string
   text: string
   pr_number: number
@@ -193,11 +193,11 @@ export function extractKeywords(text: string, maxKeywords = 8): string[] {
 // Task file parsing
 //
 // Frontmatter comes from the entity read layer's bulk-scan primitive
-// (`readRawFrontmatter` — this is a many-files status walk, not a typed
+// (`readRawFrontmatter` — this is a many-files state walk, not a typed
 // single-entity read); the body for keyword scoring comes from the shared
 // `splitFrontmatter` fence splitter. A task with missing or malformed
 // frontmatter yields `null` frontmatter rather than raising — it scores with
-// status "unknown" and won't be picked as a link target.
+// state "unknown" and won't be picked as a link target.
 // ---------------------------------------------------------------------------
 
 /** Return the first `#`-prefixed line's text, or empty string. */
@@ -254,13 +254,13 @@ export function scoreCorpus(
   for (const row of scanEntityDir(tasksDir, { withText: true })) {
     if (excludeSet.has(row.basename)) continue
     seen.add(row.basename)
-    const statusVal = row.fm === null ? undefined : row.fm['status']
-    const status = statusVal === undefined || statusVal === null ? 'unknown' : String(statusVal)
+    const stateVal = row.fm === null ? undefined : row.fm['state']
+    const state = stateVal === undefined || stateVal === null ? 'unknown' : String(stateVal)
     const [, body] = splitFrontmatter(row.text!)
     const headline = extractHeadline(body)
     const score = scoreBody(body, keywords, headline)
     if (score === 0) continue
-    scored.push({ basename: row.basename, score, status, headline })
+    scored.push({ basename: row.basename, score, state, headline })
   }
   // Unmerged rows score by the SAME body rule, so an on-disk task and a
   // PR-only task are ranked on one scale. A basename already on disk is
@@ -275,7 +275,7 @@ export function scoreCorpus(
     scored.push({
       basename: row.basename,
       score,
-      status: row.status ?? 'unknown',
+      state: row.state ?? 'unknown',
       headline,
       pr: row.pr_number,
     })
@@ -306,7 +306,7 @@ export function decide(
   thresholdMinScore: number,
   thresholdRatio: number,
 ): [string, string | null] {
-  const top = candidates.find((c) => !c.status.startsWith('closed/'))
+  const top = candidates.find((c) => !c.state.startsWith('closed/'))
   if (top === undefined) {
     return ['SPAWNED', null]
   }
@@ -347,14 +347,14 @@ export function formatBlock(opts: FormatBlockOptions): string {
   if (excluded.length) {
     lines.push(`Excluded: ${excluded.join(', ')}`)
   }
-  lines.push('Top candidates (score / status / headline):')
+  lines.push('Top candidates (score / state / headline):')
   if (candidates.length) {
     for (const c of candidates) {
       const head = c.headline ? c.headline : '(no headline)'
       // An unmerged candidate is flagged inline: it is NOT on main yet, so a
       // reader who greps the task corpus for it will come up empty.
       const origin = c.pr === undefined ? '' : ` [unmerged, PR #${c.pr}]`
-      lines.push(`  - ${c.score} / ${c.status} / ${c.basename}${origin} — ${head}`)
+      lines.push(`  - ${c.score} / ${c.state} / ${c.basename}${origin} — ${head}`)
     }
   } else {
     lines.push('  - (no candidates matched any keyword)')
@@ -540,7 +540,7 @@ export function loadExtraCandidates(path: string): UnmergedRow[] {
         basename,
         text,
         pr_number: prNumber,
-        status: typeof o['status'] === 'string' ? o['status'] : null,
+        state: typeof o['state'] === 'string' ? o['state'] : null,
         headline: typeof o['headline'] === 'string' ? o['headline'] : '',
       },
     ]
@@ -701,7 +701,7 @@ export function main(argv: readonly string[], ctx: CliContext): number {
         candidates: result.candidates.map((c) => ({
           basename: c.basename,
           score: c.score,
-          status: c.status,
+          state: c.state,
           headline: c.headline,
         })),
         decision: result.decision,

@@ -4,7 +4,7 @@
  *
  * A Roadmap is a living tracking document: `CommonFrontmatter` base +
  * Roadmap-specific fields, `.strict()` for `additionalProperties: false`, plus
- * the one status-conditional required (`closed/* ⇒ completion_note`, mirroring
+ * the one state-conditional required (`closed/* ⇒ completion_note`, mirroring
  * milestone). Unlike Milestone, Roadmap's `id` carries NO sub-id suffix — a
  * roadmap is not something you insert between two others.
  *
@@ -34,7 +34,7 @@ import { titleMirrorsH1 } from '../_rules.ts'
 
 /** Mirrors the other per-type schemas' SCHEMA version constant (the SCHEMA
  *  version, not any product/plan version). */
-export const SCHEMA_VERSION = '1'
+export const SCHEMA_VERSION = '2'
 
 export const RoadmapSchema = CommonFrontmatter.extend({
   type: z.literal('roadmap').describe('Dispatch tag for the validator framework.'),
@@ -47,7 +47,7 @@ export const RoadmapSchema = CommonFrontmatter.extend({
         '(base-36 numbering). Never renamed once assigned. No sub-id suffix ' +
         '(unlike Milestone) — a roadmap is not inserted between two others.',
     ),
-  status: z
+  state: z
     .enum(['open/draft', 'open/active', 'closed/superseded', 'closed/abandoned'])
     .default('open/draft')
     .describe(
@@ -77,7 +77,7 @@ export const RoadmapSchema = CommonFrontmatter.extend({
     .min(1)
     .optional()
     .describe(
-      'What superseded this roadmap (or why it was abandoned). Required for any closed/* status.',
+      'What superseded this roadmap (or why it was abandoned). Required for any closed/* state.',
     ),
 })
   .strict()
@@ -86,7 +86,7 @@ export const RoadmapSchema = CommonFrontmatter.extend({
     // why abandoned) — mirrors Milestone's `closed/* ⇒ completion_note` rule.
     requiredWhen(
       ctx,
-      fm.status.startsWith('closed/') && fm.completion_note === undefined,
+      fm.state.startsWith('closed/') && fm.completion_note === undefined,
       'completion_note',
     )
   })

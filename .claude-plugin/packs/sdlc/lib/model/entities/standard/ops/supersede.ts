@@ -1,12 +1,12 @@
 /**
  * `sdlc standard supersede <standard> --by <new-id>` — mark a standard as
- * superseded by a successor: set `status: closed/superseded` and
+ * superseded by a successor: set `state: closed/superseded` and
  * `superseded_by: [[<new-id>]]` on the OLD standard, schema-validated before
  * anything is written.
  *
  * A distinct verb (not a `standard update --set` shape) because supersession
  * is a fixed two-field transition with its own contract: it always sets the
- * same `status`, always points `superseded_by:` at the successor, and is the
+ * same `state`, always points `superseded_by:` at the successor, and is the
  * surface /sdlc:standard-new wires its supersession flow into
  * ([[D-0007-deterministic-op-substrate]] §2a, Cluster 6). It shares the
  * entity-agnostic frontmatter-set engine in `model/ops/_update.ts` with the
@@ -116,7 +116,7 @@ export default defineOp({
       entity: getStandardEntity(),
       path,
       text,
-      updates: { status: 'closed/superseded', superseded_by: supersededBy },
+      updates: { state: 'closed/superseded', superseded_by: supersededBy },
       ctx,
     })
     return { ...result, superseded: true }

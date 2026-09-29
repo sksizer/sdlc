@@ -20,7 +20,7 @@ Usage:
 - `/sdlc:backlog-triage` — walk every untriaged backlog file.
 - `/sdlc:backlog-triage <slug-or-path>` — triage just the named file.
 
-Untriaged ≡ frontmatter has no `status:` field. Any task with `status:` set (whether `promoted/*` or
+Untriaged ≡ frontmatter has no `state:` field. Any task with `state:` set (whether `promoted/*` or
 `closed/*`) is considered already triaged and skipped by the no-arg pickup.
 
 Project context (don't re-derive every run):
@@ -29,7 +29,7 @@ Project context (don't re-derive every run):
   `${CLAUDE_PLUGIN_ROOT}/lib/model/entities/backlog/schema.ts`.
 - Two usage patterns coexist (see the template head comment). This skill targets
   **single-candidate** files — those representing one idea that may get promoted. Multi-item dump
-  files (where the body holds many ideas) typically don't ever get `status:` set; for those, this
+  files (where the body holds many ideas) typically don't ever get `state:` set; for those, this
   skill offers "defer" (bump last_reviewed) but the per-item promotion is up to the author.
 - Frontmatter mutations go through `sdlc backlog update <backlog> --set '<json>'` (schema-validated
   before write, body byte-untouched, a `null` value deletes a key); the standalone validator is
@@ -53,7 +53,7 @@ If an argument was given, resolve it:
   user pick. If none, exit `NO BACKLOG FOUND for "<arg>"`.
 
 If no argument, list `docs/planning/backlog/*.md` and read frontmatter from each. Filter to the
-untriaged set (no `status:` field at all). Sort by filename (alphabetical). If the untriaged set is
+untriaged set (no `state:` field at all). Sort by filename (alphabetical). If the untriaged set is
 empty, exit `NO UNTRIAGED BACKLOG FILES`.
 
 Report at the start: how many files will be triaged, and their slugs.
@@ -63,7 +63,7 @@ Report at the start: how many files will be triaged, and their slugs.
 For each file in turn:
 
 1. Read the file. Capture:
-   - Frontmatter (current `status`, `tags`, `last_reviewed`).
+   - Frontmatter (current `state`, `tags`, `last_reviewed`).
    - Headline (the first `#` line in the body, stripped).
    - Body summary — the first ~200 chars after the headline. If the body is short, show the whole
      thing.
@@ -73,10 +73,10 @@ For each file in turn:
 
 3. Ask via AskUserQuestion (4 top-level options):
    - **Promote to task** — create a task via `sdlc task create`, then set this backlog to
-     `status: promoted/task` with `result: [[<new-task-basename>]]`. Default action for items that
+     `state: promoted/task` with `result: [[<new-task-basename>]]`. Default action for items that
      map to one concrete change.
    - **Promote to milestone** — create a milestone via `sdlc milestone create`, then set this
-     backlog to `status: promoted/milestone` with `result: [[M-<NNNN>-<slug>]]`. For larger outcomes
+     backlog to `state: promoted/milestone` with `result: [[M-<NNNN>-<slug>]]`. For larger outcomes
      spanning multiple tasks.
    - **Close** — discard without promotion, or record that the item shipped without ever being
      promoted. A second AskUserQuestion asks the reason: `abandoned` (won't do / no longer relevant;
@@ -123,7 +123,7 @@ decisions stay and the unprocessed files remain untriaged, resurfacing in the ne
    ```text
    ${CLAUDE_PLUGIN_ROOT}/cli/sdlc task create \
      --headline "<backlog-headline>" \
-     --status planning/draft \
+     --state planning/draft \
      --impact medium \
      --complexity medium
    ```
@@ -138,7 +138,7 @@ decisions stay and the unprocessed files remain untriaged, resurfacing in the ne
 
    ```text
    ${CLAUDE_PLUGIN_ROOT}/cli/sdlc backlog update <backlog-path> \
-     --set '{"status":"promoted/task","result":"[[T-<NNNN>-<slug>]]","last_reviewed":"<today>"}'
+     --set '{"state":"promoted/task","result":"[[T-<NNNN>-<slug>]]","last_reviewed":"<today>"}'
    ```
 
    The `result:` wikilink MUST be the canonical `[[T-<NNNN>-<slug>]]` form (the schema-assigned id,
@@ -163,12 +163,12 @@ Mirror step 3, but:
 
 - Use `sdlc milestone create` instead of `sdlc task create`. The milestone op auto-assigns the next
   `M-<NNNN>` id — capture it from the printed path.
-- Update the backlog via `sdlc backlog update` with `status: promoted/milestone` and
+- Update the backlog via `sdlc backlog update` with `state: promoted/milestone` and
   `result: [[M-<NNNN>-<slug>]]`:
 
   ```text
   ${CLAUDE_PLUGIN_ROOT}/cli/sdlc backlog update <backlog-path> \
-    --set '{"status":"promoted/milestone","result":"[[M-<NNNN>-<slug>]]","last_reviewed":"<today>"}'
+    --set '{"state":"promoted/milestone","result":"[[M-<NNNN>-<slug>]]","last_reviewed":"<today>"}'
   ```
 
 - Stage both files and commit through `sdlc commit create`:
@@ -185,7 +185,7 @@ The milestone create call:
 ```text
 ${CLAUDE_PLUGIN_ROOT}/cli/sdlc milestone create \
   --title "<backlog-headline>" \
-  --status open/draft
+  --state open/draft
 ```
 
 (Don't seed tasks or other fields — the milestone will be fleshed out later by `/sdlc:milestone-new`
@@ -213,14 +213,14 @@ Then update the backlog frontmatter via `sdlc backlog update`:
 
   ```text
   ${CLAUDE_PLUGIN_ROOT}/cli/sdlc backlog update <backlog-path> \
-    --set '{"status":"closed/abandoned","result":null,"last_reviewed":"<today>"}'
+    --set '{"state":"closed/abandoned","result":null,"last_reviewed":"<today>"}'
   ```
 
 - **Duplicate**:
 
   ```text
   ${CLAUDE_PLUGIN_ROOT}/cli/sdlc backlog update <backlog-path> \
-    --set '{"status":"closed/duplicate","result":"[[<other-slug>]]","last_reviewed":"<today>"}'
+    --set '{"state":"closed/duplicate","result":"[[<other-slug>]]","last_reviewed":"<today>"}'
   ```
 
 - **Delivered**: the schema REQUIRES `result:` on `closed/delivered`, freeform (not
@@ -228,7 +228,7 @@ Then update the backlog frontmatter via `sdlc backlog update`:
 
   ```text
   ${CLAUDE_PLUGIN_ROOT}/cli/sdlc backlog update <backlog-path> \
-    --set '{"status":"closed/delivered","result":"<PR link or note>","last_reviewed":"<today>"}'
+    --set '{"state":"closed/delivered","result":"<PR link or note>","last_reviewed":"<today>"}'
   ```
 
 The op is schema-validated; it fails non-zero if the result does not validate. Then commit only that
@@ -244,7 +244,7 @@ ${CLAUDE_PLUGIN_ROOT}/cli/sdlc commit create \
 ## 6. Defer
 
 1. Update the backlog frontmatter via `sdlc backlog update`: set `last_reviewed:` to today. Do not
-   change `status:`. The op is schema-validated and leaves the body byte-untouched.
+   change `state:`. The op is schema-validated and leaves the body byte-untouched.
 
    ```text
    ${CLAUDE_PLUGIN_ROOT}/cli/sdlc backlog update <backlog-path> \
@@ -272,15 +272,15 @@ After the loop finishes (or the user stops it), print a short summary:
 
 ## Acceptance criteria
 
-- Every promoted backlog file has `status: promoted/<entity>` AND a canonical `result:` wikilink
+- Every promoted backlog file has `state: promoted/<entity>` AND a canonical `result:` wikilink
   (`[[T-<NNNN>-<slug>]]` for a task, `[[M-<NNNN>-<slug>]]` for a milestone — never a date-prefixed
   basename) AND `last_reviewed:` set to today.
-- Every closed/duplicate backlog file has `status: closed/duplicate` AND
+- Every closed/duplicate backlog file has `state: closed/duplicate` AND
   `result: [[<other-backlog-slug>]]` AND `last_reviewed:` set to today, and the referenced backlog
   exists.
-- Every closed/abandoned backlog file has `status: closed/abandoned` AND `last_reviewed:` set to
+- Every closed/abandoned backlog file has `state: closed/abandoned` AND `last_reviewed:` set to
   today, and NO `result:` field.
-- Every closed/delivered backlog file has `status: closed/delivered` AND a non-empty `result:` (a PR
+- Every closed/delivered backlog file has `state: closed/delivered` AND a non-empty `result:` (a PR
   link or short note of what shipped) AND `last_reviewed:` set to today.
 - Every modified backlog file passes `sdlc entities validate`.
 - Every promotion produced exactly one new artifact file AND one updated backlog file, both in the
@@ -293,17 +293,17 @@ After the loop finishes (or the user stops it), print a short summary:
 
 - Promotion does NOT invoke the interactive `/sdlc:task-new` or `/sdlc:milestone-new` skills — they
   ask too many follow-up questions for a triage flow. The new artifact lands with sensible defaults
-  (task: `status: planning/draft`, `impact: medium`, `complexity: medium`; milestone:
-  `status: open/draft`, no version or target_date). The author refines them later via
+  (task: `state: planning/draft`, `impact: medium`, `complexity: medium`; milestone:
+  `state: open/draft`, no version or target_date). The author refines them later via
   `/sdlc:task-define` and `/sdlc:milestone-new` follow-up edits.
 - The backlog body is NOT carried over into the new task/milestone. The body stays in place on the
   backlog file as the origin story; the new artifact starts empty. To seed the body content into the
   task, follow up with `/sdlc:task-define` or paste it in by hand.
 - This skill never changes the body of a backlog file — only frontmatter. Strike-through / deletion
   of promoted items inside multi-item dump files is the author's job.
-- Backlog files with `status:` already set are NOT re-triaged. To re-promote (e.g. you decide the
+- Backlog files with `state:` already set are NOT re-triaged. To re-promote (e.g. you decide the
   task it pointed at should actually be a milestone), edit the backlog frontmatter manually —
-  clearing `status` and `result` returns the file to the untriaged set.
+  clearing `state` and `result` returns the file to the untriaged set.
 - **Committing model-generated messages.** Each decision's commit is authored through
   `sdlc commit create` (`--subject`/`--body`, or `--message -` for whole messages on stdin) so the
   conventional-commit parens never reach a re-parsing shell. See

@@ -23,10 +23,10 @@
  *
  * | Case | Behavior |
  * |---|---|
- * | Pass, unleased, `planning/*` | ONE promotion commit: `status: open/ready` + `readiness_verified_at` (+ drop `definition_gap`). Promotion IS the readiness claim. |
+ * | Pass, unleased, `planning/*` | ONE promotion commit: `state: open/ready` + `readiness_verified_at` (+ drop `definition_gap`). Promotion IS the readiness claim. |
  * | Pass, unleased, already `open/ready` | No-op — the file stays byte-identical. Unless a `definition_gap` is present: clearing it is a semantic edit and keeps its commit. The stamp is never refreshed. |
  * | Pass, active lease | CAS-write the lease `gates` only. Zero commits on main, no frontmatter write. |
- * | Fail | Downshift to `planning/needs-definition` + `definition_gap` — except the carve-out, which preserves status when the input is `in-progress*` OR an active lease exists (post-split a leased task reads `open/ready`, and downshifting it would corrupt live work). |
+ * | Fail | Downshift to `planning/needs-definition` + `definition_gap` — except the carve-out, which preserves state when the input is `in-progress*` OR an active lease exists (post-split a leased task reads `open/ready`, and downshifting it would corrupt live work). |
  *
  * Terminal markers (slug-namespaced per skills/CLAUDE.md):
  *
@@ -42,7 +42,7 @@
  * Exit codes ([[S-0015-standalone-cli-shape]] rule 4): 0 ok / 1 the command
  * failed against the state it found / 2 the command was typed wrong / 12
  * (`LEASE_CONFLICT`) `--commit` refused because an active lease exists / 19
- * the commit or the lease write was refused-or-failed / 20 the input status is
+ * the commit or the lease write was refused-or-failed / 20 the input state is
  * not one this gate accepts.
  *
  * Frontmatter edits are span-preserving (`lib/util/frontmatter.ts`): the block
@@ -90,10 +90,10 @@ import { legacyCliContext } from '@lib/util/legacy-cli.ts'
  */
 const EXIT_WRITE_REFUSED = 19
 
-/** The task's status is not one this gate accepts as input. */
-const EXIT_UNACCEPTABLE_STATUS = 20
+/** The task's state is not one this gate accepts as input. */
+const EXIT_UNACCEPTABLE_STATE = 20
 
-const ALLOWED_INPUT_STATUSES = new Set([
+const ALLOWED_INPUT_STATES = new Set([
   'planning/draft',
   'planning/proposed',
   'planning/backlog',
@@ -101,9 +101,9 @@ const ALLOWED_INPUT_STATUSES = new Set([
   'in-progress',
   'in-progress/blocked',
 ])
-const IN_PROGRESS_STATUSES = new Set(['in-progress', 'in-progress/blocked'])
-const DOWNSHIFT_STATUS = 'planning/needs-definition'
-const PROMOTED_STATUS = 'open/ready'
+const IN_PROGRESS_STATES = new Set(['in-progress', 'in-progress/blocked'])
+const DOWNSHIFT_STATE = 'planning/needs-definition'
+const PROMOTED_STATE = 'open/ready'
 const PLANNING_PREFIX = 'planning/'
 
 /** Which plane a pass verdict landed on — the marker's third line. */
@@ -128,9 +128,9 @@ interface PassPlan {
 /**
  * Plan the pass mutation for the FRONTMATTER plane (the unleased case).
  *
- * A `planning/*` task is promoted: one edit batch carries the status flip AND
+ * A `planning/*` task is promoted: one edit batch carries the state flip AND
  * the stamp, because promotion IS the readiness claim
- * ([[D-S30G-task-state-plane-split]]). Already `open/ready` tasks get no status
+ * ([[D-S30G-task-state-plane-split]]). Already `open/ready` tasks get no state
  * change and no stamp refresh — the stamp records "was ready when promoted",
  * a question re-verification cannot answer. Clearing `definition_gap` is the
  * only edit on that path (it is semantic), so it keeps its commit.
@@ -143,11 +143,11 @@ function planPassEdits(fm: Record<string, unknown>, nowIso: string): PassPlan {
   const edits: FieldEdit[] = []
   if ('definition_gap' in fm) edits.push({ Remove: { key: 'definition_gap' } })
 
-  const status = fm['status']
-  const promoting = typeof status === 'string' && status.startsWith(PLANNING_PREFIX)
+  const state = fm['state']
+  const promoting = typeof state === 'string' && state.startsWith(PLANNING_PREFIX)
   if (!promoting) return { edits, stamp: null }
 
-  edits.push({ Set: { key: 'status', value: PROMOTED_STATUS } })
+  edits.push({ Set: { key: 'state', value: PROMOTED_STATE } })
   edits.push({ Set: { key: 'readiness_verified_at', value: nowIso } })
   return { edits, stamp: nowIso }
 }
@@ -155,7 +155,7 @@ function planPassEdits(fm: Record<string, unknown>, nowIso: string): PassPlan {
 /**
  * Plan the fail mutation, as a span-preserving edit batch.
  *
- * The carve-out preserves status for work that is mid-flight — legacy
+ * The carve-out preserves state for work that is mid-flight — legacy
  * `in-progress*` frontmatter OR an active lease. A leased task reads
  * `open/ready` for its whole run, so without the lease arm a standalone fail
  * would downshift live work ([[D-S30G-task-state-plane-split]]).
@@ -171,11 +171,11 @@ function failEdits(
   opts: { leased: boolean } = { leased: false },
 ): FieldEdit[] {
   const edits: FieldEdit[] = []
-  const currentStatus = fm['status']
+  const currentState = fm['state']
   const midFlight =
-    opts.leased || (typeof currentStatus === 'string' && IN_PROGRESS_STATUSES.has(currentStatus))
+    opts.leased || (typeof currentState === 'string' && IN_PROGRESS_STATES.has(currentState))
   if (!midFlight) {
-    edits.push({ Set: { key: 'status', value: DOWNSHIFT_STATUS } })
+    edits.push({ Set: { key: 'state', value: DOWNSHIFT_STATE } })
   }
   if (!opts.leased && 'readiness_verified_at' in fm) {
     edits.push({ Remove: { key: 'readiness_verified_at' } })
@@ -235,7 +235,7 @@ function nowIsoUtc(): string {
 // A pass that commits is always the promotion commit. That includes the
 // gap-clearing pass on a task already at `open/ready`: `definition_gap` is the
 // needs-definition marker, so clearing it IS the readiness claim landing on
-// main, even when `status` was already there (the lease carve-out can leave a
+// main, even when `state` was already there (the lease carve-out can leave a
 // gap on an `open/ready` task).
 function commitSubject(
   mode: string,
@@ -509,7 +509,7 @@ function emitPassMarker(io: CliIo, basename: string, stampIso: string | null, pl
  * the CURRENT checkout and branch — exactly the write a live run must never
  * take ([[D-S30G-task-state-plane-split]]) — so a held lease refuses instead of
  * committing. Its own exit code (12, `LEASE_CONFLICT`), distinct from the
- * usage/status/commit codes, so a caller can branch on it.
+ * usage/state/commit codes, so a caller can branch on it.
  */
 function emitLeasedMarker(io: CliIo, basename: string, phase: string): void {
   io.stdout(`ENSURE-READY-LEASED: ${basename}\n`)
@@ -669,14 +669,14 @@ function applyMutation(
     io.stderr(`${parseError} in ${path}\n`)
     throw new ExitError(EXIT.error)
   }
-  const status = fm['status']
-  if (typeof status !== 'string' || !ALLOWED_INPUT_STATUSES.has(status)) {
-    const sorted = Array.from(ALLOWED_INPUT_STATUSES).sort()
+  const state = fm['state']
+  if (typeof state !== 'string' || !ALLOWED_INPUT_STATES.has(state)) {
+    const sorted = Array.from(ALLOWED_INPUT_STATES).sort()
     io.stderr(
-      `status ${repr(status)} in ${path} is not an accepted ` +
+      `state ${repr(state)} in ${path} is not an accepted ` +
         `ensure-ready input (allowed: ${repr(sorted)})\n`,
     )
-    throw new ExitError(EXIT_UNACCEPTABLE_STATUS)
+    throw new ExitError(EXIT_UNACCEPTABLE_STATE)
   }
   let edits: FieldEdit[]
   let stamp: string | null = null

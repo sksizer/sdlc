@@ -1,13 +1,18 @@
 {
-  "state": "OPEN",
-  "mergeable": "MERGEABLE",
-  "mergeStateStatus": "CLEAN",
-  "reviewDecision": "",
-  "headRefName": "task/example-no-checks",
-  "baseRefName": "main",
-  "statusCheckRollup": [],
+  "number": 1,
+  "url": "https://github.com/example/example/pull/1",
+  "title": "example",
+  "isDraft": false,
+  "state": "open",
+  "author": { "login": "example-author", "isBot": false },
+  "baseRef": "main",
+  "headRef": "task/example-no-checks",
+  "headSha": null,
   "mergedAt": null,
-  "comments": [],
-  "reviews": [],
-  "author": { "login": "example-author" }
+  "mergeable": "mergeable",
+  "checks": { "rollup": "none", "failing": [], "failingUrls": [] },
+  "reviewDecision": null,
+  "activity": [],
+  "behind": null,
+  "ahead": null
 }

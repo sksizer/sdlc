@@ -52,7 +52,7 @@ Read the freeform argument text and derive, in-session:
 - `--body` — the remaining detail as freeform markdown, only when the input carries detail beyond
   the headline. Omit the flag for a one-liner.
 - `--tag` — inferred from the content: one `--tag` per relevant theme (kebab-case, e.g.
-  `--tag docs --tag ci`). Infer 0–3 tags; pass none when nothing clearly applies. Leave `--status`
+  `--tag docs --tag ci`). Infer 0–3 tags; pass none when nothing clearly applies. Leave `--state`
   and `--slug` to the tail's defaults unless the user explicitly named one.
 
 ## 2. Shell out to `sdlc backlog create`

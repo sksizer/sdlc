@@ -39,9 +39,9 @@ contract only binds shape when promotion or closure is recorded.
 | Field | Required? | Notes |
 |---|---|---|
 | `type`, `schema_version`, `id` | optional | Dispatch tag; generation stamp; identity (legacy dumps may lack all three) |
-| `status` | optional | Absent = raw idea. `promoted/task`, `promoted/milestone`, `promoted/decision`, `closed/abandoned`, `closed/duplicate`, `closed/delivered` |
+| `state` | optional | Absent = raw idea. `promoted/task`, `promoted/milestone`, `promoted/decision`, `closed/abandoned`, `closed/duplicate`, `closed/delivered` |
 | `likely_type` | optional | Non-binding triage hint — the entity-type slug the triager guesses the item becomes (`task`, `milestone`, `decision`, `driver`, …). Never constrains the promotion outcome |
-| `result` | conditional | Wikilink to the produced artifact; required with `promoted/*`, `closed/duplicate`, and `closed/delivered` (freeform PR link/note for `closed/delivered`), forbidden with `closed/abandoned` (schema-enforced per status) |
+| `result` | conditional | Wikilink to the produced artifact; required with `promoted/*`, `closed/duplicate`, and `closed/delivered` (freeform PR link/note for `closed/delivered`), forbidden with `closed/abandoned` (schema-enforced per state) |
 | `tags` | optional | Filtering labels |
 | `last_reviewed` | optional | Bumped by `/sdlc:backlog-triage` on any decision |
 | `need_human_review` | optional | Review-tracking flag |
@@ -56,7 +56,7 @@ structure is imposed at promotion time, not capture time.
 
 ## Lifecycle
 
-| Status | Meaning |
+| State | Meaning |
 |---|---|
 | *(absent)* | Raw idea (single-candidate) or ongoing dump (multi-item) |
 | `promoted/task` | Became a task; `result:` points at it (task-shaped wikilink) |
@@ -66,13 +66,13 @@ structure is imposed at promotion time, not capture time.
 | `closed/duplicate` | Already captured elsewhere; `result:` points at the canonical backlog |
 | `closed/delivered` | Built directly, without going through a promoted artifact; `result:` is a freeform PR link or short note of what shipped |
 
-All statuses are terminal — a backlog file never moves backward; the
+All states are terminal — a backlog file never moves backward; the
 promoted file stays as the idea's origin story.
 
 ## Relationships
 
 - **Backlog → Task / Milestone / Decision** (`result:`): promotion
-  provenance, shape-checked per status by the schema.
+  provenance, shape-checked per state by the schema.
 - **Backlog → Backlog** (`result:` with `closed/duplicate`): canonical
   capture pointer.
 
@@ -117,9 +117,9 @@ execute as Tasks.
 - Pre-triage idea capture — deliberately unstructured, cheap to write,
   terminal-stated once promoted or closed. ^summary
 - Identifier: `B-NNNN[-slug].md`, base-36; optional on legacy dumps.
-- Status: absent until promoted (`promoted/task`,
+- State: absent until promoted (`promoted/task`,
   `promoted/milestone`, `promoted/decision`) or closed
   (`closed/abandoned`, `closed/duplicate`, `closed/delivered`);
-  `result:` shape-checked per status.
+  `result:` shape-checked per state.
 - Body freeform; structure arrives at promotion.
 - Distinct from Task (has a spec) and Milestone (release narrative).

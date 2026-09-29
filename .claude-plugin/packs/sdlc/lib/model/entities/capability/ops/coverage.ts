@@ -220,7 +220,7 @@ export async function buildCapabilityCoverage(
       basename: n.basename,
       title: n.title,
       kind: n.kind,
-      status: n.status,
+      state: n.state,
       parent: n.parent,
       location_count: n.locations.length,
       resolved,
@@ -307,6 +307,9 @@ export default defineOp({
   path: ['capability', 'coverage'],
   summary:
     'Join capabilities against packages and crates: unanchored units, unanchored capabilities, rot.',
+  // Read-only: reads the capability corpus + on-disk manifest graph, writes
+  // nothing.
+  mutating: false,
   input: z.object({
     scope: z.string().nullable().default(null),
   }),

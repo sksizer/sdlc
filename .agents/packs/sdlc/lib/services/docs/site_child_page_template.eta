@@ -11,7 +11,7 @@
  *   title       string   frontmatter title (already escapeFmString'd)
  *   description string   frontmatter description (already escapeFmString'd)
  *   sourceRel   string   source path relative to project root
- *   metaLine    string   joined meta line e.g. "**Status:** `open/active` · **Aliases:** west wind"
+ *   metaLine    string   joined meta line e.g. "**State:** `open/active` · **Aliases:** west wind"
  *                        (empty string when no meta items)
  *   body        string   body content (wikilinks resolved, block-ids stripped, trimmed;
  *                        a projection's child-body appendix — e.g. references'

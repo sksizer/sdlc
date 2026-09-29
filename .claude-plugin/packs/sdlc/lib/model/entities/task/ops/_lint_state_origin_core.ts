@@ -5,7 +5,7 @@
  * Per
  * [[2026-05-28-task-state-frontmatter-commits-on-main-not-worktree-branch]],
  * changes to a task file's *task-state* frontmatter fields
- * (`status:`, `readiness_verified_at:`, `last_reviewed:`,
+ * (`state:`, `readiness_verified_at:`, `last_reviewed:`,
  * `definition_gap:`, `completion_note:`, `prs:`) must commit on
  * `main` — never on a `task/<basename>` branch. The worktree branch
  * carries implementation diff only (code, tests, docs, post-mortem
@@ -28,7 +28,7 @@ import { repr } from '@lib/util/diagnostics'
 
 // The exact set of frontmatter fields that count as "task-state".
 const TASK_STATE_FIELDS: ReadonlySet<string> = new Set([
-  'status',
+  'state',
   'readiness_verified_at',
   'last_reviewed',
   'definition_gap',

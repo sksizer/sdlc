@@ -40,7 +40,7 @@ schema's property descriptions. The roster:
 | Field | Required? | Notes |
 |---|---|---|
 | `id` | required | Immutable `T-NNNN` |
-| `status` | required | See Lifecycle; workflow cache under the lease protocol |
+| `state` | required | See Lifecycle; workflow cache under the lease protocol |
 | `type`, `schema_version` | recommended | Dispatch tag; schema generation stamp |
 | `created`, `last_reviewed` | optional | ISO dates |
 | `created_at` | optional | ISO 8601 datetime the task was authored, finer than `created` |
@@ -53,7 +53,7 @@ schema's property descriptions. The roster:
 | `scheduling` | optional | Soft scheduling hints — concurrency class, not-before instant, recurrence. Policy may ignore all of them |
 | `tags`, `related` | optional | Labels; loose cross-references |
 | `parent_key`, `depends_on` | optional | Self-nesting (epic-ness); hard dependency edges |
-| `prs`, `completion_note`, `relevance_note`, `definition_gap` | optional | Lifecycle bookkeeping; `completion_note` required once `closed/*` |
+| `prs`, `issue`, `completion_note`, `relevance_note`, `definition_gap` | optional | Lifecycle bookkeeping; `completion_note` required once `closed/*`. `issue` is the linked GitHub issue's bare decimal number (e.g. `"1234"`), set by `sdlc issues`' `define`-stage dispatch ([[D-0019-sdlc-chain-stages-and-labels]]) |
 | `readiness_verified_at`, `touchpoints_verified_at` | optional | Gate stamps, written only by their owning skills; pinned to the bottom of the frontmatter |
 
 ## Body shape
@@ -83,7 +83,7 @@ Four majors: `planning/*` (spec forming, not pickable), `open/*`
 (pickable now), `in-progress[/blocked]` (claimed), `closed/*`
 (terminal).
 
-| Status | Meaning |
+| State | Meaning |
 |---|---|
 | `planning/draft` | Being authored |
 | `planning/proposed` | Authored, awaiting triage |
@@ -124,7 +124,7 @@ Four majors: `planning/*` (spec forming, not pickable), `open/*`
 | work | skill | `/sdlc:task-work <task>` | `solutions/ontological/plugin/plugins/sdlc/skills/task-work/` | Lease → worktree → implement → PR |
 | review | skill | `/sdlc:task-review` | `solutions/ontological/plugin/plugins/sdlc/skills/task-review/` | Batch triage of unfinished tasks |
 | close-out | skill | `/sdlc:task-close-out <task>` | `solutions/ontological/plugin/plugins/sdlc/skills/task-close-out/` | Close after merge; teardown worktree/branch |
-| probe-state | cli | `sdlc task probe-state <basename>` | `solutions/ontological/lib/model/entities/task/ops/probe-state.ts` | Report single-task pre-flight signals (worktree/branch/PR/status + resume detector) for `/sdlc:task-work`; read-only, never self-aborts |
+| probe-state | cli | `sdlc task probe-state <basename>` | `solutions/ontological/lib/model/entities/task/ops/probe-state.ts` | Report single-task pre-flight signals (worktree/branch/PR/state + resume detector) for `/sdlc:task-work`; read-only, never self-aborts |
 
 The `create` op is the relocated deterministic core (T-0010); its
 Surface is `runner` because the op module exists and is registered but
@@ -135,11 +135,11 @@ adapter (T-0014) lands. Generic cross-entity ops (`audit`, `validate`,
 
 ## Workflow invariants
 
-- The lease ref is the authoritative claim; `status:` is a cache.
+- The lease ref is the authoritative claim; `state:` is a cache.
   Reconcile flags `in-progress` without a matching lease.
 - `readiness_verified_at` is written only by `/sdlc:task-ensure-ready`
   on pass, cleared on fail and at close-out.
-- Every `closed/*` status carries a `completion_note` (schema-enforced).
+- Every `closed/*` state carries a `completion_note` (schema-enforced).
 - Task-state frontmatter flips commit on main, never on the task's
   worktree branch.
 - A `depends_on` target must be `closed/*` before this task starts.
@@ -156,7 +156,7 @@ front.
 - Atomic unit of executable work — one problem, one implementer,
   typically one PR; a Task with children is an epic-rollup. ^summary
 - Identifier: `T-NNNN[-slug].md`, base-36, immutable.
-- Status: four majors (`planning/*`, `open/*`, `in-progress[/blocked]`,
+- State: four majors (`planning/*`, `open/*`, `in-progress[/blocked]`,
   `closed/*`); lease ref authoritative while claimed.
 - Body: Goal + Acceptance criteria + Out of scope required; the
   implementation-ready contract governs pickup-time completeness.

@@ -21,14 +21,14 @@ Usage:
 
 - `/sdlc:find-verbs --name <verb>` — probe the current project (if `<verb>` is
   `check` or `setup`), present detected candidates, write the user-approved
-  subset to `<project-root>/sdlc.yaml`'s `verbs.<verb>` entry.
+  subset to `<project-root>/sdlc.yaml`'s `workflows.<verb>` entry.
 
 Read `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md` once before running this
-skill — it documents the schema and execution semantics of `verbs:`.
+skill — it documents the schema and execution semantics of `workflows:`.
 
 Edit only `<project-root>/sdlc.yaml`; touch no other file.
 
-## 1. Read the existing `verbs.<name>` list
+## 1. Read the existing `workflows.<name>` list
 
 Read the current list deterministically:
 
@@ -56,7 +56,7 @@ ${CLAUDE_PLUGIN_ROOT}/cli/sdlc quality detect --project-root <project-root>
 Parse the JSON on stdout (the op defaults to `--output json`). Detected tasks are under the `tasks`
 key. The fields that matter here:
 
-- `display` — the shell verb a user would type. **This is what goes into `verbs.check:`.**
+- `display` — the shell verb a user would type. **This is what goes into `workflows.check:`.**
 - `runner` — which tool owns it (`just`, `node-scripts`, `make`, `cargo`, `python`).
 - `source` — the file that declares it, project-relative.
 - `origin` — `declared` when a config file states the task, `synthesized` when it follows from a
@@ -88,8 +88,8 @@ and offer two options via AskUserQuestion:
 
 - "Record 'no verbs needed' explicitly" — run `sdlc config
   set-verbs --name <verb> --verbs '[]' --config <project-root>/sdlc.yaml` to
-  write a starter file with an explicit empty `verbs.<verb>: []` (the op stamps
-  the canonical header on create); then go to Step 5 to report and exit.
+  write a starter file with an explicit empty `workflows.<verb>: []` (the op
+  stamps the canonical header on create); then go to Step 5 to report and exit.
 - "Stop" — do nothing.
 
 ## 3. Present candidates to the user (if probed) or existing list for review
@@ -104,13 +104,13 @@ If not probed (Step 2 skipped for custom verb names), present the existing list
 from Step 1 and ask the user if they want to update it. Phrase as:
 "Edit the verbs for `<verb>`? (current list has N entries)" or similar.
 
-Pre-select any option whose command appears in the existing `verbs.<verb>` list
-from Step 1 — this is what makes the skill idempotent under repeat runs.
+Pre-select any option whose command appears in the existing `workflows.<verb>`
+list from Step 1 — this is what makes the skill idempotent under repeat runs.
 
 For the probed case, phrase the question something like:
 "Which of the detected commands should run as part of the `<verb>` lifecycle
 for this project? (Select all that apply — these will be written to
-`sdlc.yaml`'s `verbs.<verb>:` entry and executed in order.)"
+`sdlc.yaml`'s `workflows.<verb>:` entry and executed in order.)"
 
 Capture the user's selection. Order the resulting list to match the order
 entries appear in the detector's report (the detector already sorts
@@ -127,9 +127,9 @@ ${CLAUDE_PLUGIN_ROOT}/cli/sdlc config set-verbs --name <verb> --verbs '<json-arr
 `<json-array>` is the detector-ordered selection (e.g. `["just ci","bun
 run scripts/lint.ts"]`). The op:
 
-- round-trips sibling `verbs.*` names and comments untouched — it mutates the
-  `verbs.<verb>` key in place rather than re-dumping a plain object;
-- writes an explicit `verbs.<verb>: []` on an empty selection (an explicit
+- round-trips sibling `workflows.*` names and comments untouched — it mutates
+  the `workflows.<verb>` key in place rather than re-dumping a plain object;
+- writes an explicit `workflows.<verb>: []` on an empty selection (an explicit
   opt-out — never a key-delete);
 - stamps the canonical header when creating the file from scratch;
 - is idempotent: a write whose list matches the existing one reports
@@ -161,13 +161,13 @@ any time to update the list.
   `FIND-VERBS-` (per `${CLAUDE_PLUGIN_ROOT}/skills/CLAUDE.md`) so a
   parent reading its output can't mistake them for its own verdict.
 - **Schema + execution semantics.** See
-  `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md` — the `verbs:` section
+  `${CLAUDE_PLUGIN_ROOT}/conventions/sdlc-yaml.md` — the `workflows:` section
   documents the map shape, verb names, executor paths, and cascade semantics.
 - **Related surfaces.** `/sdlc:setup` creates an empty starter `sdlc.yaml` if
   absent and invokes this skill twice as Steps 6 and 7 (for `check` and
   `setup` respectively); `sdlc quality run --name <verb>` executes a
-  configured list, and `resolveVerb` in `lib/config/verbs.ts` is what every
-  consumer resolves a name through.
+  configured list, and `resolveWorkflowCommands` in `lib/config/workflows.ts`
+  is what every consumer resolves a name through.
 - **Idempotent.** Re-running with no detector changes and the same user
   selection is a no-op (the `FIND-VERBS-UNCHANGED` branch above). The
   write op owns byte-for-byte parity; the skill's only ordering obligation is to

@@ -12,7 +12,7 @@
  * Signals reported (the pre-flight blockers + the resume detector):
  *   - worktree_exists  — a directory at `.sdlc/worktrees/<basename>`.
  *   - branch_exists    — a local branch `task/<basename>`.
- *   - task_status      — `status:` frontmatter on the task file (main checkout).
+ *   - task_state       — `state:` frontmatter on the task file (main checkout).
  *   - open_pr_number   — open PR whose head is `task/<basename>`, or null.
  *   - lease_present    — `refs/sdlc/tasks/<basename>` is in the local mirror.
  *   - lease_phase      — that lease's execution phase, or null.
@@ -25,12 +25,12 @@
  *
  * Derived (pure functions of the signals above — the op computes them so every
  * caller reads ONE notion of the gate, not a re-derived prose copy that drifts):
- *   - blocked_preflight — ANY of: status `closed/*` | `in-progress[/blocked]` |
+ *   - blocked_preflight — ANY of: state `closed/*` | `in-progress[/blocked]` |
  *     worktree_exists | branch_exists | open PR. (The skill still owns the
  *     planning/* AskUserQuestion soft-gate; that is judgment, left to prose.)
  *   - resume_candidate  — the execution-plane AND-gate
- *     ([[D-S30G-task-state-plane-split]]): status `open/ready` on main (a task
- *     keeps that status for its whole in-flight life now), worktree exists,
+ *     ([[D-S30G-task-state-plane-split]]): state `open/ready` on main (a task
+ *     keeps that state for its whole in-flight life now), worktree exists,
  *     branch exists, lease phase is `claimed` or `working`, and NO open PR.
  *     Lease phase — not a main-HEAD commit subject — is what says "a run holds
  *     this". Any other combination falls through to the pre-flight blockers
@@ -96,8 +96,8 @@ const output = z.object({
   worktree_exists: z.boolean(),
   /** A local branch `task/<basename>` exists. */
   branch_exists: z.boolean(),
-  /** `status:` frontmatter on the main-checkout task file, or null when absent. */
-  task_status: z.string().nullable(),
+  /** `state:` frontmatter on the main-checkout task file, or null when absent. */
+  task_state: z.string().nullable(),
   /** `readiness_verified_at:` frontmatter on the main-checkout task file. */
   readiness_verified_at: z
     .string()
@@ -162,7 +162,7 @@ function renderProbe(out: Output, io: OpIo): number {
     `basename=${out.basename}`,
     `worktree=${bit(out.worktree_exists)}`,
     `branch=${bit(out.branch_exists)}`,
-    `status=${out.task_status ?? 'none'}`,
+    `state=${out.task_state ?? 'none'}`,
     `pr=${out.open_pr_number ?? 'none'}`,
     `lease=${bit(out.lease_present)}`,
     `lease-phase=${out.lease_phase ?? 'none'}`,
@@ -187,7 +187,10 @@ const input = z.object({
 export default defineOp({
   path: ['task', 'probe-state'],
   summary:
-    'Report single-task pre-flight signals (worktree/branch/PR/status + resume detector) for /sdlc:task-work.',
+    'Report single-task pre-flight signals (worktree/branch/PR/state + resume detector) for /sdlc:task-work.',
+  // Read-only by design (see module docblock): reports signals, never
+  // mutates project state.
+  mutating: false,
   input,
   output,
   cli: {
@@ -205,7 +208,7 @@ export default defineOp({
     const branchPresent = branchExists(basename, projectRoot, ctx)
 
     const fm = readFrontmatter(taskFilePath(projectRoot, basename))
-    const taskStatus = frontmatterString(fm, 'status')
+    const taskState = frontmatterString(fm, 'state')
     const readinessVerifiedAt = frontmatterString(fm, 'readiness_verified_at')
 
     let openPrNumber: number | null = null
@@ -223,20 +226,20 @@ export default defineOp({
 
     // Hard pre-flight blockers (task-work Step 2). The planning/* soft-gate is a
     // skill-owned AskUserQuestion (judgment) and is deliberately NOT folded in.
-    const statusBlocked =
-      taskStatus !== null &&
-      (taskStatus.startsWith('closed/') ||
-        taskStatus === 'in-progress' ||
-        taskStatus === 'in-progress/blocked')
+    const stateBlocked =
+      taskState !== null &&
+      (taskState.startsWith('closed/') ||
+        taskState === 'in-progress' ||
+        taskState === 'in-progress/blocked')
     const blockedPreflight =
-      statusBlocked || worktreeExists || branchPresent || openPrNumber !== null
+      stateBlocked || worktreeExists || branchPresent || openPrNumber !== null
 
     // Resume AND-gate (task-work Step 2 resume detector). A stalled run is a
     // task whose frontmatter still reads `open/ready` — it does for the whole
     // in-flight life now — whose worktree and branch survive, whose lease says
     // a run holds it (`claimed`/`working`), and which has not opened a PR.
     const resumeCandidate =
-      taskStatus === 'open/ready' &&
+      taskState === 'open/ready' &&
       worktreeExists &&
       branchPresent &&
       lease !== null &&
@@ -249,7 +252,7 @@ export default defineOp({
       branch,
       worktree_exists: worktreeExists,
       branch_exists: branchPresent,
-      task_status: taskStatus,
+      task_state: taskState,
       readiness_verified_at: readinessVerifiedAt,
       open_pr_number: openPrNumber,
       lease_present: lease !== null,

@@ -191,6 +191,9 @@ export default defineOp({
   path: ['task', 'resolve'],
   summary:
     'Resolve an arg naming a task (absolute path / filename / slug) to its task file (deterministic, per file-resolution.md).',
+  // Read-only: resolves an arg to a task path via fs reads only; writes
+  // nothing.
+  mutating: false,
   input,
   output,
   cli: {

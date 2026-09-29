@@ -15,7 +15,7 @@ import { CommonFrontmatter, DATE_PATTERN, entityIdPattern } from '../_common.ts'
 import { titleMirrorsH1 } from '../_rules.ts'
 
 /** Mirrors `product/schema.json` `version`. */
-export const SCHEMA_VERSION = '1'
+export const SCHEMA_VERSION = '2'
 
 /**
  * Product `related`: any non-empty, pipe-free wikilink target. Deliberately
@@ -36,7 +36,7 @@ export const ProductSchema = CommonFrontmatter.extend({
         "(Products use incrementing numbering; 'P' is taken by Principle). Never " +
         'renamed once assigned.',
     ),
-  status: z
+  state: z
     .enum(['open/draft', 'open/active', 'closed/sunset'])
     .default('open/draft')
     .describe(

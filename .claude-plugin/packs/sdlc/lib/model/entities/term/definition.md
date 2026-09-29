@@ -43,7 +43,7 @@ A Term is *not*:
 | `id` | required | `TM-NNNN` |  | Immutable; matches filename prefix |
 | `title` | required | string |  | The term itself, canonical capitalization (`Substrate`) |
 | `aliases` | optional | list of strings | `[]` | Alternate names, rendered beside the term in the glossary |
-| `status` | required | enum (see Lifecycle) | `open/active` |  |
+| `state` | required | enum (see Lifecycle) | `open/active` |  |
 | `created` | required | ISO date |  |  |
 | `last_reviewed` | optional | ISO date |  |  |
 | `related` | optional | list of wikilinks | `[]` | The glossary's Source column: where the term is normative |
@@ -66,7 +66,7 @@ A Term is *not*:
 
 ## Lifecycle
 
-| Status | Meaning | Glossary bucket |
+| State | Meaning | Glossary bucket |
 |---|---|---|
 | `open/active` | Adopted vocabulary, in use today. The default — a term is captured because it is in use | Active table |
 | `open/draft` | Proposed vocabulary, not yet settled | Emerging table |
@@ -89,7 +89,7 @@ retired Term is never deleted — inbound links must keep resolving.
 
 | Name | Surface | Signature | Pointer | Description |
 |---|---|---|---|---|
-| create | cli | `sdlc term create [<slug>] --title <term>` | `solutions/ontological/lib/model/entities/term/ops/create.ts` | Author a term with minted `TM-NNNN` identity; status defaults `open/active`; slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
+| create | cli | `sdlc term create [<slug>] --title <term>` | `solutions/ontological/lib/model/entities/term/ops/create.ts` | Author a term with minted `TM-NNNN` identity; state defaults `open/active`; slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
 | preview-id | cli | `sdlc term preview-id <title>` | `solutions/ontological/lib/model/entities/term/ops/preview-id.ts` | Read-only: report the slug + `TM-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
 | validate | cli | `sdlc entities validate <path>` | `solutions/ontological/lib/model/ops/validate.ts` | Frontmatter + body manifest check (generic cross-entity op) |
 | generate | cli | `sdlc docs generate glossary` | `solutions/ontological/lib/services/docs/` | Reassemble the glossary artifact from the instances |
@@ -99,7 +99,7 @@ cover Terms with no per-type wiring.
 
 ## Workflow invariants
 
-- A Term MUST declare `status: open/draft | open/active | closed/retired`.
+- A Term MUST declare `state: open/draft | open/active | closed/retired`.
 - A Term's body MUST contain a Definition section whose defining
   paragraph carries the `^summary` block-id.
 - The glossary artifact is generated, never hand-edited; a vocabulary
@@ -119,7 +119,7 @@ about itself.
   authoritative definition, transcluded into the generated glossary. ^summary
 - Identifier: `TM-NNNN-<slug>.md` filename, `[[TM-NNNN-<slug>]]`
   wikilink, incrementing ids.
-- Status enum: `open/draft | open/active | closed/retired`; default
+- State enum: `open/draft | open/active | closed/retired`; default
   `open/active`.
 - Body convention: Definition (required, carries `^summary`) +
   optional Contrast / Notes / References.

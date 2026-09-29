@@ -1,29 +1,39 @@
 {
-  "state": "OPEN",
-  "mergeable": "MERGEABLE",
-  "mergeStateStatus": "CLEAN",
-  "reviewDecision": "CHANGES_REQUESTED",
-  "headRefName": "task/example-needs-response",
-  "baseRefName": "main",
-  "statusCheckRollup": [
-    {
-      "name": "ci/build",
-      "conclusion": "SUCCESS"
-    }
-  ],
+  "number": 1,
+  "url": "https://github.com/example/example/pull/1",
+  "title": "example",
+  "isDraft": false,
+  "state": "open",
+  "author": null,
+  "baseRef": "main",
+  "headRef": "task/example-needs-response",
+  "headSha": null,
   "mergedAt": null,
-  "comments": [
+  "mergeable": "mergeable",
+  "checks": { "rollup": "success", "failing": [], "failingUrls": [] },
+  "reviewDecision": "changes_requested",
+  "activity": [
     {
-      "author": { "login": "reviewer-one" },
-      "createdAt": "2026-05-21T10:00:00Z",
-      "body": "Please address the concerns in the review."
+      "id": "c1",
+      "kind": "comment",
+      "author": { "login": "reviewer-one", "isBot": false },
+      "at": "2026-05-21T10:00:00Z",
+      "editedAt": null,
+      "body": "Please address the concerns in the review.",
+      "reviewState": null,
+      "location": null
+    },
+    {
+      "id": "r1",
+      "kind": "review",
+      "author": { "login": "reviewer-one", "isBot": false },
+      "at": "2026-05-21T10:00:00Z",
+      "editedAt": null,
+      "body": "",
+      "reviewState": "CHANGES_REQUESTED",
+      "location": null
     }
   ],
-  "reviews": [
-    {
-      "author": { "login": "reviewer-one" },
-      "submittedAt": "2026-05-21T10:00:00Z",
-      "state": "CHANGES_REQUESTED"
-    }
-  ]
+  "behind": null,
+  "ahead": null
 }

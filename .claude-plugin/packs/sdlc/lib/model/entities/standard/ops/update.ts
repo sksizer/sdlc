@@ -4,7 +4,7 @@
  * anything is written.
  *
  * The deterministic surface for /sdlc:standard-new and peers instead of
- * hand-edited frontmatter: status flips `open/proposed → open/active`,
+ * hand-edited frontmatter: state flips `open/proposed → open/active`,
  * `last_reviewed` bumps, `deprecation_note` set. One shared `defineUpdateOp`
  * factory (`_update.ts`), registered per mutable entity — only the noun and
  * schema differ ([[D-0007-deterministic-op-substrate]] §2a, Cluster 6).

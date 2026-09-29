@@ -385,7 +385,7 @@ The command runs the ADR's cutover procedure verbatim (see
    on stderr and exits non-zero. Running migrate a second time is a
    bug, not a feature — the ADR is explicit on this. Idempotent-by-
    construction.
-2. Scans `docs/planning/tasks/*.md` for files at `status: in-progress`.
+2. Scans `docs/planning/tasks/*.md` for files at `state: in-progress`.
 3. For each, derives the initial lease phase from observable state:
    open PR exists → `awaiting-review`; work branch only → `working`;
    neither → `stale-requires-review` (logged + skipped, run continues).

@@ -18,8 +18,9 @@
  *
  *   - Tier 1 (HARD gaps, exit 1). Deterministic, project-grounded
  *     resolution: `resolveProjectManagers` inspects the repo root's
- *     lockfiles / ecosystem markers and the verbs `resolveVerb` resolves
- *     for `check` and `setup` ([[D-V2XJ-verb-cascade-and-repo-trust]]), and
+ *     lockfiles / ecosystem markers and the verbs `resolveWorkflowCommands`
+ *     resolves for `check` and `setup`
+ *     ([[D-LSLH-collapse-verbs-workflows-chain-hooks]]), and
  *     returns the FULL SET of package managers in play (a polyglot
  *     bun+cargo repo resolves BOTH). For each resolved manager whose
  *     `Bash(<pm>:*)` permission is not granted, a hard
@@ -74,7 +75,7 @@ import { dirname, join } from 'node:path'
 import { z } from 'zod'
 
 import { defineCli, EXIT, type CliContext, type CliIo } from '@sksizer/cli-tool'
-import { resolveVerb } from '@lib/config/verbs'
+import { resolveWorkflowCommands } from '@lib/config/workflows'
 import { resolveProjectManagers } from '@sksizer/detect-runners'
 import { checkoutRoot } from '@sksizer/easy-git'
 import { claudeUserSettingsPath } from '@lib/util/claude-home'
@@ -563,10 +564,10 @@ export async function main(argv: readonly string[], ctx: CliContext): Promise<nu
     resolvedManagers = new Set<string>()
   } else {
     const [check, setup] = await Promise.all([
-      resolveVerb('check', repoRoot),
-      resolveVerb('setup', repoRoot),
+      resolveWorkflowCommands('check', repoRoot),
+      resolveWorkflowCommands('setup', repoRoot),
     ])
-    const verbs = [...check.verbs, ...setup.verbs]
+    const verbs = [...check.commands, ...setup.commands]
     // The existence check is injected so the resolver stays pure and
     // testable without a filesystem.
     resolvedManagers = resolveProjectManagers(repoRoot, verbs, isFile)
@@ -653,8 +654,8 @@ export function worktreeDirForTaskFile(taskPath: string): string | null {
 // surface (flags, error text, exit codes) is `main`, above, unchanged from the
 // retired standalone script. No `needs` are declared: the retired script
 // never went through the op dispatcher's `preflight()` check either, and
-// `resolveVerb`'s own validation (SCHEMA_ERROR on a broken sdlc.yaml) is the
-// only check this op ever ran.
+// `resolveWorkflowCommands`'s own validation (SCHEMA_ERROR on a broken
+// sdlc.yaml) is the only check this op ever ran.
 // ---------------------------------------------------------------------------
 
 const input = z.object({ argv: z.array(z.string()) })

@@ -3,7 +3,7 @@ name: capability-review
 description: |
   Review existing Capability entities for accuracy against the code they
   anchor: do the `locations` still realize the Statement, do `kind`,
-  `audience` and `status` match the shared rubric, do `parent_key` and
+  `audience` and `state` match the shared rubric, do `parent_key` and
   `related` still resolve, does the body describe what the code does. Runs
   `sdlc capability coverage` and `sdlc capability graph` read-only,
   dispatches one read-only sub-agent per capability, and prints a report.
@@ -26,7 +26,7 @@ Usage:
 - `/sdlc:capability-review <dir>` — review every capability whose `locations` touch a directory.
 - `/sdlc:capability-review C-NNNN` — review one capability and its subtree.
 - `/sdlc:capability-review all` — review the whole corpus.
-- `--fix` — write frontmatter corrections (`kind`, `audience`, `status`, `parent_key`,
+- `--fix` — write frontmatter corrections (`kind`, `audience`, `state`, `parent_key`,
   `locations`, `related`, `need_human_review`) and stamp `last_reviewed` on every reviewed
   capability, on a branch with a PR.
 - `--rewrite` — `--fix` plus a rewrite of every body section the review found drifted.
@@ -131,7 +131,7 @@ Each sub-agent, for each capability in its group, in order:
    in that file. Read enough of each location (README, manifest, entry points) to judge
    whether it delivers the Statement.
 2. Judge each check against the rubric: `locations` (resolve and realize the Statement),
-   `kind`, `audience`, `status`, `parent_key`, `related`, and, when the prompt asked for body
+   `kind`, `audience`, `state`, `parent_key`, `related`, and, when the prompt asked for body
    checks, each body section (`Summary`, `Statement`, `What it provides`,
    `Underlying implementation`).
 3. Decide the verdict:
@@ -150,7 +150,7 @@ Each sub-agent, for each capability in its group, in order:
     "locations": { "ok": true, "found": "<what the code shows>", "proposed": ["<location>"] },
     "kind": { "ok": false, "found": "module", "proposed": "component" },
     "audience": { "ok": true },
-    "status": { "ok": false, "found": "open/planned", "proposed": "open/verified" },
+    "state": { "ok": false, "found": "open/planned", "proposed": "open/verified" },
     "parent_key": { "ok": true },
     "related": { "ok": true, "proposed": ["[[C-NNNN]]"] },
     "body": {
@@ -184,7 +184,7 @@ Apply these checks to the merged list before rendering the report:
   stored grain and gains `need_human_review: true`.
 - **Audience.** A proposed `audience` follows the rubric's surface test; a proposal without a
   named surface is dropped.
-- **Status.** A proposed status follows the rubric's table. `closed/retired` is never proposed
+- **State.** A proposed state follows the rubric's table. `closed/retired` is never proposed
   or written.
 - **Tree.** A proposed `parent_key` or `related` target must be an existing id, else the
   proposal is dropped and noted.
@@ -204,7 +204,7 @@ Render one markdown report:
 
 | Capability | Verdict | Failing checks | Proposed |
 |---|---|---|---|
-| C-NNNN <title> | drift | kind, status | kind module→component; status planned→verified |
+| C-NNNN <title> | drift | kind, state | kind module→component; state planned→verified |
 | C-NNNN <title> | drift | body: Statement | <one line> |
 | C-NNNN <title> | stale | locations | package removed in <commit> |
 
@@ -244,7 +244,7 @@ For every reviewed capability, `accurate` rows included:
 ```text
 scripts/sdlc capability update <C-NNNN-slug> \
   --project-root <worktree-absolute-path> \
-  --set '{"last_reviewed": "<today>", "kind": "<grain>", "status": "<status>", "locations": [...], "related": [...], "need_human_review": true}'
+  --set '{"last_reviewed": "<today>", "kind": "<grain>", "state": "<state>", "locations": [...], "related": [...], "need_human_review": true}'
 ```
 
 The positional is the file basename without `.md`. `--set` carries `last_reviewed` for every

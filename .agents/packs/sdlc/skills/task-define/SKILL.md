@@ -156,7 +156,7 @@ For each gap, ask the user via AskUserQuestion. Be specific:
 
 - Quote the section header and current content (or "<empty>").
 - Propose 2-3 plausible options where the gap admits them
-  (e.g. status downshift options, impact tier).
+  (e.g. state downshift options, impact tier).
 - For free-form content gaps (Goal, Approach, ACs), use AskUserQuestion
   to confirm the user wants to draft now ("Draft now" / "Skip for now"
   / "Stop"), then if drafting, ask in plain text for the content.
@@ -167,7 +167,7 @@ Apply each answer immediately:
   only from `main` (or from a `docs/<basename>` spec-only branch).
   Per
   T-SIHV-task-state-frontmatter-commits-on-main-not-worktree-branch,
-  task-state frontmatter (`status:`, `readiness_verified_at:`,
+  task-state frontmatter (`state:`, `readiness_verified_at:`,
   `last_reviewed:`, `definition_gap:`, `completion_note:`, `prs:`)
   belongs on `main`; body content belongs on whatever branch the
   user is on. This skill edits both kinds in the same commit, so

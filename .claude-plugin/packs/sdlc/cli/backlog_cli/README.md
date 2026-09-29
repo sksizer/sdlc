@@ -1,7 +1,7 @@
 # `backlog` noun — `sdlc backlog …`
 
 The user-facing **backlog-capture** noun of the unified `sdlc` CLI. Turns a headline (plus optional
-body/tags/status) into a schema-valid `docs/planning/backlog/B-XXXX-<slug>.md` (id minted via the
+body/tags/state) into a schema-valid `docs/planning/backlog/B-XXXX-<slug>.md` (id minted via the
 identifier registry) and lands it on a rolling capture PR.
 
 Full design: [`docs/planning/decisions/sdlc-cli/`](../../../docs/planning/decisions/sdlc-cli/). The
@@ -29,7 +29,7 @@ solutions/ontological/cli/backlog_cli/
 
 ```text
 sdlc backlog create --headline "<text>" [--slug <kebab>] [--tag <t>]...
-                    [--body "<text>"] [--status <backlog-status>]
+                    [--body "<text>"] [--state <backlog-state>]
                     [--project-root <path>] [--dry-run]
 ```
 
@@ -43,7 +43,7 @@ On success it:
 2. Mints a `B-NNNN` id (collision-checked; an existing file with the same slug reuses its id) and
    writes `docs/planning/backlog/B-NNNN-<slug>.md` with minimal valid frontmatter (`type: backlog`,
    `schema_version` = the backlog schema's current top-level `version`, `id` = the minted `B-NNNN`,
-   optional `status`/`tags`, `last_reviewed` = today) plus the freeform body, and validates it with
+   optional `state`/`tags`, `last_reviewed` = today) plus the freeform body, and validates it with
    `sdlc entities validate` (routing through the backlog `contract(...)`).
 3. Manages the rolling `backlog-capture` branch (see below).
 4. Commits (`docs(backlog): capture <slug>`), pushes, creates-or-updates the
@@ -147,7 +147,7 @@ Explicit flags always win over model-derived values; the model only fills gaps:
 | headline | `--headline` if given, else the model's |
 | body | `--body` if given (even `""`), else the model's |
 | tags | the explicit `--tag` set if any were passed (replaces inferred tags wholesale), else the model's inferred tags |
-| status / slug | passed straight through to `create` |
+| state / slug | passed straight through to `create` |
 
 ### Failure modes
 

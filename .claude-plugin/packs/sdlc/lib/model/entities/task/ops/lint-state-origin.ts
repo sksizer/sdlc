@@ -7,7 +7,7 @@
  *
  * Per
  * [[2026-05-28-task-state-frontmatter-commits-on-main-not-worktree-branch]],
- * changes to a task file's task-state frontmatter fields (`status:`,
+ * changes to a task file's task-state frontmatter fields (`state:`,
  * `readiness_verified_at:`, `last_reviewed:`, `definition_gap:`,
  * `completion_note:`, `prs:`) must commit on `main` — never on a
  * `task/<basename>` branch.
@@ -89,6 +89,9 @@ export default defineOp({
   path: ['task', 'lint-state-origin'],
   summary: 'Enforce task-state frontmatter commits only on main, not task branches.',
   hidden: true,
+  // Read-only: runs `git log`/`git diff` through ctx.git and reports
+  // violations; never commits or writes.
+  mutating: false,
   input,
   output,
   cli: {

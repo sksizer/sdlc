@@ -27,7 +27,7 @@ Project context (don't re-derive every run):
 
 - Task documents live in `docs/planning/tasks/`. Active tasks use `YYYY-MM-DD-<slug>.md`; closed
   tasks may still use the older `NNNN-<slug>.md`. Both shapes are valid.
-- Full status/frontmatter schema in `docs/planning/tasks/README.md`. Statuses considered
+- Full state/frontmatter schema in `docs/planning/tasks/README.md`. States considered
   "unfinished": anything that does NOT start with `closed/`.
 - Frontmatter is validated by the sdlc plugin's schema. Before the synthesis step (and any time
   you've just updated a batch of frontmatter), run the validator over the corpus:
@@ -37,7 +37,7 @@ Project context (don't re-derive every run):
   ```
 
   Validator failures are signal — usually a `closed`-shape task missing
-  `resolution_date`/`resolution_commit`, or a status that's drifted from the canonical enum. Surface
+  `resolution_date`/`resolution_commit`, or a state that's drifted from the canonical enum. Surface
   these in the synthesized report under "Schema violations" alongside the other gaps, and have the
   per-task sub-agent fix them as part of its frontmatter update. Schema lives at
   `${CLAUDE_PLUGIN_ROOT}/lib/model/entities/task/schema.ts`.
@@ -55,7 +55,7 @@ Project context (don't re-derive every run):
 2. Build the unfinished list. Apply `--since` and `--tag` filters if provided.
 3. If zero unfinished tasks, print `NO UNFINISHED TASKS — backlog is clean.` and exit.
 
-Print a one-line preview: `Found <N> unfinished tasks across <statuses…>. Triaging in parallel.`
+Print a one-line preview: `Found <N> unfinished tasks across <states…>. Triaging in parallel.`
 
 ## 2. Dispatch one sub-agent per task (parallel)
 
@@ -101,7 +101,7 @@ Each sub-agent prompt must include:
 
   4. **Read referenced related tasks.** If the task's frontmatter `related:` or body contains
      `[[other-task]]` wikilinks or `0NNN-foo.md` references, briefly check those target files'
-     current status — they may have moved the ground under this task.
+     current state — they may have moved the ground under this task.
 
   5. **Evaluate spec completeness against the implementation-ready contract.** Apply the contract
      from `${CLAUDE_PLUGIN_ROOT}/lib/model/entities/task/implementation-ready.md`. Read required
@@ -142,17 +142,17 @@ Each sub-agent prompt must include:
 
   6. **Decide one of** (the 5-way):
      - **Already shipped** — described "Today" state is gone and proposed code is in place. Set
-       `status: closed/done`. Add `completion_note:` citing real evidence — commit hash, PR number,
+       `state: closed/done`. Add `completion_note:` citing real evidence — commit hash, PR number,
        or specific file change. **Do not auto-close on inference**: if the evidence isn't
        unambiguous, surface to the orchestrator for confirmation rather than closing.
      - **Obsoleted** — the file/feature no longer exists or the surrounding architecture was
-       rewritten such that the task can never apply. Set `status: closed/obsoleted` with
+       rewritten such that the task can never apply. Set `state: closed/obsoleted` with
        `completion_note:` explaining what changed and where the equivalent concern lives now (if
        anywhere).
      - **Still relevant, accurate** — task spec matches current code. Refresh `relevance_note:` only
        if anything material shifted; otherwise leave it alone.
      - **Still relevant, but spec drifted** — paths/line numbers/symbol names moved, scope shrunk or
-       grew, dependencies changed status, etc. Update `relevance_note:` with a precise diff of what
+       grew, dependencies changed state, etc. Update `relevance_note:` with a precise diff of what
        shifted. Do NOT rewrite the body.
      - **Spec incomplete** — one or more of the completeness items is missing or thin. Add
        `definition_gap:` listing what's missing (e.g.
@@ -181,7 +181,7 @@ Each sub-agent prompt must include:
 
   ```text
   Task: <filename>
-  Status: <new status if changed, else unchanged>
+  State: <new state if changed, else unchanged>
   Impact: <high|medium|low>
   Complexity: <small|medium|large>
   Decision: <shipped|obsoleted|relevant-accurate|relevant-drifted|incomplete>
@@ -221,7 +221,7 @@ concrete action for each.
 
 ### Newly closed during this run
 
-List every task whose status was changed to `closed/done` or `closed/obsoleted` by sub-agents, with
+List every task whose state was changed to `closed/done` or `closed/obsoleted` by sub-agents, with
 the one-line `completion_note:`.
 
 ### Definition gaps

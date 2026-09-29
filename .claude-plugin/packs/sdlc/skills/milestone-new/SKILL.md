@@ -1,7 +1,7 @@
 ---
 name: milestone-new
 description: |
-  Interactively define a new milestone. Walk the user through title, status, version,
+  Interactively define a new milestone. Walk the user through title, state, version,
   target date, and known member tasks; create the file via `sdlc milestone create`
   (which auto-assigns an immutable id); validate the frontmatter; report the path.
   Optionally also capture prose for Goal / Success criteria / Out of scope and Edit
@@ -79,7 +79,7 @@ Run:
 ```text
 ${CLAUDE_PLUGIN_ROOT}/cli/sdlc milestone create \
   --title "<title>" \
-  --status <status> \
+  --state <state> \
   [--version <semver>] \
   [--target-date YYYY-MM-DD] \
   [--tasks <basename>]... \
@@ -115,7 +115,7 @@ If validation fails, report the error verbatim and walk the user through fixing 
 Tell the user:
 
 - The absolute path of the new file (the assigned id is in the filename).
-- One line: `<id> · <status> · <version-or-no-version> — <title>`.
+- One line: `<id> · <state> · <version-or-no-version> — <title>`.
 - Next-step pointer:
   - If `tasks:` is non-empty, suggest one of the member tasks via `/sdlc:task-work <task-basename>`.
   - Otherwise, suggest creating tasks via `/sdlc:task-new` and adding them to this milestone (add to

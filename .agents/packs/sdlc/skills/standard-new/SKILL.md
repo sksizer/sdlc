@@ -3,7 +3,7 @@ name: standard-new
 description: |
   Interactively define a new standard — a prescriptive statement about the
   codebase (architectural rule, design convention, style requirement, or
-  workflow expectation). Walk the user through slug, title, status,
+  workflow expectation). Walk the user through slug, title, state,
   applies_to.paths scope, and optional supersession links; create the file
   via `sdlc standard create` (which auto-assigns an immutable S<NNNN> id);
   validate the frontmatter; report the path. Optionally also capture prose
@@ -98,7 +98,7 @@ step 5 succeeds, mark the predecessor superseded in one call:
 scripts/sdlc standard supersede <predecessor-id> --by <new-id>
 ```
 
-This sets `status: closed/superseded` and `superseded_by: [[<new-id>]]` on the predecessor,
+This sets `state: closed/superseded` and `superseded_by: [[<new-id>]]` on the predecessor,
 schema-validated before the write. It no-ops gracefully (exit 0, `superseded:false`) when the
 predecessor file does not resolve — so a never-created predecessor is harmless — and is idempotent
 when the predecessor is already superseded by the same successor.
@@ -112,7 +112,7 @@ pass it only when the user named the standard deliberately in step 1):
 scripts/sdlc standard create [<slug>] \
   --title "<title>" \
   --created "$(date -u +%Y-%m-%d)" \
-  --status <status> \
+  --state <state> \
   [--paths <glob>]... \
   [--superseded-by '[[S-NNNN-slug]]'] \
   [--supersedes '[[S-NNNN-slug]]'] \
@@ -149,7 +149,7 @@ If validation fails, report the error verbatim and walk the user through fixing 
 Tell the user:
 
 - The absolute path of the new file (the assigned id is in the filename).
-- One line: `<id> · <status> · <scope-summary> — <title>`, where scope-summary is either
+- One line: `<id> · <state> · <scope-summary> — <title>`, where scope-summary is either
   `broadly applicable` or the list of glob patterns.
 - Next-step pointer:
   - If the standard is path-scoped, suggest verifying the globs match the intended files (e.g.
@@ -165,7 +165,7 @@ Tell the user:
 - Frontmatter passes `sdlc entities validate` with zero errors.
 - The title is set both in frontmatter `title:` and in the body `# ...` line (no `<Title>`
   placeholder remains).
-- If the standard was created with `--status closed/superseded`, `superseded_by` is set.
+- If the standard was created with `--state closed/superseded`, `superseded_by` is set.
 - The path was reported back to the user.
 
 ## Notes
@@ -176,5 +176,5 @@ Tell the user:
   `${CLAUDE_PLUGIN_ROOT}/lib/model/entities/standard/definition.md` for the
   supersession-over-rewriting rule.
 - Keep the conversation short. If the user packed everything into the first invocation message ("new
-  standard: co-locate-first, status open/active, applies to plugin/skills/**"), skip the
+  standard: co-locate-first, state open/active, applies to plugin/skills/**"), skip the
   AskUserQuestion calls and go straight to step 5.

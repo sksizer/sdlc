@@ -39,14 +39,14 @@ A Decision is *not*:
 | `schema_version` | optional | numeric string | `"1"` |  |
 | `id` | required | `D<NNNN>` |  | Immutable; matches filename prefix |
 | `title` | required | string |  | Human-readable headline |
-| `status` | required | enum (see Lifecycle) | `open/proposed` |  |
+| `state` | required | enum (see Lifecycle) | `open/proposed` |  |
 | `created` | required | ISO date |  |  |
 | `last_reviewed` | optional | ISO date |  | When the decision was last sanity-checked |
 | `supersedes` | optional | wikilink to a Decision |  | Legacy — no longer written; supersession deletes the predecessor and the deletion commit records the succession |
-| `superseded_by` | conditional | wikilink to a Decision |  | Required when `status: closed/superseded` (legacy tombstones only — new supersessions delete the predecessor) |
+| `superseded_by` | conditional | wikilink to a Decision |  | Required when `state: closed/superseded` (legacy tombstones only — new supersessions delete the predecessor) |
 | `related` | optional | list of wikilinks | `[]` | Other decisions, principles, standards, or milestones |
 | `tags` | optional | list of strings | `[]` | Free-form labels |
-| `deprecation_note` | conditional | string |  | Required when `status: closed/deprecated` |
+| `deprecation_note` | conditional | string |  | Required when `state: closed/deprecated` |
 | `need_human_review` | optional | bool | `false` |  |
 | `created_at` | optional | ISO 8601 datetime |  | When the entity was authored, finer than `created` |
 | `provenance` | optional | string |  | What authored it when not by hand: a skill, tool, or import source |
@@ -55,9 +55,9 @@ A Decision is *not*:
 
 | Section | Required? | Aliases | Notes |
 |---|---|---|---|
-| Summary | required | | Bulleted outcomes at the **top** of the doc, each linking down to the section that elaborates it. Carries `^summary` block-id for transclusion. Placeholder allowed until `status: open/accepted` |
+| Summary | required | | Bulleted outcomes at the **top** of the doc, each linking down to the section that elaborates it. Carries `^summary` block-id for transclusion. Placeholder allowed until `state: open/accepted` |
 | Decision | required | Recommendation, Conclusion, Resolution | What was decided. Exactly one form must appear |
-| Status | optional | | Narrative status; authoritative status is the frontmatter `status:` field |
+| Status | optional | | Narrative status; authoritative state is the frontmatter `state:` field |
 | Context | optional | What this is, Background | Situation that prompted the decision |
 | Why | optional | Rationale | Why this and not a plausible alternative |
 | Options considered | optional | | Alternatives weighed before landing on the decision |
@@ -75,7 +75,7 @@ when the standard set doesn't cover). Authoritative spec is the
 
 ## Lifecycle
 
-| Status | Meaning | Required fields |
+| State | Meaning | Required fields |
 |---|---|---|
 | `open/proposed` | Authored; under review. Not yet binding. Summary section may carry the "*Pending — outcomes to be populated when this decision is accepted.*" placeholder |  |
 | `open/accepted` | Reviewed and adopted. Downstream work conforms. Summary section MUST be populated with bulleted outcomes, each linking down to the section it elaborates | populated `Summary` |
@@ -114,12 +114,12 @@ Transitions:
 
 | Operation | CLI | What it does |
 |---|---|---|
-| Create | `sdlc decision new` | Scaffold a new instance; status starts `open/proposed` |
+| Create | `sdlc decision new` | Scaffold a new instance; state starts `open/proposed` |
 | Accept | `sdlc decision accept <id>` | Transition `open/proposed → open/accepted` |
 | Supersede | `sdlc decision supersede <old-id> --by <new-id>` | Delete the predecessor; the deletion commit names the successor. (Implementation still tombstones; slated to match this contract) |
 | Deprecate | `sdlc decision deprecate <id> --reason <note>` | Set to `closed/deprecated` with `deprecation_note:` |
 | Validate | `sdlc decision validate <path>` | Frontmatter + body manifest check |
-| List | `sdlc decision list [--status <status>]` | Roster |
+| List | `sdlc decision list [--state <state>]` | Roster |
 
 `Validate` is the generic `entities validate` op
 (`solutions/ontological/lib/model/ops/`, Surface `runner` — registered, not yet a CLI
@@ -130,13 +130,13 @@ live under `solutions/ontological/lib/model/ops/`.
 ## Workflow invariants
 
 - A Decision MUST declare
-  `status: open/proposed | open/accepted | closed/superseded | closed/deprecated`.
+  `state: open/proposed | open/accepted | closed/superseded | closed/deprecated`.
 - A `closed/superseded` Decision MUST carry `superseded_by:` pointing at a
   Decision.
 - A `closed/deprecated` Decision MUST carry `deprecation_note:`.
 - A Decision's body MUST contain a Summary-section at the top and
   a Decision-section (under that name or one of its aliases).
-- A Decision with `status: open/accepted` MUST carry a populated Summary
+- A Decision with `state: open/accepted` MUST carry a populated Summary
   (not the placeholder).
 - `superseded_by:` MUST point at a Decision that exists. `supersedes:` is
   legacy — new supersessions write no pointer; the deletion commit records
@@ -155,7 +155,7 @@ how the project reasons about itself.
 - Identifier: `D<NNNN>-<slug>.md` filename (or folder for complex
   decisions), `[[D<NNNN>-<slug>]]` wikilink, sequential zero-padded
   ids.
-- Status enum: `open/proposed | open/accepted | closed/superseded | closed/deprecated`.
+- State enum: `open/proposed | open/accepted | closed/superseded | closed/deprecated`.
   `closed/superseded` requires `superseded_by:` and is legacy — a fully
   superseded Decision is deleted, git history is the archive;
   `closed/deprecated` requires `deprecation_note:`.

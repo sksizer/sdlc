@@ -2,7 +2,7 @@
 name: task-close-out
 description: |
   Close the loop on a task whose PR has merged: flip the task file to
-  status: closed/done on main with a completion_note citing the merged
+  state: closed/done on main with a completion_note citing the merged
   PR, tear down the worktree at .sdlc/worktrees/<basename>, and
   delete the task/<basename> branch locally and on origin. Detects
   the merged PR automatically from the branch name (override with
@@ -29,7 +29,7 @@ Usage:
   `${CLAUDE_PLUGIN_ROOT}/conventions/branch-naming.md`).
 - Append `--dry-run` to rehearse the close-out without executing any
   side effects. Steps 1–3 run unchanged (resolve the task, gate on
-  status, detect the merged PR); Steps 4–6 print every side effect
+  state, detect the merged PR); Steps 4–6 print every side effect
   they *would* perform — the unified diff for the frontmatter edit,
   the exact `git commit` / `git push` / `git worktree remove` /
   `git branch -d` / `git push origin --delete` commands — and the
@@ -56,7 +56,7 @@ Where `MARKER` is one of:
 - `DRY-RUN ok pr=#<N>` — `--dry-run` was supplied; Steps 1–3 ran
   unchanged, Steps 4–6 printed each side effect without executing
   them, and no state was mutated.
-- `ALREADY-CLOSED reason="status is <current>"` — the task is already
+- `ALREADY-CLOSED reason="state is <current>"` — the task is already
   in a `closed/*` state. No file edits, no commits, no teardown. If the
   task's worktree or feat branch was never torn down (an orphan from a
   close-out that ran before the worktree was created, or a manual
@@ -64,8 +64,8 @@ Where `MARKER` is one of:
   `/sdlc:project-cleanup` (e.g. `/sdlc:project-cleanup --scope
   worktrees`), which scans for the leftover worktree/branch and
   proposes the teardown for approval.
-- `NOT-IN-PROGRESS reason="status is <current>; task hasn't started"`
-  — status is in the `planning/*` or `open/*` family. Close-out is
+- `NOT-IN-PROGRESS reason="state is <current>; task hasn't started"`
+  — state is in the `planning/*` or `open/*` family. Close-out is
   not applicable.
 - `NO-MERGED-PR reason="no merged PR found for head task/<basename>"`
   — could not auto-detect a merged PR and `--pr` was not provided.
@@ -125,8 +125,8 @@ prompts. Map each failure to this skill's markers:
 
 Read the resolved file's frontmatter. Apply these checks in order:
 
-1. `status` starts with `closed/` → emit
-   `ALREADY-CLOSED reason="status is <current>"` and exit. No file
+1. `state` starts with `closed/` → emit
+   `ALREADY-CLOSED reason="state is <current>"` and exit. No file
    edits, no commits, no teardown. If a human hit this because a
    closed task's worktree or feat branch was never cleaned up, the
    recovery path is `/sdlc:project-cleanup`
@@ -135,9 +135,9 @@ Read the resolved file's frontmatter. Apply these checks in order:
    Reclaiming orphans is deliberately NOT this skill's job: close-out
    only tears down the scaffolding it created on a live in-progress
    task, so an already-closed task is a no-op here by design.
-2. `status` is `in-progress` or `in-progress/blocked` → continue.
+2. `state` is `in-progress` or `in-progress/blocked` → continue.
 3. Otherwise (any `planning/*` or `open/*` value) → emit
-   `NOT-IN-PROGRESS reason="status is <current>; task hasn't started"`
+   `NOT-IN-PROGRESS reason="state is <current>; task hasn't started"`
    and exit. Close-out is not applicable.
 
 ## 3. Detect the merged PR
@@ -307,7 +307,7 @@ Inside the ephemeral worktree off `origin/main`, the op:
   body automatically;
 - plants the `## Post-mortem` stub when the body carries none, so the
   section the post-mortem flow fills always exists (T-5LP4);
-- flips `status` → `closed/done`, sets `completion_note` +
+- flips `state` → `closed/done`, sets `completion_note` +
   `last_reviewed` (UTC), and clears `relevance_note` /
   `readiness_verified_at`;
 - regenerates the derived generated-docs FROM THE CLEAN TREE (so the

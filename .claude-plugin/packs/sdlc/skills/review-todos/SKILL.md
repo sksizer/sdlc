@@ -121,7 +121,7 @@ the next run.
    `<derived from TODO>`)". The default is the hit's `stripped` content, capitalized. Accept the
    default if the user replies empty / "y" / "ok".
 
-3. Single AskUserQuestion for triage (3 questions): **Status** (planning/draft / planning/proposed /
+3. Single AskUserQuestion for triage (3 questions): **State** (planning/draft / planning/proposed /
    open/ready), **Impact** (high / medium / low), **Complexity** (small / medium / large). Recommend
    `planning/draft` for first capture unless you specifically judged the TODO as ready-to-pick-up.
 
@@ -131,7 +131,7 @@ the next run.
    ```text
    ${CLAUDE_PLUGIN_ROOT}/cli/sdlc task create \
      --headline "<headline>" \
-     --status <status> \
+     --state <state> \
      --impact <impact> \
      --complexity <complexity>
    ```
@@ -206,7 +206,7 @@ captured items is the separate `/sdlc:backlog-triage` flow.
      --body "<body seed from step 2>"
    ```
 
-   Omit `--status` — backlog items born from this skill are untriaged on purpose, so
+   Omit `--state` — backlog items born from this skill are untriaged on purpose, so
    `/sdlc:backlog-triage` picks them up later. The tail prints one `PR: <url>` line; capture it. If
    the tail exits non-zero, surface its stderr verbatim (bad slug, schema-validation, or `gh`/`git`
    error).
@@ -270,7 +270,7 @@ After the loop finishes (or the user stops it), print:
   `path:line`.
 - Every "Create backlog item" action landed exactly one new backlog file at
   `docs/planning/backlog/B-NNNN-<slug>.md` (id minted by the tail) on the rolling `backlog-capture`
-  PR, with no `status:` field set (so it's picked up by `/sdlc:backlog-triage`) and its body
+  PR, with no `state:` field set (so it's picked up by `/sdlc:backlog-triage`) and its body
   referencing the source `path:line`. The tail's `PR: <url>` marker was reported back to the user.
 - Each created artifact landed in its own commit. If the user opted into source annotation, that
   commit also includes the single source-file edit.

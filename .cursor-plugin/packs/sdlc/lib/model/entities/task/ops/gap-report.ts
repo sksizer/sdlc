@@ -159,7 +159,7 @@ interface Parenthood {
  *
  * Deliberately the SAME two primitives (`unwrapWikilink` + `resolveTarget`)
  * `task next`'s leaf predicate uses, so the gate's notion of "parent" cannot
- * drift from the orchestrator's. Parenthood is STRUCTURAL, not status-dependent:
+ * drift from the orchestrator's. Parenthood is STRUCTURAL, not state-dependent:
  * a parent whose only child is `closed/done` is still a parent.
  */
 function taskChildren(projectRoot: string, selfBasename: string): string[] {
@@ -379,6 +379,9 @@ export default defineOp({
   // Hidden plumbing ([[D-H7FS-op-substrate-surface]] §2): a gate/agent-reached
   // composite no human types, sibling to parse-/scan-/check- ops.
   hidden: true,
+  // Read-only: this op is explicitly documented as never mutating project
+  // state (see module docblock's "facts, not judgment" section).
+  mutating: false,
   input,
   output,
   cli: {

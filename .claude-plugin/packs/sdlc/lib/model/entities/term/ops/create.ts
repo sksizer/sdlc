@@ -20,7 +20,7 @@ export default defineCreateOp({
   fields: {
     title: { cli: { short: 't' } },
     created: { birthDefault: () => todayUtc() },
-    status: {},
+    state: {},
     aliases: {},
     related: {},
   },

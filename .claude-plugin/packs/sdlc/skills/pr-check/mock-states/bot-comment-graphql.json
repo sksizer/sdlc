@@ -1,29 +1,39 @@
 {
-  "state": "OPEN",
-  "mergeable": "MERGEABLE",
-  "mergeStateStatus": "CLEAN",
-  "reviewDecision": "",
-  "headRefName": "task/example-bot",
-  "baseRefName": "main",
-  "statusCheckRollup": [
-    {
-      "name": "ci/build",
-      "conclusion": "SUCCESS"
-    }
-  ],
+  "number": 1,
+  "url": "https://github.com/example/example/pull/1",
+  "title": "example",
+  "isDraft": false,
+  "state": "open",
+  "author": null,
+  "baseRef": "main",
+  "headRef": "task/example-bot",
+  "headSha": null,
   "mergedAt": null,
-  "comments": [
+  "mergeable": "mergeable",
+  "checks": { "rollup": "success", "failing": [], "failingUrls": [] },
+  "reviewDecision": null,
+  "activity": [
     {
-      "author": { "login": "github-actions" },
-      "createdAt": "2026-05-21T11:00:00Z",
-      "body": "Deploy preview ready! https://example-preview.pages.dev"
+      "id": "c1",
+      "kind": "comment",
+      "author": { "login": "github-actions", "isBot": true },
+      "at": "2026-05-21T11:00:00Z",
+      "editedAt": null,
+      "body": "Deploy preview ready! https://example-preview.pages.dev",
+      "reviewState": null,
+      "location": null
+    },
+    {
+      "id": "r1",
+      "kind": "review",
+      "author": { "login": "cloudflare-workers-and-pages", "isBot": true },
+      "at": "2026-05-21T11:05:00Z",
+      "editedAt": null,
+      "body": "",
+      "reviewState": "COMMENTED",
+      "location": null
     }
   ],
-  "reviews": [
-    {
-      "author": { "login": "cloudflare-workers-and-pages" },
-      "submittedAt": "2026-05-21T11:05:00Z",
-      "state": "COMMENTED"
-    }
-  ]
+  "behind": null,
+  "ahead": null
 }

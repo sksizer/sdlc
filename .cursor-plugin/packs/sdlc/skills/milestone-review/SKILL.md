@@ -1,13 +1,13 @@
 ---
 name: milestone-review
 description: |
-  Given a milestone id (M-NNNN) or milestone file, assess its real status against
-  its declared frontmatter status: walk its member tasks and related items to
-  derive a grounded status and the concrete gaps / remaining work, then scan
+  Given a milestone id (M-NNNN) or milestone file, assess its real state against
+  its declared frontmatter state: walk its member tasks and related items to
+  derive a grounded state and the concrete gaps / remaining work, then scan
   unclosed tasks and backlog items for related-but-unlinked work — bugs or gaps
   reported elsewhere. Reports read-only by default; corrects frontmatter drift on
   --fix or after asking. Use when asked to review or audit a milestone, check
-  whether a milestone's status is accurate, or find what's left before closing it.
+  whether a milestone's state is accurate, or find what's left before closing it.
 allowed-tools: Read Edit Shell Glob Grep Agent AskUserQuestion
 ---
 
@@ -25,19 +25,19 @@ Usage:
 
 References:
 
-- `${CLAUDE_PLUGIN_ROOT}/lib/model/entities/milestone/definition.md` — status enum, membership
+- `${CLAUDE_PLUGIN_ROOT}/lib/model/entities/milestone/definition.md` — state enum, membership
   derivation, and the frontmatter `tasks:` ↔ body `## Deliverables` sync rule.
   **Read once per project — it governs every skill that touches milestone files.**
 
 Project context (don't re-derive every run):
 
-- Milestones live in `docs/planning/milestones/` as `M<NNNN>-<slug>.md`. Status enum:
+- Milestones live in `docs/planning/milestones/` as `M<NNNN>-<slug>.md`. State enum:
   `open/{draft,planned,active}`, `closed/{done,partial,superseded,abandoned}`.
 - Member tasks are the frontmatter `tasks:` list of `[[T-NNNN]]` wikilinks; the body
   `## Deliverables` section mirrors them. Tasks carry no milestone back-link — membership is
   one-directional, so real membership is derived by reading each member plus scanning for unlinked
   relatives.
-- Tasks live in `docs/planning/tasks/`; "unfinished" = a status that does NOT start with `closed/`.
+- Tasks live in `docs/planning/tasks/`; "unfinished" = a state that does NOT start with `closed/`.
   Backlog lives in `docs/planning/backlog/` as `B<NNNN>` files — freeform ideas that may point at a
   milestone via `related:` or body text.
 - Validate after any frontmatter edit; gate on the exit code, don't pipe (see Notes):
@@ -49,21 +49,21 @@ Project context (don't re-derive every run):
 ## 1. Resolve the milestone
 
 If the argument is a path, use it. If it is an id, glob `docs/planning/milestones/M<NNNN>*.md`. On
-no match or an ambiguous match, print `ERROR reason="..."` and stop. Read the frontmatter (`status`,
+no match or an ambiguous match, print `ERROR reason="..."` and stop. Read the frontmatter (`state`,
 `tasks`, `related`, `version`, `completion_note`) and the body (`Goal`, `Success criteria`,
 `Deliverables`).
 
 ## 2. Walk member tasks
 
-For each `[[T-NNNN]]` in `tasks:`, read the target task's frontmatter and classify its status: done
+For each `[[T-NNNN]]` in `tasks:`, read the target task's frontmatter and classify its state: done
 (`closed/done`), other-closed (any other `closed/*`), in-progress (`in-progress[/blocked]`), ready
 (`open/ready`), planning (`planning/*`), or missing (no file / broken wikilink). Note blocked tasks.
-Trust the member statuses here — deep "did this actually ship" verification is `/sdlc:task-review`'s
+Trust the member states here — deep "did this actually ship" verification is `/sdlc:task-review`'s
 job; only flag a `done` task that the body plainly contradicts.
 
-## 3. Derive grounded status
+## 3. Derive grounded state
 
-Map member reality to the milestone status the evidence supports:
+Map member reality to the milestone state the evidence supports:
 
 - none started or all `planning/*`, body still placeholder → `open/draft`.
 - committed, tasks queued, none started → `open/planned`.
@@ -90,8 +90,8 @@ Rank by relatedness, keep it to the top handful, and state plainly if you droppe
 
 Print inline, in this order:
 
-- Header: `<id> — <title>`, then `Declared: <status> · Grounded: <status> · Drift: <yes|no>`.
-- Member roster: one line per member task with its classified status; call out missing/blocked.
+- Header: `<id> — <title>`, then `Declared: <state> · Grounded: <state> · Drift: <yes|no>`.
+- Member roster: one line per member task with its classified state; call out missing/blocked.
 - Gaps / what remains: unmet success criteria plus every open member task.
 - Related-but-unlinked candidates: the tasks and backlog items from step 4, each with a one-line
   why-related.
@@ -101,7 +101,7 @@ Print inline, in this order:
 If `--read-only`, skip to step 7 — no mutation, no prompt. Otherwise assemble the candidate
 corrections:
 
-- `status` → the grounded `open/*` value. Do NOT auto-close: closing needs `version` +
+- `state` → the grounded `open/*` value. Do NOT auto-close: closing needs `version` +
   `completion_note`, so only propose it and ask the user for those values.
 - `last_reviewed` → today (UTC); optional `relevance_note` → one line on what shifted.
 - Append high-confidence unlinked member tasks to BOTH frontmatter `tasks:` and the body
@@ -118,7 +118,7 @@ If anything was edited, run `entities validate <path>` and gate on its exit code
 re-run on failure. Then emit the terminal marker:
 
 - `MILESTONE-REVIEW-OK: <id> declared=<s> grounded=<s> drift=<yes|no>` — no edits.
-- `MILESTONE-REVIEW-FIXED: <id> status=<old>→<new> tasks+=<n>` — edits applied.
+- `MILESTONE-REVIEW-FIXED: <id> state=<old>→<new> tasks+=<n>` — edits applied.
 - `ERROR reason="..."` — unrecoverable failure.
 
 ## Notes

@@ -3,8 +3,8 @@
      derived from the rows — the payload carries no totals to contradict. */
   const tasks = it.tasks;
   const gaps = tasks.filter(t => t.definitionGap !== null);
-  const closedDone = it.newlyClosed.filter(c => c.status === "closed/done");
-  const closedObsoleted = it.newlyClosed.filter(c => c.status === "closed/obsoleted");
+  const closedDone = it.newlyClosed.filter(c => c.state === "closed/done");
+  const closedObsoleted = it.newlyClosed.filter(c => c.state === "closed/obsoleted");
   const tiers = [
     { n: 1, title: "Tier 1 — high-impact, do soon" },
     { n: 2, title: "Tier 2 — quick wins to bundle" },
@@ -84,7 +84,7 @@
 <table>
   <tr><th>Task</th><th>Status</th><th>Completion note</th></tr>
 <% it.newlyClosed.forEach(c => { %>
-  <tr><td><code><%= c.file %></code></td><td><code><%= c.status %></code></td><td><%= c.completionNote %></td></tr>
+  <tr><td><code><%= c.file %></code></td><td><code><%= c.state %></code></td><td><%= c.completionNote %></td></tr>
 <% }) %>
 </table>
 <% } %>

@@ -19,7 +19,7 @@ import { CommonFrontmatter, entityIdPattern, entityWikilinkPattern } from '../_c
 import { titleMirrorsH1 } from '../_rules.ts'
 
 /** Mirrors `principle/schema.json` `version`. */
-export const SCHEMA_VERSION = '1'
+export const SCHEMA_VERSION = '2'
 
 /** The required category tag shape: `principle/<one-of>`. */
 export const PRINCIPLE_CATEGORY_PATTERN = /^principle\/(product|technical|project|llm-ai)$/
@@ -42,7 +42,7 @@ export const PrincipleSchema = CommonFrontmatter.extend({
         "[[D-0002-entity-identifier-shape]]: 'P-' + 4 zero-padded chars [0-9A-Z] " +
         '(Principles use incrementing numbering). Never renamed once assigned.',
     ),
-  status: z
+  state: z
     .enum(['open/draft', 'open/published', 'closed/retired'])
     .default('open/draft')
     .describe(

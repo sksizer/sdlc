@@ -174,7 +174,7 @@ Each sub-agent does, in order:
   "headline": "<one-line headline; required when type is task or milestone>",
   "slug_suggestion": "<kebab-case slug; required when type is task>",
   "frontmatter": {
-    "status": "<task status: planning/draft|planning/proposed|planning/backlog|open/ready  OR  milestone status: open/draft|open/planned|open/active>",
+    "state": "<task state: planning/draft|planning/proposed|planning/backlog|open/ready  OR  milestone state: open/draft|open/planned|open/active>",
     "impact": "<task only: high|medium|low>",
     "complexity": "<task only: small|medium|large>",
     "version": "<milestone only, if a semver appears in the source>",
@@ -224,14 +224,14 @@ Found <N> candidate(s) → would produce <T> task(s), <M> milestone(s), <S> skip
 For each `task` verdict:
 - `<slug>` — <headline>
   - Source: `<path>` (<size> bytes, <heuristic_hints>)
-  - Status: <status> · Impact: <impact> · Complexity: <complexity>
+  - State: <state> · Impact: <impact> · Complexity: <complexity>
   - Body coverage: Goal/Today/Proposed/Approach/AC<s>/Out-of-scope/Discovery — list which sections were filled vs left as placeholder.
 
 ## Milestones (<M>)
 For each `milestone` verdict:
 - `<title>` — <headline>
   - Source: `<path>` (<size> bytes, <heuristic_hints>)
-  - Status: <status> · Version: <version|->  · Target: <target_date|->
+  - State: <state> · Version: <version|->  · Target: <target_date|->
   - Body coverage: Goal/Success/Tasks/Out-of-scope/Risks/Discovery — list filled vs placeholder.
 
 ## Skipped (<S>)
@@ -278,7 +278,7 @@ From inside the worktree:
 ${CLAUDE_PLUGIN_ROOT}/cli/sdlc task create \
   --project-root <worktree-absolute-path> \
   --headline "<headline>" \
-  --status <status> \
+  --state <state> \
   --impact <impact> \
   --complexity <complexity> \
   [--tags <tag>]... \
@@ -304,7 +304,7 @@ recoverable by either continuing or abandoning the PR.
 ${CLAUDE_PLUGIN_ROOT}/cli/sdlc milestone create \
   --project-root <worktree-absolute-path> \
   --title "<headline>" \
-  --status <status> \
+  --state <state> \
   [--version <semver>] \
   [--target-date YYYY-MM-DD] \
   [--tasks <basename>]... \
@@ -389,12 +389,12 @@ task/milestone entities. T tasks, M milestones. S candidates skipped.
 
 ## Tasks created (<T>)
 
-- `<basename>` — <headline> (<status>)
+- `<basename>` — <headline> (<state>)
   - Source: `<path>`
 
 ## Milestones created (<M>)
 
-- M<NNNN> — <title> (<status>)
+- M<NNNN> — <title> (<state>)
   - Source: `<path>`
 
 ## Skipped (<S>)
@@ -414,7 +414,7 @@ drafted body sections in.
 Body sections were best-effort distilled from the source. Any
 remaining `<...>` placeholders indicate sections the source didn't
 cover. Reviewers should refine headlines, fill remaining placeholders,
-and adjust status before merging if any imported entity isn't actually
+and adjust state before merging if any imported entity isn't actually
 the type the skill inferred.
 ```
 

@@ -30,7 +30,7 @@ import {
 import { titleMirrorsH1 } from '../_rules.ts'
 
 /** Current capability schema version. */
-export const SCHEMA_VERSION = '2'
+export const SCHEMA_VERSION = '3'
 
 /**
  * The 11 structural grains — what KIND of structure the capability names,
@@ -79,7 +79,7 @@ export const CapabilitySchema = CommonFrontmatter.extend({
         "[[D-0002-entity-identifier-shape]]: 'C-' + 4 zero-padded chars [0-9A-Z] " +
         '(Capabilities use incrementing numbering). Never renamed once assigned.',
     ),
-  status: z
+  state: z
     .enum(['open/planned', 'open/building', 'open/verified', 'closed/retired'])
     .default('open/planned')
     .describe(

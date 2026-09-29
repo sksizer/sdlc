@@ -92,7 +92,7 @@ The agent does, in this order:
    - `git diff <main>...<branch> --stat` — divergence size.
    - If `facts.pr` is present:
      `gh pr view <pr.number> --json state,reviewDecision,mergedAt,closedAt,comments`.
-   - If `facts.task` is present: read the task file end-to-end (status, completion_note, blocked
+   - If `facts.task` is present: read the task file end-to-end (state, completion_note, blocked
      sections).
 
    **`worktree` (always run):**
@@ -114,7 +114,7 @@ The agent does, in this order:
    - If `facts.task` is present: read the task file end-to-end.
 
    **`task_linkage` (always run):**
-   - Read the task file end-to-end (status, completion_note, body — especially any `<blocked>`
+   - Read the task file end-to-end (state, completion_note, body — especially any `<blocked>`
      section).
    - `git log --all --oneline -- <relative path of task file>` — has the task itself been touched
      recently?

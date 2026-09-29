@@ -18,7 +18,7 @@ sections and disqualifiers below are category errors for it (a
 rollup has no Areas). A parent is EXEMPT — its readiness is
 its children's readiness. Readiness gates skip rollups instead of
 failing them: no gap evaluation, no `readiness_verified_at` stamp,
-no status downshift. The same leaf-only rule governs dispatch
+no state downshift. The same leaf-only rule governs dispatch
 ([[D-VSLI-distributed-work-runner-architecture]]); this is the
 readiness half of that split ([[D-S30G-task-state-plane-split]]).
 
@@ -27,7 +27,7 @@ Parenthood is a deterministic fact, not a judgment call.
 and reports `parenthood: { is_parent, children }`, with
 `parent=<bool>` as the last token of its one-line marker. A gate
 reads that fact first. Parenthood is structural, not
-status-dependent: a parent whose every child is closed is still a
+state-dependent: a parent whose every child is closed is still a
 parent.
 
 A rollup is well-formed when its body states the rollup criteria —
@@ -100,7 +100,7 @@ shape, so nothing below is a place to put a half-filled table.
 
 ## Required frontmatter
 
-- `status` is one of the active pre-implementation stages —
+- `state` is one of the active pre-implementation stages —
   `planning/draft`, `planning/proposed`, `planning/backlog`,
   `open/ready` — OR an active mid-implementation stage —
   `in-progress`, `in-progress/blocked`. NOT
@@ -186,13 +186,13 @@ which the contract was last verified to hold.
 A task that does not satisfy this contract has
 `readiness_verified_at:` unset. It may additionally carry
 `definition_gap:` (a description of what's missing) and
-`status: planning/needs-definition`.
+`state: planning/needs-definition`.
 
 ### Fail-mode carve-out for `in-progress*`
 
 When the input task was already `in-progress` or `in-progress/blocked`,
 a failed readiness check still records the `definition_gap` and still
-clears `readiness_verified_at:`, but it does NOT downshift `status:`
+clears `readiness_verified_at:`, but it does NOT downshift `state:`
 to `planning/needs-definition`. The task is already mid-flight;
 downshifting away from `in-progress` corrupts task-work state
 (worktree, branch, and PR all assume the doc reflects an active

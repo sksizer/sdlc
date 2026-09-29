@@ -37,7 +37,7 @@ A Driver is *not*:
 | `type` | required | `driver` |  | Validator-dispatch tag |
 | `schema_version` | optional | numeric string | `"1"` |  |
 | `id` | required | `DR-NNNN` |  | Immutable; matches filename prefix |
-| `status` | required | `open/proposed \| open/validated \| closed/resolved \| closed/retired` | `open/proposed` | See Lifecycle |
+| `state` | required | `open/proposed \| open/validated \| closed/resolved \| closed/retired` | `open/proposed` | See Lifecycle |
 | `title` | required | string |  | The driver in one line |
 | `kind` | required | `pain-point \| use-case \| opportunity` |  | Flavour of motivation |
 | `product` | required | `[[PR-NNNN]]` wikilink |  | The Product this driver motivates |
@@ -66,7 +66,7 @@ Required and optional H2 sections, in order:
 
 ## Lifecycle
 
-| Status | Meaning |
+| State | Meaning |
 |---|---|
 | `open/proposed` | Hypothesized; not yet backed by cited evidence. |
 | `open/validated` | Backed by cited evidence; legitimately motivates Goals and work. |

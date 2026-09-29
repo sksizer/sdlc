@@ -23,7 +23,7 @@ function metaLine(e: EntityView): string[] {
   const kind = e.fm['kind']
   const audience = e.fm['audience']
   return [
-    e.status ? `**Status:** \`${e.status}\`` : '',
+    e.state ? `**State:** \`${e.state}\`` : '',
     typeof kind === 'string' && kind ? `**Kind:** \`${kind}\`` : '',
     typeof audience === 'string' && audience ? `**Audience:** \`${audience}\`` : '',
   ]

@@ -35,7 +35,7 @@ Project context (don't re-derive every run):
   mechanically fixable (`auto_fixable: true`). Dispatch only on what the audit tagged; do not invent
   new fix logic.
 - **Closed entities are skipped at the audit layer**, not at migrate. The audit early-returns for
-  any entity whose `status` indicates closed (`closed/<reason>` or legacy bare-closed values like
+  any entity whose `state` indicates closed (`closed/<reason>` or legacy bare-closed values like
   `closed`, `done`, `superseded`), so migrate never sees those entries. Pass `--include-closed` to
   forward that flag through to audit so closed entities are drift-checked and fixed alongside active
   ones — reach for it only when every record must track the current schema, since closed = frozen:

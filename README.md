@@ -17,7 +17,7 @@ that history is kept, never rewritten, when a release replaces the tree.
 
 ## Current version
 
-**v0.4.0**
+**v0.7.0**
 
 ## Install
 
