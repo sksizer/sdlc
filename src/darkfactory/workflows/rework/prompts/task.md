@@ -7,6 +7,11 @@ Read the PRD at `{{PRD_PATH}}` for context on what was implemented.
 The git history on this branch shows what you committed. Use
 `git log` and `git diff {{BASE_REF}}...HEAD` to see what's already done.
 
+## PRD Check
+Check all PRD todos, and ensure the work was done or perform the work 
+if it remains unaddressed. Check items once they are confirmed done 
+or finished.
+
 ## Review feedback to address
 
 {{REWORK_FEEDBACK}}
