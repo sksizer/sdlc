@@ -5,4 +5,4 @@
  * this file exists so `./vN-to-vN+1.ts` modules and their tests keep
  * importing it from `./errors.ts` unchanged.
  */
-export { MigrationError } from '../../_migration_error.ts'
+export { MigrationError } from '@lib/model/entities/_migration_error.ts'

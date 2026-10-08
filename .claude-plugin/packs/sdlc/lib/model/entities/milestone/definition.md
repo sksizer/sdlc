@@ -56,6 +56,7 @@ carry order. The separate `roadmap` manifest is retired.
 | `last_reviewed` | optional | ISO date |  | Last triage date |
 | `target_date` | optional | ISO date |  | Aspirational; not a deadline |
 | `tasks` | required (may be empty) | list of wikilinks | `[]` | Task wikilinks (including parent Tasks) |
+| `capabilities` | optional | list of wikilinks | `[]` | Capability wikilinks (`[[C-NNNN]]`) this milestone delivers or changes; each must resolve (`roadmap check`, `entities audit`) |
 | `tags` | optional | list of strings | `[]` | Free-form labels |
 | `related` | optional | list of wikilinks | `[]` | Other milestones or tasks |
 | `relevance_note` | optional | string |  | What shifted since planning |
@@ -75,7 +76,7 @@ Required and optional H2 sections, in order:
 |---|---|---|
 | Goal | required | One paragraph |
 | Success criteria | required | 3–6 high-level bullets, each a verifiable end state |
-| Deliverables | required | Everything the milestone produces. Sub-H3 categories (Decisions / Standards / Entity specs / Reviews / Implementation / Planning) encouraged. Each entry is a checkbox; typically links to a Task once one exists |
+| Deliverables | required | Everything the milestone produces. Sub-H3 categories (Decisions / Standards / Entity specs / Reviews / Implementation / Planning) encouraged. Each entry is a checkbox; typically links to a Decision, Standard or entity spec. A task appears only as an annotated restatement of the `tasks:` roster |
 | Out of scope | optional | What the milestone explicitly does NOT cover |
 | Risks / open questions | optional | Unresolved decisions or known fragility |
 
@@ -125,7 +126,7 @@ terminal (re-opening requires an explicit `open/*` move).
 | List | `sdlc milestone list` | Roster of all milestones, optionally filtered by state |
 
 The `Create` deterministic core is the relocated `milestone create` op
-(`solutions/ontological/lib/model/entities/milestone/ops/create.ts`, Surface `runner`
+(`solutions/ontological/lib/model/entities/milestone/noun.ts`, Surface `runner`
 — registered but not yet a CLI subcommand; T-0010); `new_milestone.ts`
 and `/sdlc:milestone-new` are the shim and LLM head over it. `Validate`
 is the generic `entities validate` op (`solutions/ontological/lib/model/ops/`). Per
@@ -139,6 +140,14 @@ is the generic `entities validate` op (`solutions/ontological/lib/model/ops/`). 
   roadmap position; duplicates make order ambiguous). `project-check`
   flags it — the ordering sibling of the duplicate-`id` invariant.
   (Check implementation is a follow-up; the invariant is normative now.)
+- An `open/*` Milestone MUST be linked from a roadmap or carry the
+  `deferred` tag, and a Milestone listed under a roadmap's `## vX.Y.Z`
+  section MUST have that same `version`. `sdlc roadmap check
+  --strict-order` flags both (`unroadmapped_milestone`,
+  `version_section_mismatch`); it also flags an `open/*` task that no open
+  milestone claims (`task_without_milestone`). The first and third run
+  only when no roadmap `id` is given. The flag is off by default until the
+  corpus conforms.
 - A Milestone with `tasks:` referencing wikilinks to non-existent
   tasks is a defect. `project-check` flags this.
 - A Milestone with the same `id` as another Milestone is a defect.

@@ -29,6 +29,7 @@ import { CapabilitySchema, SCHEMA_VERSION as CAPABILITY_VERSION } from './capabi
 import { DecisionSchema, SCHEMA_VERSION as DECISION_VERSION } from './decision/schema.ts'
 import { DriverSchema, SCHEMA_VERSION as DRIVER_VERSION } from './driver/schema.ts'
 import { MilestoneSchema, SCHEMA_VERSION as MILESTONE_VERSION } from './milestone/schema.ts'
+import { NoteSchema, SCHEMA_VERSION as NOTE_VERSION } from './note/schema.ts'
 import { PrincipleSchema, SCHEMA_VERSION as PRINCIPLE_VERSION } from './principle/schema.ts'
 import { ProductSchema, SCHEMA_VERSION as PRODUCT_VERSION } from './product/schema.ts'
 import { ReferenceSchema, SCHEMA_VERSION as REFERENCE_VERSION } from './reference/schema.ts'
@@ -183,6 +184,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchemaEntry> = {
   decision: entry('decision', DecisionSchema, DECISION_VERSION),
   driver: entry('driver', DriverSchema, DRIVER_VERSION),
   milestone: entry('milestone', MilestoneSchema, MILESTONE_VERSION),
+  note: entry('note', NoteSchema, NOTE_VERSION),
   principle: entry('principle', PrincipleSchema, PRINCIPLE_VERSION),
   product: entry('product', ProductSchema, PRODUCT_VERSION),
   reference: entry('reference', ReferenceSchema, REFERENCE_VERSION),

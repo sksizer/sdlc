@@ -14,11 +14,10 @@
  * arrays, so column layout lives in exactly one place per shape.
  *
  * The leading frontmatter block stamps this file as the corpus's OKF
- * bundle-root `index.md` ([[M-LBU2]] / [[T-IZ3L]]): `type: Note` since this
- * page is a non-entity narrative/roster front-door, not one of the 12
- * registered entity types, and `okf_version: "0.2"` naming the OKF spec
- * revision this bundle conforms to. `sdlc okf validate` checks for exactly
- * these two keys on this file.
+ * bundle-root `index.md` ([[M-LBU2]] / [[T-IZ3L]]): `okf_version: "0.2"`
+ * naming the OKF spec revision this bundle conforms to. Per OKF spec §8/§12 a
+ * bundle-root index carries ONLY that key — no `type`, since an index is not a
+ * concept document.
  */
 function pipeRow(cells) {
   return "| " + cells.map((c) => String(c ?? "")).join(" | ") + " |";
@@ -39,14 +38,13 @@ function followupTable(headers, section) {
 }
 %>
 ---
-type: Note
 okf_version: "0.2"
 ---
 
 # Ontological
 
 > The single front-door for Ontological. The **Narrative** lives in the prose
-> docs — [[vision]] (the why, the end state, and the plan), [[PR-0001-sdlc]] (what it is and how it's
+> docs — [[N-41AZ-vision]] (the why, the end state, and the plan), [[PR-0001-sdlc]] (what it is and how it's
 > designed), [[D-VSLI-distributed-work-runner-architecture]] (the architecture). The
 > **Reference** below is generated from the entities on disk by the
 > `docs` skill. **Do not hand-edit** — edit the source entity and
@@ -65,7 +63,7 @@ okf_version: "0.2"
 
 | Doc                           | What it is                                     |
 | ----------------------------- | ---------------------------------------------- |
-| [[vision]]                    | The why, the end state, and the plan           |
+| [[N-41AZ-vision]]                    | The why, the end state, and the plan           |
 | [[PR-0001-sdlc]]               | The product — what it is and how it's designed |
 | [[D-VSLI-distributed-work-runner-architecture]] | The system architecture                        |
 | [[glossary]]                  | Vocabulary — every architecture term, defined once |

@@ -7,6 +7,254 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-08
+
+Adoption, sessions and a safer orchestrator: the setup wizard becomes real
+ops, every launch writes one session record, the orchestrator is safe to
+run live, branch cleanup becomes plan, verify and apply, and the entity
+commands gain a uniform read surface.
+
+### Added
+
+- `sdlc setup plan` and `sdlc setup apply [--choices <json|file>] [--up-to <step>]`:
+  the adoption wizard's steps as ops. `plan` shows the file changes and
+  notes without writing; `apply` makes them. Both are additive: a key
+  already set, or a file that exists with different text, is reported and
+  left alone, and nothing is removed, so replaying the same choices changes
+  nothing. A default run writes only what every project wants (the
+  `.gitignore` section, the `sdlc.yaml` skeleton and example docs); checks,
+  extensions, sandbox lists and the look-back prompt are written only when
+  chosen. Setup offers the runners it detected, can write machine-local
+  choices to `sdlc.local.yaml`, and lists choices it cannot write yet
+  instead of dropping them silently.
+  ([#2822](https://github.com/sksizer/dev/pull/2822),
+  [#2825](https://github.com/sksizer/dev/pull/2825),
+  [#2827](https://github.com/sksizer/dev/pull/2827),
+  [#2886](https://github.com/sksizer/dev/pull/2886))
+- `sdlc harness detect [--write-host-default]`: reports the AI tools that are
+  installed, local runtimes (Ollama, LM Studio) and their models, session
+  hosts, and sign-in state (signed in or unknown, never "signed out"), and
+  can write `host.default`. `project doctor` prints the same table.
+  ([#2886](https://github.com/sksizer/dev/pull/2886))
+- `sdlc project doctor` checks authentication for the code host the repo
+  uses and prints one fix line per failed check; it also prints the
+  resolved tracker and code host and warns when `sessions.keep_raw` is set
+  with a store outside the project.
+  ([#2660](https://github.com/sksizer/dev/pull/2660),
+  [#2886](https://github.com/sksizer/dev/pull/2886))
+- Unknown nouns, verbs, config keys and repo names get "did you mean"
+  suggestions, and top-level `sdlc --help` shows a one-line summary for each
+  noun. ([#2660](https://github.com/sksizer/dev/pull/2660))
+- `sdlc shell completion`: bash, zsh and fish completion generated from the
+  op registry. ([#2660](https://github.com/sksizer/dev/pull/2660))
+- Every entity kind (backlog, capability, decision, driver, milestone,
+  principle, product, reference, roadmap, standard, task, term) gets the
+  same read verbs: `list`, `get`, `search` and `related`.
+  ([#2664](https://github.com/sksizer/dev/pull/2664))
+- The `note` kind (`N-XXXX`, a required `genre` and an optional `parent`)
+  with `sdlc note create|get|list|preview-id|related|search`. A roadmap's
+  `plan_doc` now links a note, and `roadmap check` resolves it
+  (`missing_plan_note`). ([#2512](https://github.com/sksizer/dev/pull/2512))
+- OKF v0.2 is the base contract: every entity accepts `description`,
+  `resource`, `status`, `stale_after`, `generated`, `verified`, `sources` and
+  `usage_window`, and `sdlc okf validate` walks `docs/` as a bundle (every
+  non-reserved markdown file carries frontmatter with a `type`).
+  ([#2512](https://github.com/sksizer/dev/pull/2512))
+- Planning links on the capability graph: a capability can name its
+  `product`, a milestone can list the `capabilities` it advances,
+  `entities audit` reports a `dangling_link` for either, and `roadmap check`
+  reports `missing_capability`.
+  ([#2513](https://github.com/sksizer/dev/pull/2513))
+- `sdlc capability graph` gains `--audience user|system`, `--tree` (indented
+  containment tree), `--depth N` (with `--tree`; hidden children show a
+  `(+K)` count) and `--unnested` (capabilities with no parent that are not
+  a system root). `sdlc capability relations <id>` and
+  `GET /api/capabilities/:id/relations` (client method
+  `getCapabilityRelations`) return a capability's children, the milestones
+  that list it and their open tasks.
+  ([#2513](https://github.com/sksizer/dev/pull/2513),
+  [#2595](https://github.com/sksizer/dev/pull/2595),
+  [#2633](https://github.com/sksizer/dev/pull/2633))
+- `sdlc roadmap check --strict-order` also reports ordered-flow findings
+  (off by default). ([#2886](https://github.com/sksizer/dev/pull/2886))
+- `sdlc config pin-test` records the project's test command once in
+  `sdlc.yaml`; `pr_update.verify: test` runs only that recorded command.
+  `sdlc config migrate-machine` upgrades the machine config file to the
+  current version and keeps a `.bak`.
+  ([#2662](https://github.com/sksizer/dev/pull/2662))
+- `sdlc pr update`: a configurable `pr_update.repair.command` can fix a
+  conflict or a failed verify (`pr_update.repair.on`); `--confirm-push` shows
+  the commits and diffstat and asks before each force-push;
+  `pr_update.max_failed_attempts` (default 1) and `--retry-failed` skip a PR
+  whose update failed until its head or base moves.
+  ([#2662](https://github.com/sksizer/dev/pull/2662))
+- `sdlc pr review` refreshes a reused worktree, and updates the PR first when
+  it is behind its base (`pr_review.refresh`: `update` (default), `pull` or
+  `off`; `--no-refresh` for one run). `pr_review.related_prs` lists stacked
+  and overlapping PRs in the review brief.
+  ([#2662](https://github.com/sksizer/dev/pull/2662))
+- Orchestrator safety: a new `CI-BLOCKED` verdict for checks that a billing or
+  spending-limit block stopped (no `pr-respond` is dispatched for it);
+  `orchestrator.pr_filters.exclude_drafts` (default `true`) and
+  `include_labels` (opt-in) scope which PRs the `prs` and `merges` ticks touch;
+  `orchestrator.limits.*` caps every session-starting dispatch (`implement`,
+  `pr_review`, `pr_respond`, `pr_update`, `close_out`, `issues`, optional
+  `total`, and `session_ttl_minutes`); `orchestrate run` lists every planned
+  item, dry-run or live. ([#2462](https://github.com/sksizer/dev/pull/2462))
+- Orchestrator efficiency and visibility: the `prs` tick lists open PRs and
+  fully fetches only those whose `updatedAt` changed
+  (`orchestrator.polling.full_refresh_secs`, default 900);
+  `router.quiet_period_secs` (default 120) batches a reviewer's consecutive
+  comments into one delivery; `sdlc orchestrate status --waiting` and a
+  dashboard panel list the tasks and PRs waiting on a person.
+  ([#2663](https://github.com/sksizer/dev/pull/2663))
+- Dispatch hardening: review feedback goes to a file under `.sdlc/feedback/`
+  and the session gets a one-line pointer; the router never starts a second
+  session beside a running one; the work tick re-checks `depends_on` before
+  launching and holds the task as `blocked-deps`; `sdlc pr update` tells the
+  live session on a rebased branch to fetch and rebase.
+  ([#2663](https://github.com/sksizer/dev/pull/2663))
+- `sdlc session focus <target>` brings the terminal of a task, PR or branch
+  forward, through a new optional host `focus` part (Orca and tmux).
+  ([#2663](https://github.com/sksizer/dev/pull/2663))
+- A `sessions:` config block (local layer): `sessions.store.path` and
+  `sessions.store.layout` (`flat` or `by-project`) choose where session records
+  live (default `.sdlc/sessions`), and `sessions.keep_raw` is reserved. Each
+  session keeps an append-only `events.jsonl` log and a `machine` field, and
+  records carry kind, origin, state, outcome and author. Session commands
+  ignore other machines' records.
+  ([#2823](https://github.com/sksizer/dev/pull/2823),
+  [#2886](https://github.com/sksizer/dev/pull/2886))
+- A `tracker:` config block (`tracker.kind`, default `github`) behind a Tracker
+  port with a GitHub Issues adapter, and the code host is its own port
+  (`@sksizer/code-host`) that `pr survey` and `pr update` go through; every PR
+  argument parses with one `parsePrInput`.
+  ([#2886](https://github.com/sksizer/dev/pull/2886))
+- Each PR head gets a step evidence ledger at `.sdlc/pr-evidence/<sha>.jsonl`,
+  and every `sdlc.yaml` key carries an enforcement grade, projected into the
+  generated `docs/sdlc-yaml-enforcement.md`.
+  ([#2886](https://github.com/sksizer/dev/pull/2886))
+- Safe branch and worktree cleanup: `sdlc project apply-cleanup --plan <file>
+  [--row <category:id>] [--authorize <name[=category:id]>]` re-checks an
+  approved plan, deletes compare-and-swap on the judged commit and writes a
+  receipt. `sdlc project cleanup` now fetches first (`--no-fetch` to skip;
+  a repo whose fetch failed is an error row), writes a plan with
+  `--write-plan` or `--plan-out`, narrows to one branch with `--branch`,
+  reports worktrees that are locked, hide index edits, nest repos or share a
+  branch, and reports one remote checked out as several clones. Each row names
+  the authorization its delete needs (`abandon-unmerged`, `discard-changes`,
+  `confirm-open-pr`). `session-cleanup` runs on this plan and apply pair.
+  ([#2640](https://github.com/sksizer/dev/pull/2640))
+- `sdlc project follow <checkout> [--status]` fast-forwards a served project's
+  detached checkout to `origin/main` when the tree is clean, and
+  `sdlc project follow-loop start <checkout> [--interval <secs>]` repeats it
+  (default 60s). ([#2597](https://github.com/sksizer/dev/pull/2597))
+- Multi-root projects: `task resolve` searches every planning root,
+  `task start` finds a task in a nested planning root, and every op builds
+  worktree paths from one worktree root. ([#2560](https://github.com/sksizer/dev/pull/2560),
+  [#2561](https://github.com/sksizer/dev/pull/2561),
+  [#2566](https://github.com/sksizer/dev/pull/2566))
+- Harness distribution: `sdlc dev install` writes the launcher as a real-file
+  shim instead of a symlink; dispatched prompts pin the running `sdlc`
+  (`SDLC_PINNED_CMD`, opt out with `--no-pin-sdlc`) and every launch and
+  resume sets `SDLC_SESSION` and `SDLC_TASK`; a dispatched agent loads
+  skills from a session-local plugin directory; harness plugins install
+  through each harness's own CLI. ([#2661](https://github.com/sksizer/dev/pull/2661))
+- A Pi export: the plugin builds a `.pi/` tree beside `.claude-plugin/`,
+  `.agents/` and `.cursor-plugin/`, one Pi package per plugin, with skills
+  named `<plugin>-<skill>` (install with `pi install <path>/.pi/packs/<plugin>`).
+  Skill invocations in plugin source are `/[[skill]]` calls rendered in each
+  harness's own spelling. ([#2482](https://github.com/sksizer/dev/pull/2482),
+  [#2483](https://github.com/sksizer/dev/pull/2483))
+- The dev-checkout launcher names the checkout and says `bun install` when a
+  declared dependency is missing, instead of printing a module-resolution
+  trace. ([#2599](https://github.com/sksizer/dev/pull/2599))
+- `GET /api/entities/notes` and `/api/entities/notes/:id`; entity list rows
+  carry `genre` and `parent`. ([#2569](https://github.com/sksizer/dev/pull/2569))
+- The docs site builds a reference page for every plugin's skills, not only
+  `sdlc`'s. ([#2835](https://github.com/sksizer/dev/pull/2835))
+- `GET /api/session-records` and `getSessionRecords` in `@sdlc/dashboard-client`: the session
+  store's records (state, author, origin, task, outcome) as typed JSON. The dashboard sessions page
+  lists them above the Claude transcripts.
+
+### Changed
+
+- **BREAKING:** the per-lease session note (`.sdlc/dispatch/sessions/<lease>.json`) is deleted
+  with `SessionNote`, `SessionRegistry`, `reconcileNotes` and `reportStatusEvent`. The session
+  record is the only record: `session list`'s `state` column is now the record's `state`
+  (`starting`, `running`, `waiting_for_input`, `idle`, `ended`), and is never `null`. Existing
+  note files are no longer read; delete them. The hook-status mapping moved to
+  `lib/services/session/hook-status.ts`.
+- **BREAKING:** the `forge:` key in `sdlc.yaml` is renamed `code_host:`
+  (`code_host.override` still takes `'github' | 'forgejo' | null`). A stale
+  `forge:` key is an unknown key, and an invalid `sdlc.yaml` is fatal: the
+  config refuses to load until `forge:` is renamed to `code_host:` (in
+  `sdlc.local.yaml` too). There is no alias. The `Forge` port is renamed `CodeHost` throughout
+  (`selectForge` -> `selectCodeHost`, `GithubForge` -> `GithubCodeHost`,
+  `ForgejoForge` -> `ForgejoCodeHost`, `lib/services/pr/forge/` ->
+  `lib/services/pr/code-host/`).
+- The built-in `judge` workflow now runs `sdlc verify changes --blocking`
+  (one `script:` step) instead of nothing. A project without its own
+  `workflows.judge` now runs an AI review in the gate, which costs tokens;
+  set `workflows.judge` to override it, or to `[]` to opt out. The step
+  assumes `sdlc` is on `PATH`. (T-3N5B)
+- **BREAKING:** `orchestrator.max_implementations` is now
+  `orchestrator.limits.implement` (same default, 5). The orchestrator block
+  rejects unknown keys, so `sdlc.yaml` refuses to load until you rename it.
+  There is no alias.
+  ([#2462](https://github.com/sksizer/dev/pull/2462))
+- **BREAKING:** session records are one type. The field `hostSessionId` is now
+  `harnessSessionId`, and a record written before the event log (or without
+  `kind`, `origin`, `state`, `outcome`, `author` and `harnessSessionId`) fails
+  the schema and is skipped by `session list`. Nothing migrates old records.
+  ([#2823](https://github.com/sksizer/dev/pull/2823),
+  [#2886](https://github.com/sksizer/dev/pull/2886))
+- **BREAKING:** `entities validate` now fails a file stamped with an older
+  schema version (`[schema_version/outdated]`), and `ensure-ready` refuses a
+  task behind the current task schema. Run `sdlc entities migrate` first;
+  `entities migrate --dry-run` now runs the transform chain in memory so each
+  plan line says what changes (for example `v3 -> v9 (status -> state)`), and
+  `entities migrate` is listed in help.
+  ([#2600](https://github.com/sksizer/dev/pull/2600))
+- The `harness` key in `sdlc.yaml` is no longer reserved: `sdlc apply` acts on it.
+  ([#2886](https://github.com/sksizer/dev/pull/2886))
+- `--project-root` help states the real default (the nearest directory above
+  the cwd that holds an `sdlc.yaml`), not "cwd".
+  ([#2602](https://github.com/sksizer/dev/pull/2602))
+
+### Removed
+
+- **BREAKING:** the `explore-codebase` and `api-enhancement-scan` skills
+  leave the `sdlc` plugin. They moved to the portable `craft` plugin, which
+  the sdlc product does not ship; install them from a source that carries
+  `craft`. ([#2835](https://github.com/sksizer/dev/pull/2835))
+- The legacy `docs/planning/backlogs/` directory alias: backlog entries load
+  from `docs/planning/backlog/` only.
+  ([#2770](https://github.com/sksizer/dev/pull/2770))
+
+### Fixed
+
+- A merged PR counts as proof that a branch landed only on an exact head-SHA,
+  same-repo match; a closed task alone never turns an unmerged branch into a
+  force delete; local-branch ancestry is measured against the remote default
+  branch, and slashed default branch names are read whole. `task-close-out`
+  deletes the remote branch only at the merged PR's head.
+  ([#2640](https://github.com/sksizer/dev/pull/2640))
+- A `BEHIND` PR no longer marks new review comments as read: they surface as
+  `NEEDS-RESPONSE` once the branch is current.
+  ([#2462](https://github.com/sksizer/dev/pull/2462))
+- `sdlc pr update` no longer pushes a rebase that hit a second conflict
+  half-replayed. ([#2662](https://github.com/sksizer/dev/pull/2662))
+- Staging a path that begins with `-` no longer reads it as an option
+  (`git add` always puts `--` before the paths).
+  ([#2806](https://github.com/sksizer/dev/pull/2806))
+- The docs site no longer strips `^2` out of `mc^2`: a block id needs
+  whitespace or a line start before it.
+  ([#2792](https://github.com/sksizer/dev/pull/2792))
+- `sdlc gate corpus-invocation` no longer walks `node_modules` and follows
+  symlinks (23 minutes became about a second), and reports the exempt
+  runtime-conventions doc once. ([#2835](https://github.com/sksizer/dev/pull/2835))
+
 ## [0.8.0] - 2026-09-28
 
 Phase 13 of the sdlc plan (M-I6NE,
@@ -350,3 +598,233 @@ Phases 1-3 of the sdlc plan (PR [#2284](https://github.com/sksizer/dev/pull/2284
   with a `--watch` dev loop.
 - `sdlc harness export` and `agent-plugin`'s exporters retired; `pr-tools`'
   `check-pr` reconciled with `sdlc:pr-respond`.
+
+## [0.3.1] - 2026-07-13
+
+The first installable build of the CLI-primary distribution. Tagged `v0.3.1`
+in the private `sksizer/dev` repo (merge of
+[#740](https://github.com/sksizer/dev/pull/740); release commit
+`1c652156ec`). This release and everything below it predate this changelog
+and were reconstructed from the tags, the commit history and the planning
+corpus; versions 0.3.x were never published to the public `sksizer/sdlc`
+repo (see the note under 0.3.0).
+
+### Fixed
+
+- The published artifact could not be installed. 0.3.0 shipped the vendored
+  `markdown-contract` as a `file:` tarball dependency, which does not
+  survive a git or registry install: bun ignores `bundledDependencies` and
+  npm's pack strips `node_modules`, so consumers hit an unresolvable
+  `markdown-contract`. `sdlc plugin build-artifact` now esbuilds it into one
+  self-contained file at `plugin/lib/_vendor/markdown-contract.js`, rewrites
+  the import specifiers to point at it, drops `markdown-contract` from the
+  published `package.json` and hoists its registry dependencies (`unified`,
+  `remark-*`, `picomatch`). Those stay external so one shared copy of each
+  (including `zod`) resolves across the sdlc and markdown-contract seam. The
+  dev repo is unchanged: it keeps the vendored `file:` dependency.
+  ([#738](https://github.com/sksizer/dev/pull/738); task T-XTGT)
+- The release workflow gained a consumer-install smoke: pack the artifact,
+  install it with `npm` into an empty directory outside the repo, assert
+  `markdown-contract` does not reappear as an external package, then run
+  `--help` and `project doctor --output json` from `node_modules`. The
+  release job also refuses to publish unless the bundled
+  `plugin/lib/_vendor/markdown-contract.js` is staged.
+
+### Changed
+
+- The harness core (model, deriver, and the claude, codex, cursor, gemini
+  and json exporters) moved out of `plugin/lib/services/harness` into a new
+  workspace package, `@sksizer/agent-plugin` (`packages/ts/agent-plugin`).
+  The `sdlc harness export|model|install` ops now import it.
+  ([#734](https://github.com/sksizer/dev/pull/734))
+- The repo's moon configuration moved to moon v2
+  ([#739](https://github.com/sksizer/dev/pull/739),
+  [#741](https://github.com/sksizer/dev/pull/741)), a repo-wide Rust aspect
+  (rustfmt, clippy, test) was added
+  ([#717](https://github.com/sksizer/dev/pull/717)), and the Polish app came
+  into the monorepo as `apps/polish`
+  ([#716](https://github.com/sksizer/dev/pull/716)). These affect the dev
+  repo's build only, not the shipped CLI or plugin.
+
+### Known limits
+
+- 0.3.0 stays a known-broken tag (not installable); use 0.3.1.
+- The package is `"private": true` in the repo and was distributed only
+  through the git-pinned dist channel described under 0.3.0, not a registry.
+- `plugin/.claude-plugin/plugin.json` still reads `0.2.0` at this tag; the
+  release version is the root `package.json` version, `0.3.1`.
+
+## [0.3.0] - 2026-07-13
+
+The first CLI-primary distribution: `sdlc` stops being a Bun-only,
+symlink-installed Claude Code plugin and becomes a plain-Node artifact,
+`@sksizer/sdlc`, that carries both the `sdlc` CLI and the Claude plugin
+tree. Tagged `v0.3.0` (annotated, "first CLI-primary dist release (D-0014 /
+T-75UD)"; merge of [#737](https://github.com/sksizer/dev/pull/737)). The
+install it describes did not work (see 0.3.1).
+
+This section covers the whole state at the tag, including work from the
+weeks after 0.2.0 that was never tagged (2026-06-07 to 2026-07-13).
+
+### Where this version lived
+
+The 0.3.x line is the private `sksizer/dev` lineage: a TypeScript plugin and
+CLI under `plugin/`, which later moved to `solutions/ontological/` and
+became 0.4.0. It is not the same thing as the Python `darkfactory` code
+that the public `sksizer/sdlc` repo held before 0.4.0 (tag `python-legacy`,
+`darkfactory` `__version__ = "0.1.0"`, a PRD-harness CLI named `prd` with
+no sdlc plugin). The public repo's first sdlc tag is `v0.4.0`; it has no 0.3.x tag.
+
+### Added
+
+- Distribution per decision D-0014. One npm artifact, `@sksizer/sdlc`
+  (`bin: sdlc`, `files: plugin, vendor, README.md`), carries the CLI and the
+  plugin directory, so the skills and the CLI that they call cannot skew.
+  - `sdlc plugin build-artifact` stages the publishable tree: built JS
+    (Node refuses to type-strip TypeScript under `node_modules`), run by
+    `prepack`. Verified by an npm-pack install that runs `npx sdlc` on
+    plain Node with Bun absent. ([#700](https://github.com/sksizer/dev/pull/700);
+    task T-XTGT)
+  - Shipped code is runtime-agnostic: `Bun.*`, `import.meta.dir` and
+    `import.meta.main` were removed from every shipped tree and the new
+    `sdlc gate runtime-agnostic` keeps them out
+    ([#692](https://github.com/sksizer/dev/pull/692),
+    [#697](https://github.com/sksizer/dev/pull/697)). Engines in the
+    manifest: `node >= 24`, `bun >= 1.3`.
+  - A release workflow (`.github/workflows/release.yml`,
+    [#709](https://github.com/sksizer/dev/pull/709),
+    [#730](https://github.com/sksizer/dev/pull/730); task T-75UD). Pushing a
+    `vX.Y.Z` tag checks the tag against `package.json`, runs the
+    `sdlc.yaml` quality roster, builds the artifact, smoke-tests it under
+    Node 20 with Bun stripped from `PATH`, and pushes the built tree to a
+    private mirror, `sksizer/sdlc-dist`, tagged to match. Consumers pin it
+    as a git dependency (`sdlc-dist#vX.Y.Z`): no registry. A manual
+    dry-run dispatch builds and smokes without publishing. Setup of the
+    mirror and the deploy-key secret was manual.
+  - Onboarding is three verbs: `bun add -d @sksizer/sdlc` (or
+    `npm i -D`), `sdlc project setup`, `sdlc harness install claude`.
+  - `sdlc harness install claude [--mode copy|node-modules|link] [--dev]`
+    wires the harness into a consumer project idempotently (auto-detects
+    link for a source checkout, copy for an installed package; idempotent
+    settings merge). `--dev` registers the live source and writes to
+    `.claude/settings.local.json`. `project doctor` gained a same-install
+    check and reports `dev/linked`.
+    ([#699](https://github.com/sksizer/dev/pull/699),
+    [#707](https://github.com/sksizer/dev/pull/707))
+  - `sdlc dev use <path> | off | status | link`: points a PATH-installed
+    `sdlc` at a live checkout. The launcher resolves its source as
+    `SDLC_HOME`, then the XDG `sdlc/home` config, then local (config is
+    ignored when `CLAUDE_PLUGIN_ROOT` is set).
+    ([#708](https://github.com/sksizer/dev/pull/708))
+  - Skills call the `${CLAUDE_PLUGIN_ROOT}cli/sdlc` launcher, which picks
+    runtime and entry; `sdlc gate corpus-invocation` forbids raw
+    `cli/sdlc.ts` calls in skills
+    ([#698](https://github.com/sksizer/dev/pull/698)). Self-location walks
+    up to the project's `sdlc.yaml` instead of assuming a code root
+    ([#701](https://github.com/sksizer/dev/pull/701)).
+  - `sdlc site build`: generate, package-manager detect, `astro build`, and
+    report the dist path, so a consumer builds the docs site without Bun
+    ([#705](https://github.com/sksizer/dev/pull/705)).
+- `sdlc harness export <target>`, `sdlc harness model`: derive a
+  host-neutral model of the plugin (capabilities, hooks, MCP servers,
+  permissions, documents) and project it to `claude`, `codex`, `cursor`,
+  `gemini` or `json` (a verbatim `harness.json`), with `--dry-run`; plus
+  an import bootstrap from the Claude surface. Skill and document bodies
+  validate through markdown-contract.
+  ([#720](https://github.com/sksizer/dev/pull/720),
+  [#721](https://github.com/sksizer/dev/pull/721),
+  [#722](https://github.com/sksizer/dev/pull/722),
+  [#725](https://github.com/sksizer/dev/pull/725),
+  [#726](https://github.com/sksizer/dev/pull/726),
+  [#727](https://github.com/sksizer/dev/pull/727),
+  [#728](https://github.com/sksizer/dev/pull/728))
+- Entity types (11, each with a schema, template and docs under
+  `plugin/lib/model/entities/<type>/`): backlog, capability, decision,
+  driver, milestone, principle, product, reference, standard, task, term.
+  `reference` (prefix `RF`) and `term` (`TM`) arrived after 0.2.0;
+  `sdlc reference create` and `sdlc term create` mint them.
+- Docs generation: `sdlc docs generate [index|glossary|references|site]`
+  replaced `sdlc index generate`. The docs site is a pure build artifact
+  (the whole content root is generated; hand-written pages live under
+  `sites/df-docs/supplemental/` and are declared in `site.yaml`), with a
+  `--check` drift gate wired into `quality_checks`. The glossary and
+  references appendix are generated from `term` and `reference` entities.
+- Monorepo: shared framework packages, the family app and scoped tooling
+  came under `apps/` and `packages/ts/`
+  ([#711](https://github.com/sksizer/dev/pull/711),
+  [#712](https://github.com/sksizer/dev/pull/712),
+  [#715](https://github.com/sksizer/dev/pull/715)).
+
+### The CLI at this tag
+
+Visible nouns: `commit`, `config`, `dashboard`, `dev`, `docs`, `entities`
+(`validate`), `harness` (`export`, `install`, `model`), `milestone`
+(`create`), `orchestrate` (`log-tick`, `watch`), `project` (`cleanup`,
+`detect-worktree-init`, `doctor`, `preflight-worktree`, `scan`, `setup`,
+`teardown-worktree`), `quality` (`baseline`, `detect`, `run`), `reference`,
+`report`, `site`, `standard` (`create`, `preview-id`, `supersede`,
+`update`), `task` (`create`, `inflight`, `next`, `preview-id`,
+`probe-state`, `resolve`, `update`), `term`, and `backlog`. Hidden behind
+`--advanced`: `gate` (`corpus-invocation`, `markdown-fixtures`,
+`runtime-agnostic`, `skill-prose`, `worktree-scope`), `lease`, `plugin`
+(`build-artifact`, `info`, `install-permissions`, `resolve`) and `pr`
+(`classify`). There is no `roadmap`, `note`, `session`, `verify`, `judge`
+or `setup plan|apply`; those came in 0.4.0 and later.
+
+### Skills
+
+36 skills under `plugin/skills/`, invoked as `/sdlc:<name>`:
+`api-enhancement-scan`, `backlog-capture`, `backlog-triage`,
+`consolidate-task-prs`, `docs`, `entities-audit`, `entities-migrate`,
+`explore-codebase`, `find-quality-checks`, `find-worktree-init`,
+`import-planning`, `info`, `migrate`, `migrate-runtime-state`,
+`milestone-new`, `milestone-review`, `milestones-from-file`,
+`orchestrate`, `pr-check`, `pr-respond`, `principle-review`, `product-new`,
+`project-cleanup`, `review-todos`, `setup`, `spawn-task-pr`, `standard-new`,
+`status-dashboard`, `task-auto-define`, `task-close-out`, `task-define`,
+`task-ensure-ready`, `task-new`, `task-review`, `task-work`,
+`update-skill-doc`. Plugin layout was the bespoke
+`plugin/.claude-plugin/plugin.json` plus `skills/<name>/SKILL.md`; the
+0.4.0 vault conversion replaced it.
+
+### Configuration
+
+`sdlc.yaml` at the project root, with `quality_checks` (a flat list of
+commands run by `/sdlc:task-work` and `sdlc quality run`),
+`lease_authority`, `docs_site` and worktree-init settings. There is no
+`workflows:`, `verbs` or `host` section yet.
+
+### Known limits
+
+- The git-pinned `sdlc-dist` channel needed manual setup of a private repo
+  and a deploy key, and was a stopgap. Decision D-2APS (2026-07-14)
+  replaced it with a compiled `bun` binary wrapped for npm; T-75UD was
+  closed as obsoleted.
+- Not installable as published; fixed in 0.3.1.
+- The Claude plugin manifest still said `0.2.0` and the marketplace entry
+  `0.1.1`; the release version lived only in the root `package.json`.
+
+## [0.2.0] - 2026-06-06
+
+Not tagged; the date and contents come from the project's own site
+changelog (`sites/df-docs/supplemental/changelog.md`) and the manifest
+(`plugin.json` `0.2.0`). The op-substrate sweep (milestone M-0003): every
+capability that lived in `plugin/scripts/` and `plugin/validators/` moved
+into `plugin/lib/` as a registry op or service, and the `sdlc` CLI became
+the sole entry.
+
+### Added
+
+- A path-keyed op registry (`defineOp`, 2 to 3 segment kebab paths),
+  `defineService` for long-running capabilities (the dashboard, the lease
+  heartbeat loop), `--output text|json|jsonl`, op render hooks, and a
+  `SERVICE_ERROR` exit tier.
+- 11 visible nouns (`task`, `backlog`, `milestone`, `standard`, `entities`,
+  `commit`, `report`, `index`, `quality`, `project`, `dashboard`) and 4
+  hidden (`plugin`, `pr`, `gate`, `lease`).
+
+### Removed
+
+- `plugin/scripts/`, `plugin/validators/` and `plugin/cli/lease_cli`.
+  Skills no longer shell out to `${CLAUDE_PLUGIN_ROOT}scripts/X.ts`; they
+  call `sdlc <path...>`.

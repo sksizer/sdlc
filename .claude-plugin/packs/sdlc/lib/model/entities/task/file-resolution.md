@@ -12,10 +12,16 @@ Run the deterministic op:
 ${CLAUDE_PLUGIN_ROOT}/cli/sdlc task resolve <arg>
 ```
 
-It implements the resolution order: absolute path → exact filename
-(with or without trailing `.md`) → glob prefix (`<arg>*.md`) then
-substring (`*<arg>*.md`) under `docs/planning/tasks/` → ambiguous or
-not-found. The op (`solutions/ontological/lib/model/entities/task/ops/resolve.ts`,
+It implements the resolution order: absolute path → relative path (only
+an arg containing a path separator, resolved against the invoking
+directory) → exact filename (with or without trailing `.md`) → glob
+prefix (`<arg>*.md`) then substring (`*<arg>*.md`) under
+`docs/planning/tasks/` → ambiguous or not-found. The filename and glob
+steps search the `docs/planning/tasks/` of every project in the git
+checkout (the project root plus each nested directory holding an
+`sdlc.yaml` and `docs/planning/`), as one union: an exact match in any
+root beats a glob match in any root, and one name in two roots is
+ambiguous. The op (`solutions/ontological/lib/model/entities/task/ops/resolve.ts`,
 [[P-0001]]) is the implementation; this document is its contract. See
 `sdlc task resolve --help`.
 
@@ -25,7 +31,7 @@ not-found. The op (`solutions/ontological/lib/model/entities/task/ops/resolve.ts
 |---|---|---|
 | Resolved | 0 | Absolute task path on stdout — capture the path and its basename (filename without `.md`). |
 | Not found | 1 | stderr `NO TASK FOUND for "<arg>"`. |
-| Ambiguous | 1 | stderr `AMBIGUOUS: <comma-separated candidate filenames>`. Re-run with `--output json` to read the structured `candidates[]` array. |
+| Ambiguous | 1 | stderr `AMBIGUOUS: <comma-separated candidate absolute paths>`. Re-run with `--output json` to read the structured `candidates[]` array. |
 
 ## Ambiguous-match policy
 

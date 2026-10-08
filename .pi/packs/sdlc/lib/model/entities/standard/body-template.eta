@@ -1,0 +1,38 @@
+<!--
+  Standard body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances.
+-->
+
+# <%= it.title ?? "<Title>" %>
+
+## Summary
+
+- <One-to-three tight bullets stating the rule's essence; keep the block-id on the first.> ^summary
+
+## Rule
+
+<The rule, stated in one paragraph or a short imperative. Be specific
+about what is required, forbidden, or expected.>
+
+## Why
+
+<Rationale. Why this rule exists; what failure mode it prevents or
+what value it preserves. Link the Principles or Decisions that
+motivated it.>
+
+## How to apply
+
+<Concrete guidance for authors, reviewers, and validators. How to
+honor the rule in practice. Where applicable, name the validator that
+checks it.>
+
+## Anti-examples
+
+<Concrete cases that violate the rule, and why each one violates it.
+Delete if the rule is too abstract for anti-examples to add value.>
+
+## Notes
+
+<Caveats, references to related discussions, context that doesn't
+fit elsewhere. Delete if there's nothing to add.>

@@ -18,6 +18,7 @@ import {
   DOC_WIKILINK_PATTERN,
   entityIdPattern,
   ENTITY_WIKILINK_PATTERN,
+  entityWikilinkPattern,
   requiredWhen,
 } from '../_common.ts'
 import { titleMirrorsH1 } from '../_rules.ts'
@@ -77,6 +78,14 @@ export const MilestoneSchema = CommonFrontmatter.extend({
       'Member items. Each entry is a wikilink to a Task (T-NNNN per ' +
         '[[D-0002-entity-identifier-shape]]) or another entity by id. Slug is ' +
         'optional.',
+    ),
+  capabilities: z
+    .array(z.string().regex(entityWikilinkPattern('C')))
+    .default([])
+    .describe(
+      'Capabilities this milestone delivers or changes, as Capability wikilinks ' +
+        '(C-NNNN, slug optional). Planning use: the milestone-to-capability-graph ' +
+        'link. Each entry must resolve to a capability file.',
     ),
   related: z
     .array(z.string().regex(DOC_WIKILINK_PATTERN))

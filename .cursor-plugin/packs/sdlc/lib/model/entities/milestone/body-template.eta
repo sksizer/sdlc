@@ -22,10 +22,13 @@ not implementation steps. Use markdown todos `- [ ]` for each.>
 
 ## Deliverables
 
-<Everything the milestone produces, grouped by category. Each entry
-is a checkbox; once a Task entity exists, replace the placeholder
-with `[[YYYY-MM-DD-task-slug]]`. Encouraged categories below; mix
-and match as the milestone calls for.>
+<What the milestone produces. `tasks:` is the member roster, so
+restate a task here only to add what the roster cannot carry: a wave
+or stage grouping, a per-task note, a status column. A bare copy of
+the roster earns nothing and drifts out of step with it. Each entry is
+a checkbox; replace a placeholder with a wikilink (`[[D-NNNN-slug]]`,
+`[[S-NNNN-slug]]`) once the entity exists. Encouraged categories
+below; mix and match as the milestone calls for.>
 
 ### Decisions
 

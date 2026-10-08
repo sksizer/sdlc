@@ -7,7 +7,7 @@ frontmatter, and runs the workflows that move that work through its
 lifecycle.
 
 This repository is sdlc's published home: a single-plugin marketplace,
-self-contained at the repo root, for Claude Code, Codex and Cursor.
+self-contained at the repo root, for Claude Code, Codex, Cursor and Pi.
 
 sdlc is developed in [sksizer/dev](https://github.com/sksizer/dev)
 (`solutions/ontological`) and released here — see
@@ -17,7 +17,7 @@ that history is kept, never rewritten, when a release replaces the tree.
 
 ## Current version
 
-**v0.8.0**
+**v0.9.0**
 
 ## Install
 
@@ -40,6 +40,19 @@ Codex CLI version supports) to pick it up.
 Cursor reads a marketplace manifest at `.cursor-plugin/marketplace.json` in
 a repository root, the same way. Point Cursor at this repository to pick it
 up.
+
+### Pi
+
+Pi has no marketplace. Clone this repository and install the pack by path:
+
+```text
+pi install <clone>/.pi/packs/sdlc
+```
+
+Pi names each skill `sdlc-<skill>` and runs it as `/skill:sdlc-<skill>`.
+Calls from one skill to another render in that form once the skill
+sources use the `/[[skill]]` call syntax. Until then they read
+`/sdlc:<skill>`, which Pi cannot run.
 
 ## License
 

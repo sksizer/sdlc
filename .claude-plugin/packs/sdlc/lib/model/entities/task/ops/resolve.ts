@@ -8,14 +8,21 @@
  * deterministic rule instead of re-implementing the prose. The handler is
  * PURE — no LLM, no shell — so the same arg always resolves the same way.
  *
- * Resolution order (reproduced exactly from that doc):
+ * Resolution order (see that doc):
  *   1. Absolute path — use directly. Missing → NO TASK FOUND.
- *   2. Exact filename match in `docs/planning/tasks/`, with or without a
- *      trailing `.md`.
- *   3. Glob match against `docs/planning/tasks/<arg>*.md` then
+ *   2. Relative path — only when the arg contains a path separator: a file
+ *      relative to the op's cwd (`ctx.cwd`). Not a file → falls through.
+ *   3. Exact filename match in `docs/planning/tasks/` of ANY planning root,
+ *      with or without a trailing `.md`.
+ *   4. Glob match against `docs/planning/tasks/<arg>*.md` then
  *      `docs/planning/tasks/*<arg>*.md`. Exactly one → use it; multiple →
  *      ambiguous (the spec's non-interactive policy: AMBIGUOUS marker).
- *   4. No match → NO TASK FOUND.
+ *   5. No match → NO TASK FOUND.
+ *
+ * "Any planning root" is every project in the git checkout holding the
+ * project root (`planningRoots`), the project root itself first. Steps 3 and 4
+ * search the UNION of their tasks dirs, so an exact match anywhere beats a
+ * glob match anywhere, and one id in two roots is ambiguous.
  *
  * After resolution the op captures the absolute `path` and the `basename`
  * (filename without `.md`).
@@ -25,7 +32,7 @@
  * not-found / ambiguous outcome):
  *   - resolved        → the absolute path on stdout, exit 0.
  *   - not-found       → `NO TASK FOUND for "<arg>"` on stderr, exit 1.
- *   - ambiguous       → `AMBIGUOUS: <comma-separated candidate filenames>` on
+ *   - ambiguous       → `AMBIGUOUS: <comma-separated candidate absolute paths>` on
  *                       stderr, exit 1. Interactive disambiguation, when a
  *                       caller wants it, reads the structured `candidates`.
  *
@@ -36,12 +43,14 @@
  */
 
 import { readdirSync } from 'node:fs'
-import { basename as pathBasename, isAbsolute, join } from 'node:path'
+import { basename as pathBasename, isAbsolute, join, resolve, sep } from 'node:path'
 
+import { checkoutRoot } from '@sksizer/easy-git'
 import { z } from 'zod'
 
 import { defineOp } from '@lib/registry'
 import { isFile } from '@lib/util/fs'
+import { planningRoots } from '@lib/util/planning-roots'
 
 // ---------------------------------------------------------------------------
 // Terminal markers — verbatim from file-resolution.md. Exported so callers
@@ -59,7 +68,7 @@ export function noTaskFoundMarker(arg: string): string {
 /** Prefix of the non-interactive ambiguity marker. */
 export const AMBIGUOUS_MARKER_PREFIX = 'AMBIGUOUS: '
 
-/** The full `AMBIGUOUS: <comma-separated candidate filenames>` marker. */
+/** The full `AMBIGUOUS: <comma-separated candidate absolute paths>` marker. */
 export function ambiguousMarker(candidates: string[]): string {
   return `${AMBIGUOUS_MARKER_PREFIX}${candidates.join(',')}`
 }
@@ -82,7 +91,7 @@ function listTaskFiles(tasksDir: string): string[] {
 // Pure resolution core (no ctx, no I/O beyond fs reads) — the testable unit.
 // ---------------------------------------------------------------------------
 
-type ResolveReason = 'absolute' | 'exact' | 'glob' | 'ambiguous' | 'not-found'
+type ResolveReason = 'absolute' | 'relative' | 'exact' | 'glob' | 'ambiguous' | 'not-found'
 
 interface ResolveResult {
   arg: string
@@ -112,48 +121,74 @@ function ambiguous(arg: string, candidates: string[]): ResolveResult {
   return { arg, resolved: false, reason: 'ambiguous', path: null, basename: null, candidates }
 }
 
+/** Every project root the lookup searches: `projectRoot` first, then the checkout's other projects. */
+function searchRoots(projectRoot: string): string[] {
+  const roots = planningRoots(checkoutRoot(projectRoot) ?? projectRoot)
+  return [projectRoot, ...roots.filter((r) => resolve(r) !== resolve(projectRoot))]
+}
+
+/** Absolute paths of the task files whose stem passes `keep`, across `tasksDirs`, sorted. */
+function matchingFiles(tasksDirs: string[], keep: (stem: string) => boolean): string[] {
+  const hits: string[] = []
+  for (const dir of tasksDirs) {
+    for (const file of listTaskFiles(dir)) {
+      if (keep(file.slice(0, -MD_EXT.length))) hits.push(join(dir, file))
+    }
+  }
+  return hits.sort()
+}
+
+/** Turn a hit list into a result: one → `found`, several → ambiguous, none → undefined. */
+function fromHits(arg: string, reason: ResolveReason, hits: string[]): ResolveResult | undefined {
+  if (hits.length === 1) return found(arg, reason, hits[0]!)
+  if (hits.length > 1) return ambiguous(arg, hits)
+  return undefined
+}
+
 /**
- * Resolve `arg` against `<projectRoot>/docs/planning/tasks/` per
- * file-resolution.md. Pure: only fs reads, never throws for a normal
- * not-found / ambiguous outcome.
+ * Resolve `arg` against the `docs/planning/tasks/` of every planning root per
+ * file-resolution.md; a relative path resolves against `cwd`. Pure: only fs
+ * reads, never throws for a normal not-found / ambiguous outcome.
  */
-export function resolveTaskFile(projectRoot: string, arg: string): ResolveResult {
+export function resolveTaskFile(projectRoot: string, arg: string, cwd: string): ResolveResult {
   // 1. Absolute path — use directly; missing → not found.
   if (isAbsolute(arg)) {
     return isFile(arg) ? found(arg, 'absolute', arg) : notFound(arg)
   }
 
-  const tasksDir = join(projectRoot, ...TASKS_SUBPATH)
+  // 2. Relative path — only an arg that spells a path; a bare id never is one.
+  if (arg.includes(sep) || arg.includes('/')) {
+    const relPath = resolve(cwd, arg)
+    if (isFile(relPath)) return found(arg, 'relative', relPath)
+  }
 
-  // 2. Exact filename match, with or without a trailing `.md`.
+  const tasksDirs = searchRoots(projectRoot).map((root) => join(root, ...TASKS_SUBPATH))
+
+  // 3. Exact filename match, with or without a trailing `.md`.
   const argBase = arg.endsWith(MD_EXT) ? arg.slice(0, -MD_EXT.length) : arg
-  const exactPath = join(tasksDir, `${argBase}${MD_EXT}`)
-  if (isFile(exactPath)) {
-    return found(arg, 'exact', exactPath)
-  }
+  const exact = fromHits(
+    arg,
+    'exact',
+    matchingFiles(tasksDirs, (stem) => stem === argBase),
+  )
+  if (exact !== undefined) return exact
 
-  // 3. Glob match: `<arg>*.md` then `*<arg>*.md`. The arg is a literal
+  // 4. Glob match: `<arg>*.md` then `*<arg>*.md`. The arg is a literal
   //    prefix / substring of the basename (the `.md`-stripped filename).
-  const files = listTaskFiles(tasksDir)
-  const stems = files.map((f) => f.slice(0, -MD_EXT.length))
+  const prefix = fromHits(
+    arg,
+    'glob',
+    matchingFiles(tasksDirs, (stem) => stem.startsWith(argBase)),
+  )
+  if (prefix !== undefined) return prefix
+  const substring = fromHits(
+    arg,
+    'glob',
+    matchingFiles(tasksDirs, (stem) => stem.includes(argBase)),
+  )
+  if (substring !== undefined) return substring
 
-  const prefixHits = files.filter((_, i) => stems[i]!.startsWith(argBase))
-  if (prefixHits.length === 1) {
-    return found(arg, 'glob', join(tasksDir, prefixHits[0]!))
-  }
-  if (prefixHits.length > 1) {
-    return ambiguous(arg, prefixHits)
-  }
-
-  const substringHits = files.filter((_, i) => stems[i]!.includes(argBase))
-  if (substringHits.length === 1) {
-    return found(arg, 'glob', join(tasksDir, substringHits[0]!))
-  }
-  if (substringHits.length > 1) {
-    return ambiguous(arg, substringHits)
-  }
-
-  // 4. No match.
+  // 5. No match.
   return notFound(arg)
 }
 
@@ -163,11 +198,11 @@ export function resolveTaskFile(projectRoot: string, arg: string): ResolveResult
 
 const input = z.object({
   projectRoot: z.string(),
-  /** The argument naming a task: absolute path, filename, or slug. */
+  /** The argument naming a task: absolute path, relative path, filename, or slug. */
   arg: z.string(),
 })
 
-const reason = z.enum(['absolute', 'exact', 'glob', 'ambiguous', 'not-found'])
+const reason = z.enum(['absolute', 'relative', 'exact', 'glob', 'ambiguous', 'not-found'])
 
 const output = z.object({
   /** Echo of the input arg (so the marker text can be reproduced downstream). */
@@ -181,7 +216,7 @@ const output = z.object({
   /** Resolved filename without `.md`, or null. */
   basename: z.string().nullable(),
   /**
-   * Matching filenames (with `.md`) when `reason === "ambiguous"`, sorted;
+   * Matching absolute paths when `reason === "ambiguous"`, sorted;
    * empty otherwise. A caller wanting interactive disambiguation reads this.
    */
   candidates: z.array(z.string()),
@@ -190,7 +225,7 @@ const output = z.object({
 export default defineOp({
   path: ['task', 'resolve'],
   summary:
-    'Resolve an arg naming a task (absolute path / filename / slug) to its task file (deterministic, per file-resolution.md).',
+    'Resolve an arg naming a task (absolute or relative path / filename / slug) to its task file, searching every planning root in the repo (deterministic, per file-resolution.md).',
   // Read-only: resolves an arg to a task path via fs reads only; writes
   // nothing.
   mutating: false,
@@ -215,6 +250,6 @@ export default defineOp({
     // The registry adapter injects `--project-root` into `args.projectRoot`;
     // fall back to the ctx root for direct invokeOp callers.
     const projectRoot = args.projectRoot !== '' ? args.projectRoot : ctx.projectRoot
-    return resolveTaskFile(projectRoot, args.arg)
+    return resolveTaskFile(projectRoot, args.arg, ctx.cwd)
   },
 })

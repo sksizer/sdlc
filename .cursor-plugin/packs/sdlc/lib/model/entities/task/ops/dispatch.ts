@@ -15,14 +15,17 @@
  * the EXACT per-basename lease-claim + sequence body `runWorkTick`'s own
  * loop calls, extracted once so this op and the tick can never drift apart.
  * That means the SAME safety properties apply here as in a tick:
- *   - the `max_implementations` slot backstop still applies (`claim:
- *     'capped'`) — a manual dispatch does not let a human silently exceed
- *     the cap;
+ *   - the `orchestrator.limits.implement` slot backstop still applies
+ *     (`claim: 'capped'`) — a manual dispatch does not let a human silently
+ *     exceed the cap;
  *   - the per-task `orchestrate-work/<basename>` operation lease and
  *     `lease task acquire` still gate it (`claim: 'lost'`) — this op cannot
  *     race a concurrent tick or another manual dispatch of the same task;
  *   - a pending hook park marker for the task's branch still short-circuits
- *     it (`claim: 'parked'`).
+ *     it (`claim: 'parked'`);
+ *   - an unmet `depends_on` target, or a task that cannot be read, stops it
+ *     before the task lease (`claim: 'blocked-deps'`; exit 1 in text output —
+ *     JSON output always exits 0, so read `claim`).
  *
  * No `--force`: unlike the Router (`pr route`/`pr update`, whose
  * idempotence is a SIGNATURE-keyed `DeliveryRecord` that `--force` can
@@ -33,10 +36,9 @@
  * only reports the plan (basename + `would-dispatch`); it claims no lease
  * and calls no workflow.
  *
- * Does NOT run `task next`'s candidate filtering (state, autonomy,
- * `depends_on`) — naming a specific `basename` IS the override for that
- * filtering. A caller who wants the tick's own picks should use
- * `sdlc orchestrate run --loop work` instead.
+ * Does NOT run `task next`'s state and autonomy filtering — naming a
+ * specific `basename` IS the override for those. A caller who wants the
+ * tick's own picks should use `sdlc orchestrate run --loop work` instead.
  */
 
 import { z } from 'zod'
@@ -65,12 +67,13 @@ const parkedSchema = z.object({
 const output = z.object({
   basename: z.string(),
   claim: z
-    .enum(['won', 'lost', 'parked', 'capped', 'would-dispatch'])
+    .enum(['won', 'lost', 'parked', 'capped', 'blocked-deps', 'would-dispatch'])
     .describe(
       "'won': the sequence ran (see `ok`). 'lost': the task's op-lease or task-lease is held " +
         "elsewhere right now — retry later. 'parked': a hook park marker was already pending for " +
-        "this task's branch; not dispatched. 'capped': no free max_implementations slot right " +
-        "now. 'would-dispatch': --dry-run only.",
+        "this task's branch; not dispatched. 'capped': no free orchestrator.limits.implement " +
+        "slot right now. 'blocked-deps': a depends_on target is not satisfied, or the task " +
+        "could not be read (see `unsatisfied`). 'would-dispatch': --dry-run only.",
     ),
   /** Set only when `claim === 'won'`: whether the define/implement/check/judge sequence completed clean. */
   ok: z.boolean().optional(),
@@ -78,6 +81,8 @@ const output = z.object({
   failedWorkflow: z.string().optional(),
   /** Set when a hook park marker parked the task (`claim === 'parked'`, or `won` with `ok: false`). */
   parked: parkedSchema.optional(),
+  /** See `WorkDispatchEntry.unsatisfied` in lib/services/orchestrator/ticks/work.ts. */
+  unsatisfied: z.array(z.string()).optional(),
 })
 
 // ---------------------------------------------------------------------------
@@ -102,19 +107,22 @@ export default defineOp({
     positionals: ['basename'],
     render: (out, io) => {
       const detail =
-        out.ok === false && out.failedWorkflow !== undefined
-          ? ` (failed: ${out.failedWorkflow})`
-          : ''
+        out.unsatisfied !== undefined
+          ? ` (${out.unsatisfied.join(', ')})`
+          : out.ok === false && out.failedWorkflow !== undefined
+            ? ` (failed: ${out.failedWorkflow})`
+            : ''
       io.stdout(`${out.basename}: ${out.claim}${detail}\n`)
+      return out.claim === 'blocked-deps' ? 1 : 0
     },
   },
   handler: async (args, ctx) => {
     // `noGh: false` matches `runWorkTick`'s own call — `task inflight`'s
     // `awaiting-review` bucket needs a live `gh pr list` to categorize
-    // correctly, and `max_implementations` (the only field this op reads)
-    // does not depend on it either way.
+    // correctly, and `implement` (the only field this op reads) does not
+    // depend on it either way.
     const inflight = await inflightOp.handler({ noGh: false }, ctx)
-    const maxImpl = inflight.limits.max_implementations
+    const maxImpl = inflight.limits.implement
 
     // `--dry-run` is the registry's own global flag (`ctx.dryRun`), not a
     // custom input field — same convention every other op in this registry

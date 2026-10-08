@@ -89,8 +89,8 @@ retired Term is never deleted — inbound links must keep resolving.
 
 | Name | Surface | Signature | Pointer | Description |
 |---|---|---|---|---|
-| create | cli | `sdlc term create [<slug>] --title <term>` | `solutions/ontological/lib/model/entities/term/ops/create.ts` | Author a term with minted `TM-NNNN` identity; state defaults `open/active`; slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
-| preview-id | cli | `sdlc term preview-id <title>` | `solutions/ontological/lib/model/entities/term/ops/preview-id.ts` | Read-only: report the slug + `TM-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
+| create | cli | `sdlc term create [<slug>] --title <term>` | `solutions/ontological/lib/model/entities/term/noun.ts` | Author a term with minted `TM-NNNN` identity; state defaults `open/active`; slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
+| preview-id | cli | `sdlc term preview-id <title>` | `solutions/ontological/lib/model/entities/term/noun.ts` | Read-only: report the slug + `TM-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
 | validate | cli | `sdlc entities validate <path>` | `solutions/ontological/lib/model/ops/validate.ts` | Frontmatter + body manifest check (generic cross-entity op) |
 | generate | cli | `sdlc docs generate glossary` | `solutions/ontological/lib/services/docs/` | Reassemble the glossary artifact from the instances |
 

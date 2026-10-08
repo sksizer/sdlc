@@ -27,7 +27,7 @@ import { z } from 'zod'
 
 import { defineOp } from '@lib/registry'
 import type { OpIo } from '@lib/registry'
-import { listWorktreeBasenames } from '@lib/util/git'
+import { listWorktreeBasenames, worktreeDir, worktreeRoot } from '@lib/util/git'
 import { realResolve } from '@lib/util/paths'
 
 import {
@@ -38,12 +38,11 @@ import {
   readLocalLease,
   taskBranch,
   taskFilePath,
-  worktreePath,
 } from './_probe_core.ts'
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_MAX_IMPLEMENTATIONS = 5
+const DEFAULT_IMPLEMENT_LIMIT = 5
 const DEFAULT_MAX_AWAITING_REVIEW = 20
 
 const CATEGORY_IMPLEMENTING = 'implementing'
@@ -112,7 +111,7 @@ const InflightTask = z.object({
 
 const output = z.object({
   limits: z.object({
-    max_implementations: z.number(),
+    implement: z.number(),
     max_awaiting_review: z.number(),
   }),
   counts: z.record(z.string(), z.number()),
@@ -160,11 +159,13 @@ export default defineOp({
     const projectRoot = realResolve(ctx.projectRoot)
 
     // ctx.sdlcConfig is hydrated by createCtx; degrade-to-defaults on any error.
-    const maxImpl = ctx.sdlcConfig.orchestrator?.max_implementations ?? DEFAULT_MAX_IMPLEMENTATIONS
+    const maxImpl = ctx.sdlcConfig.orchestrator?.limits?.implement ?? DEFAULT_IMPLEMENT_LIMIT
     const maxRev = ctx.sdlcConfig.orchestrator?.max_awaiting_review ?? DEFAULT_MAX_AWAITING_REVIEW
 
     const branches = listLocalBranches(projectRoot, ctx)
-    const basenames = listWorktreeBasenames(projectRoot)
+    // Worktrees live under the primary checkout, not the (possibly nested) project root.
+    const wtBase = worktreeRoot(projectRoot, { runner: ctx.git })
+    const basenames = listWorktreeBasenames(wtBase)
 
     const tasks: z.infer<typeof InflightTask>[] = []
     for (const basename of basenames) {
@@ -188,7 +189,7 @@ export default defineOp({
       const category = classify(taskState, openPrNumber, leasePhase)
       tasks.push({
         basename,
-        worktree_path: worktreePath(projectRoot, basename),
+        worktree_path: worktreeDir(wtBase, basename),
         branch,
         task_state: taskState,
         open_pr_number: openPrNumber,
@@ -208,11 +209,11 @@ export default defineOp({
     }
 
     const capsReached: string[] = []
-    if ((counts[CATEGORY_IMPLEMENTING] ?? 0) >= maxImpl) capsReached.push('max_implementations')
+    if ((counts[CATEGORY_IMPLEMENTING] ?? 0) >= maxImpl) capsReached.push('implement')
     if ((counts[CATEGORY_AWAITING_REVIEW] ?? 0) >= maxRev) capsReached.push('max_awaiting_review')
 
     return {
-      limits: { max_implementations: maxImpl, max_awaiting_review: maxRev },
+      limits: { implement: maxImpl, max_awaiting_review: maxRev },
       counts,
       caps_reached: capsReached,
       tasks,

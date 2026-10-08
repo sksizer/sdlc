@@ -7,7 +7,7 @@
  * Data shape (it.*):
  *   count          number    total entity type count
  *   typeList       string    comma-joined type names e.g. "backlog, capability, ..."
- *   pluralList     string    comma-joined plural paths e.g. "`backlogs/`, `capabilities/`, ..."
+ *   pluralList     string    comma-joined plural paths e.g. "`backlog/`, `capabilities/`, ..."
  *   identityRows   string[][]  rows for the identity table: [type, prefix, numbering, wikilink]
  *   identityFootnotes string[]  footnote strings (may be empty)
  *   rosterRows     string[][]  rows for the roster table: [type, role, keyFields]

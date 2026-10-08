@@ -138,6 +138,15 @@ export const CapabilitySchema = CommonFrontmatter.extend({
         'glob. Every form degrades to a path/glob. `entities audit` warns ' +
         '(anchor rot) when a stored location no longer resolves in the tree.',
     ),
+  product: z
+    .string()
+    .regex(entityWikilinkPattern('PR'))
+    .optional()
+    .describe(
+      'Wikilink to the Product this capability belongs to (PR-XXXX). Absent = ' +
+        'unassigned. Planning use: with `audience: user` it is the features ' +
+        "lens — which product's feature surface the capability is part of.",
+    ),
   related: z
     .array(z.string().regex(ENTITY_WIKILINK_PATTERN))
     .default([])

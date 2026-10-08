@@ -31,12 +31,12 @@
 import { parse, sectionSpans, codeBlockLines, tableRowLines } from 'markdown-contract'
 import type { SectionNode } from 'markdown-contract'
 import { z } from 'zod'
+import { rowCellTexts } from '@sksizer/gfm-table'
 
 import { defineOp } from '@lib/registry'
 import { splitFrontmatter } from '@lib/util/frontmatter'
 import { specBearingTaskSections, taskSectionLookup } from '@lib/model/entities/task/schema'
 
-import { splitTableRow } from './_table_cells.ts'
 import { readTaskDoc } from './_task_doc.ts'
 
 // Inline code spans: `...`. Mask matches inside backticks so we don't flag
@@ -104,7 +104,7 @@ function maskInlineCode(body: string): string {
  * (between pipes, after stripping) is empty.
  */
 function rowHasEmptyCell(rawLine: string): boolean {
-  return splitTableRow(rawLine.trim()).some((cell) => cell === '')
+  return rowCellTexts(rawLine.trim()).some((cell) => cell === '')
 }
 
 /**

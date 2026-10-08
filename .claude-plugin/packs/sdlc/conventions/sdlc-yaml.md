@@ -33,7 +33,7 @@ fields; `lib/config/reference.ts`), and `sdlc docs generate --check` fails when
 the committed copy drifts from the schema. From inside a project,
 `sdlc config list` shows every key's effective value and the layer it comes
 from, and `sdlc config explain <key>` (dotted paths such as
-`orchestrator.max_implementations` work) prints one key's reference entry
+`orchestrator.limits.implement` work) prints one key's reference entry
 alongside its value here.
 
 ## Key meta
@@ -64,15 +64,22 @@ symbol, the `machine` layer is claimed by exactly the keys
 ## Single hydration point
 
 All in-process consumers route through `loadConfig(projectRoot)` from
-`@lib/config`. It is called once by `createCtx` in `solutions/ontological/lib/registry.ts`
-and stored on `ctx.sdlcConfig`. Handlers read config via `ctx.sdlcConfig`
+`@lib/config`. `createCtx` in `solutions/ontological/lib/registry.ts` calls it on
+first read of `ctx.sdlcConfig` (once per ctx). Handlers read config via `ctx.sdlcConfig`
 — no secondary YAML reads.
 
 `loadConfig` contract:
 
 - Returns a fully-typed `SdlcConfig` with all defaults filled by Zod.
-- **Never throws.** On missing file / YAML error / schema-invalid document
-  → degrades to the all-defaults object (same as an empty file).
+- An absent `sdlc.yaml`/`sdlc.local.yaml` is not an error: with neither file
+  present the result is the all-defaults object (same as an empty file).
+- **An invalid file is fatal.** A file that exists but cannot be read, is not
+  YAML, is not a mapping, or fails the schema throws `ConfigInvalidError`
+  (the layered file path(s) plus each Zod issue's key path and message). There
+  is no fallback to defaults; the CLI exits 14 (`SCHEMA_ERROR`). Only the
+  ops that read, explain, edit or diagnose the config (`sdlc config
+  get|list|explain|set|unset|scaffold`, `sdlc project doctor`) run against an
+  invalid file, reporting the problem rather than refusing.
 - Memoized per resolved absolute path. Call `clearConfigCache()` between
   tests.
 
@@ -140,7 +147,13 @@ workflows:                  # named lifecycle workflows: setup, setup-hooks, che
     engine: codex            # engine/host live beside steps on any entry
 
 orchestrator:
-  max_implementations: 5    # cap on concurrent /sdlc:task-work sub-agents
+  limits:                  # per-operation concurrency caps — see below
+    implement: 5           # cap on concurrent /sdlc:task-work sub-agents
+    pr_review: 2
+    pr_respond: 3
+    pr_update: 5
+    close_out: 5
+    issues: 2
   max_awaiting_review: 20   # informational ceiling on open PRs awaiting review
   review:
     max_rounds: 3           # review/respond round-trips per PR before it stops
@@ -158,7 +171,11 @@ pr_update:                  # sdlc pr survey / sdlc pr update
     max_rebase_commits: 20  # above this, merge instead of replaying; 0 disables
   lockfile_install: null    # verb that re-derives lockfiles, e.g. 'bun install'
   resolvers: []             # [{paths: ['docs/index.md'], run: 'sdlc docs generate'}]
-  verify: none              # none | check, before a push
+  verify: none              # none | check | test, before a push
+  repair:
+    command: null           # last-resort command (e.g. an LLM call); trust-gated
+    on: [conflict]          # conflict | verify-failed
+  max_failed_attempts: 1    # skip a PR after this many failures at the same head and base; 0 = off
 
 task:
   execution:
@@ -194,6 +211,7 @@ pr_review:                  # sdlc pr review
   engine: claude            # claude | codex | cursor | pi
   untrusted: skip-init      # skip-init | full | refuse
   setup: true               # run setup on every launch; --no-setup skips it
+  refresh: update           # update | pull | off, for a reused worktree; --no-refresh skips it
 
 verify:                     # sdlc verify changes
   engine: claude            # claude | codex | gemini | opencode
@@ -406,8 +424,9 @@ time `resolveWorkflow` returns, its steps are always `skill`/`prompt`/
 (e.g., `sdlc pr review <url>` targeting another repo), `resolveWorkflow`
 validates the target's `sdlc.yaml` and `sdlc.local.yaml` (when present),
 throwing `OpError('SCHEMA_ERROR', …)` so a stale key fails loudly rather than
-silently defaulting. Callers that choose `validate: false` opt out (used
-internally when recursing into a `run:`/fallback splice).
+silently defaulting. Callers that choose `validate: false` skip only this
+extra check (used internally when recursing into a `run:`/fallback splice);
+`loadConfig` still throws on an invalid file.
 
 **Unknown keys fail validation.** A top-level key the schema does not declare
 fails Zod's ordinary unrecognized-key check, the same diagnostic as any typo
@@ -532,11 +551,10 @@ this file, not from the underlying project config. The strict-validation
 surfaces (`resolveWorkflow`'s loud path, and the per-op preflight gate)
 validate `sdlc.local.yaml` on its own — a read/parse/non-mapping error or an unknown
 key fails loudly naming the local file — before also validating the two
-merged together. The standalone check matters because `loadConfig`/
-`loadConfigLayers` (the tolerant path other callers use) degrade an
-unparseable local file to `local: null` and quietly carry on with the
-project config alone; validating it separately means that degrade can never
-mask a broken override on the loud path.
+merged together. `loadConfig`/`loadConfigLayers` likewise throw on an invalid
+local file; the standalone check names which file is at fault, and reads the
+layers through the unvalidating `readConfigLayers` so it can look at a broken
+one.
 
 `sdlc config scaffold --local` renders a commented template of the full
 shape.
@@ -544,21 +562,93 @@ shape.
 ### `orchestrator:` — in-flight limits for `/sdlc:orchestrate`
 
 The `orchestrator:` block configures the categorized in-flight limits
-that `/sdlc:orchestrate` enforces during its dispatch step. Two
-limits, two structurally different things:
+that `/sdlc:orchestrate` enforces during its dispatch step, plus the
+per-operation dispatch caps the `work`/`prs`/`merges`/`issues` ticks
+gate every session-starting dispatch against:
 
 ```yaml
 orchestrator:
-  max_implementations: 5    # default
+  limits:
+    implement: 5      # default
+    pr_review: 2      # default
+    pr_respond: 3     # default
+    pr_update: 5      # default
+    close_out: 5      # default
+    issues: 2         # default
+    session_ttl_minutes: 180   # default
+    # total: unset — no cross-operation cap by default
   max_awaiting_review: 20   # default
 ```
 
-- **`max_implementations:`** — hard cap on the count of tasks
-  currently in the `implementing` category (state `in-progress`,
-  no open PR). When the count is at or above this limit, the
-  orchestrator does NOT dispatch any new `/sdlc:task-work`
-  sub-agents this tick. This is the only limit that blocks
-  dispatch. Default: `5`.
+- **`limits.implement:`** — hard cap on concurrent `implement`
+  dispatches: tasks currently in the `implementing` category (state
+  `in-progress`, no open PR), read via `sdlc task inflight`. Counts
+  sessions already running from earlier passes plus this pass's own
+  dispatches. At or above this limit, the `work` tick does NOT
+  dispatch any new `/sdlc:task-work` sub-agent this pass — the
+  candidate stays eligible for the next one (no cursor/round advance,
+  no lease taken). The `issues` tick's `define`/`implement`/`check`/
+  `judge` advances count against this cap too; when `work` has not
+  run first in the pass (`--loop issues` alone), the `issues` tick
+  seeds the same `task inflight` count itself, so it can never push
+  past the cap while tasks are already implementing. Default: `5`.
+  This replaces the old top-level `orchestrator.max_implementations`
+  key (same default, same semantics) now that every dispatching
+  operation has its own cap.
+- **`limits.pr_review:`** — cap on concurrent `pr-review` dispatches
+  (the `prs` tick's new-PR path). Counted from live `.sdlc/sessions/`
+  records plus this pass's own dispatches (see
+  `limits.session_ttl_minutes` for what "live" means). Default: `2`.
+- **`limits.pr_respond:`** — cap on concurrent `pr-respond`
+  dispatches (the `prs` tick's NEEDS-RESPONSE/CI-FAILED path,
+  `merges`' CONFLICTS path, and a `respond` chain-stage advance from
+  the `issues` tick). Durable for fresh dispatches, per-pass for
+  resume: the Router's `fresh` route (and the direct non-Router
+  dispatch) goes through session launch and leaves a session record a
+  later pass counts, but a Router `resume` delivery bypasses session
+  launch entirely, so a `resume` still running from an earlier pass is
+  invisible to the count (an accepted under-count) and counts only
+  within the pass that started it; a `live` delivery into an
+  already-running session starts no new session and never counts at
+  all. Default: `3`.
+- **`limits.pr_update:`** — cap on concurrent `pr-update` dispatches
+  (the `merges` tick's stale-branch fan-out). Counted per pass only:
+  it is a deterministic script step, not an agent session, so no
+  session record exists to scan on a later pass. Every attempt counts,
+  whether the script exits clean or not. Today the built-in
+  `pr-update` workflow runs `sdlc pr update --pr {pr}` without
+  `--apply`, so it writes nothing: this cap throttles those read-only
+  measurements, and only starts bounding real rebase/merge work once a
+  workflow applies updates. Default: `5`.
+- **`limits.close_out:`** — cap on concurrent `close-out` dispatches
+  (the `merges` tick's MERGED-verdict path, and a `close-out`
+  chain-stage advance from the `issues` tick). Counted from live
+  `.sdlc/sessions/` records plus this pass's own dispatches. A merged
+  PR leaves the open-PR listing, so a close-out a cap (or a pause)
+  holds back is recorded in `.sdlc/orchestrator-pending-close-outs.json`
+  and retried first on the next pass. Default: `5`.
+- **`limits.issues:`** — cap on concurrent chain-stage advances
+  dispatched by the `issues` tick, enforced IN ADDITION to whichever
+  of the caps above the advanced stage's own workflow counts against.
+  Counted per pass only (the underlying stage's own cap carries the
+  durable count). Default: `2`.
+- **`limits.total:`** — optional cap across ALL of the operations
+  above combined, checked in addition to each one's own limit. Unset
+  by default: no cross-operation cap.
+- **`limits.session_ttl_minutes:`** — how long a session record with
+  no recorded `pid` still counts as running toward the session-counted
+  caps (`pr_review`, `pr_respond`, `close_out`). A headless launch
+  stamps the spawned engine's pid on its record, and a record with a
+  pid counts only while that process is alive, so a session orphaned
+  by a killed orchestrator stops blocking once its process is gone; a
+  pid-less record has no such signal, so this age bound keeps it from
+  counting forever. The sessions directory is scanned once per pass
+  and the counts cached for that pass. Default: `180`.
+
+Every cap above accepts `0`, meaning that operation is disabled: each
+candidate is skipped with `limit <op> 0/0` (and `limits.total: 0`
+disables them all).
+
 - **`max_awaiting_review:`** — informational ceiling on the count
   of tasks in the `awaiting-review` category (state `in-progress`
   AND an open PR exists for `task/<basename>`). When the count is
@@ -569,19 +659,40 @@ orchestrator:
   already handed control back to the human; they don't consume
   implementation slots. Default: `20`.
 
-A third category — `stale` — surfaces in the digest but never
-counts against either limit. Stale = worktree still exists but the
+A limit that blocks an item never advances its cursor, records a
+review round, or takes a lease — the item stays eligible for the next
+pass. For the `prs` tick that includes the PR comment cursor: a
+blocked item commits nothing, so comment-only feedback is still unseen
+next pass, and a new PR keeps its first `pr-review` (the cursor's
+`first_review_at` is stamped only when that review is actually
+dispatched, not when the PR is first classified). Each tick's per-item
+plan output (`sdlc orchestrate run --dry-run`) reports a blocked item
+as `action=skip reason="limit <op> <count>/<cap>"`, and the tick
+summary line's `caps-reached=` field collects the distinct reasons hit
+that pass in a space-free, comma-joined form
+(`caps-reached=limit:pr_review:2/2,limit:total:7/7`) so readers that
+split the line on whitespace keep the whole value (see
+`ticks/_limits.ts`, the one shared gate/count helper every tick reads
+through).
+
+A third inflight category — `stale` — surfaces in the digest but never
+counts against any limit. Stale = worktree still exists but the
 task file's frontmatter is already `closed/...`; the close-out
 teardown missed something and the digest is the surface for the
 human (or a follow-up tick) to clean it up.
 
-The counter that produces these categories is `sdlc task inflight` —
-see its `--help` for the schema of its JSON output. The orchestrator
-shells out to it once per tick.
+The counter behind `limits.implement`'s durable share is `sdlc task
+inflight` — see its `--help` for the schema of its JSON output. The
+orchestrator shells out to it once per tick.
 
-Missing block or missing key both default to `max_implementations: 5`
-and `max_awaiting_review: 20`. An empty `orchestrator: {}` block is
-treated the same as missing.
+Missing block or missing keys default to `limits.implement: 5` (and
+the rest of `limits`' own defaults) and `max_awaiting_review: 20`. An
+empty `orchestrator: {}` block is treated the same as missing. The
+retired top-level `orchestrator.max_implementations` key is now an
+unrecognized key — a leftover copy of it fails validation the same
+way any other typo would, rather than being silently accepted. A
+config that fails validation stops every sdlc command (see "Single
+hydration point"), `orchestrate run` included, `--dry-run` too.
 
 #### `orchestrator.review:` — the built-in `pr-review` dispatch
 
@@ -657,6 +768,7 @@ orchestrator:
     routes: [live, resume, fresh]        # default
     live_enabled: false                  # default
     max_deliveries_per_pr: 20            # default
+    quiet_period_secs: 120               # default
 ```
 
 The Router (M-27ZR, `lib/services/dispatch/`) is how the `prs`/`merges`
@@ -665,15 +777,19 @@ back to the session that produced the PR, instead of always paying for a
 brand-new, context-less `pr-respond` sub-agent. It tries an ordered
 fallback chain and stops at the first route that succeeds:
 
-- **`live`** — send text into a still-running session (Orca-hosted
-  only today; the one host with a documented terminal-injection
-  mechanism). Off by default (`live_enabled: false`) — unverified
-  against a real Orca session outside this repo's own dev loop.
+- **`live`** — send text into a still-running session (any host with
+  a `send` part — `orca`/`tmux` today). Off by default
+  (`live_enabled: false`) for the `prs`/`merges` loop — unverified
+  end-to-end against a real hosted session. An explicit
+  `sdlc pr route <n> --route live` still attempts it regardless of
+  this flag: that is a single manual op confirming the route works
+  from the pane, not the loop-wide default turning on.
 - **`resume`** — a headless native resume of the originating harness
-  session (`claude -p --resume <id> -- <message>` /
+  session (`claude -p --resume=<id> -- <message>` /
   `codex exec resume <id> -- <message>`) with the feedback bundle as
-  the follow-up prompt. The common case once a task's session record
-  has a `hostSessionId`.
+  the follow-up prompt. A claude resume passes the launch's plugin and
+  prompt-pin flags again, read from the session record. The common case
+  once a task's session record has a `harnessSessionId`.
 - **`fresh`** — today's cold dispatch: open a brand-new `pr-respond`
   sub-agent with the feedback as its prompt. Always reachable once a
   PR number is known; the terminal fallback when no session can be
@@ -691,13 +807,36 @@ cap `pr-respond` itself already respects.
   still be invoked manually regardless of this flag. Default: `true`.
 - **`routes:`** — the ordered fallback chain itself; a route missing
   from this list is never attempted. Default: `[live, resume, fresh]`.
-- **`live_enabled:`** — whether `live` may actually run even when
-  `routes` lists it. Default: `false` (see above).
+- **`live_enabled:`** — whether the `prs`/`merges` loop may actually
+  run `live` even when `routes` lists it. Default: `false` (see
+  above). Does not gate an explicit `sdlc pr route <n> --route live`.
 - **`max_deliveries_per_pr:`** — cap on entries kept in one subject's
   `DeliveryRecord` attempt history (oldest dropped past this); does
   NOT cap how many distinct items can be delivered. Default: `20`.
+- **`quiet_period_secs:`** — seconds to wait after the newest undelivered
+  comment or review before delivering, so a burst of comments goes out as
+  one batch. Failing checks and conflicts never start the wait;
+  `sdlc pr route --force` and `--route` skip it. `0` turns it off.
+  Default: `120`.
 
-Missing block or missing key defaults to all four values above.
+Missing block or missing key defaults to all five values above.
+
+#### `orchestrator.polling:` — skipping unchanged PRs
+
+```yaml
+orchestrator:
+  polling:
+    full_refresh_secs: 900               # default
+```
+
+The `prs` tick lists open PRs with their `updatedAt` first. A PR whose
+`updatedAt` matches what its cursor recorded on the last full fetch keeps
+its cached verdict and is not fetched again, until that fetch is older
+than `full_refresh_secs`. A PR whose last verdict was `CI-BLOCKED`,
+`NEEDS-RESPONSE` or `CI-FAILED`, or whose checks were still pending, is
+always fetched: GitHub does not bump
+`updatedAt` for check runs or base-branch moves. `0` fetches every PR
+every tick. Default: `900`.
 
 ##### Pausing the orchestrator
 
@@ -873,7 +1012,7 @@ field it declares matches, and a rule declaring neither `base:` nor
 Guards only ever step down from `rebase`. Nothing in this block turns a
 configured `merge` into a rebase.
 
-`lockfile_install:`, `resolvers:` and `verify:` are `sdlc pr update`'s
+`lockfile_install:`, `resolvers:`, `verify:` and `repair:` are `sdlc pr update`'s
 business — how a conflict is resolved without a human, and what must pass
 before the result is pushed.
 
@@ -887,6 +1026,23 @@ a human rather than resolved to a file that disagrees with its own manifest.
 
 A conflicted path nothing claims ends that PR's update and the run moves on.
 Guessing at a source file would be worse than reporting it.
+
+`repair.command:` is the opt-in exception. When it is set, `sdlc pr update
+--apply` runs it once in the update worktree for a problem the deterministic
+rungs left: an unclaimed `conflict`, and a failed verify step when `on:` lists
+`verify-failed`. It receives the request as JSON on stdin and in
+`PR_UPDATE_*` variables, edits files, and exits 0 to claim success. It must
+not commit, move HEAD or create refs. `sdlc pr update` checks for that, for
+leftover conflict markers and for `git diff --check` errors, then commits,
+re-runs `verify` and pushes itself. A rehearsal never runs it. The command
+is project-sourced, so it is trust-gated like `verify: check` below.
+
+`max_failed_attempts:` stops `sdlc pr update` retrying a PR that will fail the
+same way. Each `conflict` or `failed` result from an `--apply` run is recorded
+in `.pr-update/attempts.json`, keyed by the head and base sha. Once a PR has
+failed that many times at its current head and base, later runs skip it until
+either branch moves. A successful update clears the record. The default is
+`1`; `0` turns the check off, and `--retry-failed` ignores it for one run.
 
 `sdlc pr update --interactive` shows the same plan as a checklist and runs
 only the rows you tick — the per-PR call is the one a person actually wants
@@ -904,6 +1060,16 @@ verb list, so it is trust-gated
 the same way (see Trust, above): the repository must be trusted (`sdlc repo
 trust`) or the run must pass `sdlc pr update --trust`, or it exits
 `UNTRUSTED` before touching any PR.
+
+`verify: test` runs `workflows.test` the same way, but only a list set in
+`sdlc.yaml`, `sdlc.local.yaml` or `SDLC_WORKFLOW_TEST`. It never falls back to
+a detected test task. Record one once with `sdlc config pin-test` (or accept it during `sdlc
+init`): it detects the test command, asks `[Y/n]` on a terminal, and writes
+`workflows.test`. `--yes` skips the question and `--command <cmd>` records a
+given command; a detected command never replaces a different recorded one.
+When `workflows.test` resolves to no command (unset, `[]`, or a `run:` to an
+unset name), `sdlc pr update` fails before touching any PR and names `sdlc
+config pin-test`.
 
 Scope is the repository at `--project-root` unless `--repo owner/name` names others; those are found
 through the top-level [`repos:`](#repos--where-other-repositories-live-on-this-machine) containers.
@@ -1440,6 +1606,19 @@ key is consumed — `repoContainers` (`repos`), `pathTokens` (`paths`),
 those three functions, not a fourth mechanism. `SDLC_MACHINE_CONFIG=<path>`
 relocates the file for one run.
 
+`sdlc config set --layer machine <key> <value>` and `sdlc config unset --layer
+machine <key>` edit the file in place, keeping its comments. They accept only
+keys whose `layers` list `machine`, validate the result against
+`MachineConfigSchema`, keep the previous file as `config.yaml.bak`, and write
+atomically. A problem already in the file does not block an unrelated edit.
+The dashboard cannot write this file. `trust` grants stay with `sdlc repo trust`.
+
+The file has an optional integer `version`; a file without one is version 1.
+The loader upgrades an older file in memory on every read. `sdlc config
+migrate-machine` writes the upgrade to disk (`--dry-run` reports it only),
+keeping a `.bak`; the rewrite drops comments. A file whose `version` is newer
+than this build knows is read as-is and reported.
+
 ## Consumers
 
 All in-process consumers read config via `ctx.sdlcConfig` (set by
@@ -1452,8 +1631,12 @@ there too. The list below is the narrative companion.
   hydrated once per CLI invocation by `createCtx` via `loadConfig`. Every
   op handler reads config from here.
 - **`solutions/ontological/lib/model/entities/task/ops/inflight.ts`** — reads
-  `ctx.sdlcConfig.orchestrator.max_implementations` and
+  `ctx.sdlcConfig.orchestrator.limits.implement` and
   `ctx.sdlcConfig.orchestrator.max_awaiting_review` for the dispatch caps.
+- **`solutions/ontological/lib/services/orchestrator/ticks/_limits.ts`** —
+  reads the whole `ctx.sdlcConfig.orchestrator.limits` block; the one shared
+  gate/count helper `work.ts`/`prs.ts`/`merges.ts`/`issues.ts` all read
+  through, rather than each resolving `orchestrator.limits.*` itself.
 - **`solutions/ontological/lib/services/orchestrator/ticks/prs.ts`** /
   **`_pr_action.ts`** — read `ctx.sdlcConfig.orchestrator.review.max_rounds`
   to cap `pr-review`/`pr-respond` round-trips per PR.
@@ -1494,10 +1677,10 @@ there too. The list below is the narrative companion.
   wrapper over `@sksizer/pr-update`'s `runUpdate`, which plans from the same
   `runSurvey` call and reads `pr_update.lockfile_install`,
   `pr_update.resolvers` and `pr_update.verify` for the conflict-resolver
-  ladder and the pre-push gate; `verify: check` reaches the wrapper's
-  `resolveVerifyVerbs` port, which calls `resolveWorkflowCommands('check',
-  projectRoot)` and trust-gates the result before the package runs the check
-  verbs.
+  ladder and the pre-push gate; `verify: check` or `test` reaches the
+  wrapper's `resolveVerifyVerbs` port, which calls
+  `resolveWorkflowCommands(which, projectRoot)` (with detection off for
+  `test`) and trust-gates the result before the package runs the verbs.
 - **`solutions/ontological/lib/services/lease/runtime.ts`** — calls `lowReadLeaseAuthority`
   (from `@lib/config/load.ts`) as the raw YAML read inside its
   `readAuthorityFromSdlcYaml` dedup point. The env-override / throw-on-unset
@@ -1542,7 +1725,8 @@ there too. The list below is the narrative companion.
 
 `sdlc.yaml` is human-authored YAML. `sdlc config set <key> <value>` edits
 any key in place (`<value>` read as YAML: a scalar or a flow list/map;
-`--layer local` targets `sdlc.local.yaml`), and `sdlc config unset <key>`
+`--layer local` targets `sdlc.local.yaml`, `--layer machine` the
+[machine-level config](#machine-level-config)), and `sdlc config unset <key>`
 removes one. Both validate the whole resulting config against
 `SdlcConfigSchema` before writing and write through `@sksizer/yaml-splice`
 (`lib/config/edit.ts`), so comments, key order and blank lines elsewhere in the
@@ -1561,14 +1745,13 @@ Two paths to populate verbs specifically:
    Re-running `/sdlc:find-verbs --name check` later is safe — it reads the
    existing list, merges the new selection, and writes back.
 
-A hand-edited file is validated against `SdlcConfigSchema` whenever an sdlc
-command runs: the CLI's preflight (`solutions/ontological/lib/preflight.ts`)
-refuses to run any op while the file fails the schema, printing each Zod
-issue as an `at <location>: <message>` line. Inside the library `loadConfig`
-still degrades a schema-invalid document to the all-defaults object, so
-in-process callers never throw on config; the CLI is where a person gets
-told. The `workflows:` names are validated through the same schema every time
-a tool resolves them, so a malformed verb list surfaces at that point.
+A hand-edited file is validated against `SdlcConfigSchema` whenever an sdlc command runs: the CLI's
+preflight (`solutions/ontological/lib/preflight.ts`) refuses to run any op while the file fails the
+schema, printing each Zod issue as an `at <location>: <message>` line; the library's `loadConfig`
+throws `ConfigInvalidError` on the same file. Ops that set `toleratesInvalidConfig`
+(`sdlc config …`, `sdlc project doctor`) are exempt so a person can see and fix the problem. The
+`workflows:` names are validated through the same schema every time a tool resolves them, so a
+malformed verb list surfaces at that point.
 
 ## Why not under `entities/`?
 

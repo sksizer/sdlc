@@ -1,0 +1,18 @@
+{
+  "name": "site",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "generate": "sdlc docs generate site --project-root ..",
+    "dev": "bun run generate && bunx astro dev",
+    "start": "bun run generate && bunx astro dev",
+    "build": "bun run generate && bunx astro build",
+    "preview": "bun run generate && bunx astro preview",
+    "astro": "bunx astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.39.2",
+    "astro": "^6.3.1",
+    "sharp": "^0.34.5"
+  }
+}
