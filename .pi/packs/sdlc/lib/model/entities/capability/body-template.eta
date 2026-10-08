@@ -1,0 +1,45 @@
+<!--
+  Capability body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances. Leaf capabilities
+  keep Inputs / Outputs / Underlying implementation; tree roots swap
+  those for Contained sub-features / Lifecycle map.
+-->
+
+# <%= it.title ?? "<Title>" %>
+
+## Summary
+
+- <First bullet — the capability's essence in one line. Tag with ^summary> ^summary
+- <Second bullet — decomposition or major supporting claim>
+
+## Statement
+
+<What the system can do, phrased as an observable ability. One or
+two paragraphs; cite the principles or decisions that shape it.>
+
+## What it provides
+
+- <concrete deliverable>
+
+## Inputs
+
+- <what the capability consumes>
+
+## Outputs
+
+- <what the capability produces>
+
+## Hook points
+
+- <extension surface. Delete this section if none exist.>
+
+## Underlying implementation
+
+- <skill / script / module realizing it today. Mirror the code paths
+  as machine-readable anchors in the `locations` frontmatter (five-form
+  Location grammar; `entities audit` warns on anchor rot).>
+
+## Notes
+
+- <caveat or open question. Delete this section if there's nothing to flag.>

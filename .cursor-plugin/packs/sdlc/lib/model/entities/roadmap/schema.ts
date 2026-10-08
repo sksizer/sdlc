@@ -28,6 +28,7 @@ import {
   CommonFrontmatter,
   DOC_WIKILINK_PATTERN,
   entityIdPattern,
+  entityWikilinkPattern,
   requiredWhen,
 } from '../_common.ts'
 import { titleMirrorsH1 } from '../_rules.ts'
@@ -58,11 +59,11 @@ export const RoadmapSchema = CommonFrontmatter.extend({
     ),
   plan_doc: z
     .string()
-    .regex(DOC_WIKILINK_PATTERN)
+    .regex(entityWikilinkPattern('N'))
     .describe(
-      'Wikilink to the rationale/planning doc this roadmap tracks against ' +
-        '(a non-entity planning doc referenced by its wikilink slug, e.g. ' +
-        '`[[sdlc-0.8-plan]]` for `docs/planning/sdlc-0.8-plan.md`).',
+      'Wikilink to the Note (N-XXXX, slug optional) holding the rationale/plan ' +
+        'this roadmap tracks against, e.g. `[[N-4F2K-sdlc-0-8-plan]]`. `roadmap ' +
+        'check` reports a plan_doc that resolves to no note file.',
     ),
   related: z
     .array(z.string().regex(DOC_WIKILINK_PATTERN))

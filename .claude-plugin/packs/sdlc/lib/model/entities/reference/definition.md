@@ -87,8 +87,8 @@ resolving.
 
 | Name | Surface | Signature | Pointer | Description |
 |---|---|---|---|---|
-| create | cli | `sdlc reference create [<slug>] --title <name> [--url <url>]` | `solutions/ontological/lib/model/entities/reference/ops/create.ts` | Author a reference with minted `RF-NNNN` identity; state defaults `open/active`; slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
-| preview-id | cli | `sdlc reference preview-id <title>` | `solutions/ontological/lib/model/entities/reference/ops/preview-id.ts` | Read-only: report the slug + `RF-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
+| create | cli | `sdlc reference create [<slug>] --title <name> [--url <url>]` | `solutions/ontological/lib/model/entities/reference/noun.ts` | Author a reference with minted `RF-NNNN` identity; state defaults `open/active`; slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
+| preview-id | cli | `sdlc reference preview-id <title>` | `solutions/ontological/lib/model/entities/reference/noun.ts` | Read-only: report the slug + `RF-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
 | validate | cli | `sdlc entities validate <path>` | `solutions/ontological/lib/model/ops/validate.ts` | Frontmatter + body manifest check (generic cross-entity op) |
 | generate | cli | `sdlc docs generate references` | `solutions/ontological/lib/services/docs/` | Reassemble the references roster from the instances |
 

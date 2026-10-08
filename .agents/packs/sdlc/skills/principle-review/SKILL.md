@@ -17,8 +17,8 @@ PR carrying the recommended text edits.
 
 Usage:
 
-- `/sdlc:principle-review` — report only; read-only on the project.
-- `/sdlc:principle-review --propose` — report, then a PR of proposed edits.
+- `$sdlc:principle-review` — report only; read-only on the project.
+- `$sdlc:principle-review --propose` — report, then a PR of proposed edits.
 
 ## Steps
 

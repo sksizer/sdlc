@@ -1,0 +1,9 @@
+<!--
+  Note body template (Eta). Body-only — frontmatter is synthesized from the
+  entity's Zod schema by the authoring pipeline (lib/model/authoring.ts), which
+  strips this comment from rendered instances.
+-->
+
+# <%= it.title ?? "<Note>" %>
+
+<One line: what this note is for and where it stands.>

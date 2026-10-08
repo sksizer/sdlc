@@ -111,13 +111,13 @@ Four majors: `planning/*` (spec forming, not pickable), `open/*`
 
 | Name | Surface | Signature | Pointer | Description |
 |---|---|---|---|---|
-| create | runner | `task create [<slug>] [...]` | `solutions/ontological/lib/model/entities/task/ops/create.ts` | Author a task with minted identity (the relocated `new_task.ts` core); gates the slug against the canonical `SLUG_RE`; slug optional — derived from `--headline` via the shared `deriveSlug` when omitted |
-| preview-id | cli | `sdlc task preview-id <title>` | `solutions/ontological/lib/model/entities/task/ops/preview-id.ts` | Read-only: report the slug + `T-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
+| create | runner | `task create [<slug>] [...]` | `solutions/ontological/lib/model/entities/task/noun.ts` | Author a task with minted identity (the relocated `new_task.ts` core); gates the slug against the canonical `SLUG_RE`; slug optional — derived from `--headline` via the shared `deriveSlug` when omitted |
+| preview-id | cli | `sdlc task preview-id <title>` | `solutions/ontological/lib/model/entities/task/noun.ts` | Read-only: report the slug + `T-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
 | resolve | cli | `sdlc task resolve <arg>` | `solutions/ontological/lib/model/entities/task/ops/resolve.ts` | Resolve an arg (absolute path / filename / slug) to its task file; the deterministic substrate home of `file-resolution.md` (`NO TASK FOUND` / `AMBIGUOUS` markers) |
 | gap-report | runner | `task gap-report <task>` | `solutions/ontological/lib/model/entities/task/ops/gap-report.ts` | Deterministic readiness-gap composite — required-section presence + `scan-placeholders` + `parse-touchpoints` (`## Areas` shape, informational only, v7) + `check-claims`, emitted as one structured report; no LLM (interpretation stays in `/sdlc:task-ensure-ready`) |
 | new | skill | `/sdlc:task-new` | `solutions/ontological/plugin/plugins/sdlc/skills/task-new/` | LLM head over `create`; scaffolder shim forwards to the op |
 | next | cli | `sdlc task next` | `solutions/ontological/lib/model/entities/task/ops/next.ts` | Dispatchable pickup roster: priority-ordered + dependency-lift, dependency-blocked tasks filtered out by default (`--include-blocked` keeps them) |
-| update | cli | `sdlc task update <task> --set <json>` | `solutions/ontological/lib/model/entities/task/ops/update.ts` | Apply JSON frontmatter updates, schema-validated (entity-agnostic engine in `model/ops/_update.ts`) |
+| update | cli | `sdlc task update <task> --set <json>` | `solutions/ontological/lib/model/entities/task/noun.ts` | Apply JSON frontmatter updates, schema-validated (entity-agnostic engine in `model/ops/_update.ts`) |
 | define | skill | `/sdlc:task-define <task>` | `solutions/ontological/plugin/plugins/sdlc/skills/task-define/` | Interactively drive toward implementation-ready |
 | auto-define | skill | `/sdlc:task-auto-define <task>` | `solutions/ontological/plugin/plugins/sdlc/skills/task-auto-define/` | Non-interactive best-effort definition |
 | ensure-ready | skill | `/sdlc:task-ensure-ready <task>` | `solutions/ontological/plugin/plugins/sdlc/skills/task-ensure-ready/` | Verify the implementation-ready contract; stamp on pass |

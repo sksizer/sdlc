@@ -13,7 +13,9 @@
  *     defaulted-required array (the default makes the omission valid);
  *   - key declaration order (`type` → `schema_version` → `id` → `state` →
  *     `title` → `created` → `last_reviewed` → `related` → `tags` →
- *     `need_human_review` → `created_at` → `provenance` → `status`) IS the
+ *     `need_human_review` → `created_at` → `provenance` → `status` →
+ *     the remaining OKF keys: `description`, `resource`, `stale_after`, `generated`,
+ *     `verified`, `sources`, `usage_window`) IS the
  *     canonical frontmatter key order, which
  *     `entities migrate` derives from `Object.keys(shape)`.
  *
@@ -31,6 +33,10 @@
  */
 
 import { z } from 'zod'
+
+import { OKF_STATUS_VALUES, OkfFrontmatter } from '../okf/frontmatter.ts'
+
+export { OKF_STATUS_VALUES }
 
 /** ISO date `YYYY-MM-DD`. Used by `created`/`last_reviewed`. */
 export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -169,9 +175,6 @@ export const SUPERSESSION_RULES = [
 // OKF v0.2 `status` (document maturity) — see the field doc comment below.
 // ---------------------------------------------------------------------------
 
-/** The only values OKF v0.2's document-maturity `status` key admits. */
-export const OKF_STATUS_VALUES = ['draft', 'stable', 'deprecated'] as const
-
 /**
  * Whether a `status:` value is shaped like this product's own entity
  * lifecycle `state` value rather than an OKF document-maturity value — the
@@ -191,7 +194,11 @@ function looksLikeLifecycleValue(value: string): boolean {
 }
 
 /**
- * The shared frontmatter base. Built as a plain `z.object` whose `.shape`
+ * The shared frontmatter base: the OKF v0.2 concept-document model
+ * (`../okf/frontmatter.ts`, `OkfFrontmatter`) specialized for entities. Fields
+ * are reused from `OkfFrontmatter.shape` rather than `OkfFrontmatter.extend`
+ * because `.extend` keeps the base's key order, and the order declared here is
+ * the canonical one. Built as a plain `z.object` whose `.shape`
  * declares the common fields in `_common.json` order; per-type schemas call
  * `CommonFrontmatter.extend({ ... })`.
  *
@@ -203,12 +210,10 @@ function looksLikeLifecycleValue(value: string): boolean {
  * applied once, at the per-type leaf, after all extension.
  */
 export const CommonFrontmatter = z.object({
-  type: z
-    .string()
-    .describe(
-      'Dispatch tag the validator and runtime use to pick this schema. ' +
-        'Const-valued per type — each per-type schema overrides this with its own `const`.',
-    ),
+  type: OkfFrontmatter.shape.type.describe(
+    'Dispatch tag the validator and runtime use to pick this schema. ' +
+      'Const-valued per type — each per-type schema overrides this with its own `const`.',
+  ),
   schema_version: z
     .string()
     .regex(SCHEMA_VERSION_PATTERN)
@@ -339,6 +344,15 @@ export const CommonFrontmatter = z.object({
         '`state` field (do not confuse the two). Optional: absent means OKF makes no ' +
         'maturity claim about this document.',
     ),
+  // The remaining OKF v0.2 keys (§4.1, §5), optional on every entity type.
+  // Appended after the legacy keys so `entities migrate` key order is unchanged.
+  description: OkfFrontmatter.shape.description,
+  resource: OkfFrontmatter.shape.resource,
+  stale_after: OkfFrontmatter.shape.stale_after,
+  generated: OkfFrontmatter.shape.generated,
+  verified: OkfFrontmatter.shape.verified,
+  sources: OkfFrontmatter.shape.sources,
+  usage_window: OkfFrontmatter.shape.usage_window,
 })
 
 /** The inferred TS type of the shared base (rarely used directly — per-type

@@ -30,6 +30,10 @@ When authoring a skill note (per [[S-0006-skill-md-is-direct-instruction]]):
   ~3-4 hard constraints, split denser ones, and end any output-producing flow
   with an explicit verification step. Joint compliance decays sharply with the
   number of constraints in one step.
+- **Write a call to another skill as `/[[skill]]`.** The build writes each
+  harness's own form. A hand-written `/sdlc:skill`, `$sdlc:skill` or `/skill` in a
+  body is refused; escape one meant literally as `\/sdlc:skill`, `\$sdlc:skill`
+  or `\/skill`.
 
 ## Namespace every terminal stdout marker with the skill's slug
 

@@ -80,12 +80,12 @@ promoted file stays as the idea's origin story.
 
 | Name | Surface | Signature | Pointer | Description |
 |---|---|---|---|---|
-| create | runner | `backlog create [<slug>] [...]` | `solutions/ontological/lib/model/entities/backlog/ops/create.ts` | Author a backlog item with minted identity (the relocated `new_backlog.ts` core); slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
-| preview-id | cli | `sdlc backlog preview-id <title>` | `solutions/ontological/lib/model/entities/backlog/ops/preview-id.ts` | Read-only: report the slug + `B-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
+| create | runner | `backlog create [<slug>] [...]` | `solutions/ontological/lib/model/entities/backlog/noun.ts` | Author a backlog item with minted identity (the relocated `new_backlog.ts` core); slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
+| preview-id | cli | `sdlc backlog preview-id <title>` | `solutions/ontological/lib/model/entities/backlog/noun.ts` | Read-only: report the slug + `B-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
 | capture | cli, skill | `sdlc backlog capture <text>` / `/sdlc:backlog-capture` | `solutions/ontological/cli/backlog_cli/capture.ts` | Head over the rolling-PR `create` tail: freeform text → structured fields |
 | capture-tail | cli | `sdlc backlog create --headline <h> [...]` | `solutions/ontological/cli/backlog_cli/create.ts` | Deterministic tail: land a capture on the rolling backlog PR |
 | triage | skill | `/sdlc:backlog-triage` | `solutions/ontological/plugin/plugins/sdlc/skills/backlog-triage/` | Walk untriaged files: promote, defer, or close each |
-| update | cli | `sdlc backlog update <backlog> --set <json>` | `solutions/ontological/lib/model/entities/backlog/ops/update.ts` | Apply JSON frontmatter updates, schema-validated (entity-agnostic engine in `model/ops/_update.ts`); null-deletes `result` for `closed/abandoned` |
+| update | cli | `sdlc backlog update <backlog> --set <json>` | `solutions/ontological/lib/model/entities/backlog/noun.ts` | Apply JSON frontmatter updates, schema-validated (entity-agnostic engine in `model/ops/_update.ts`); null-deletes `result` for `closed/abandoned` |
 
 The registered `backlog create` op is the relocated scaffolder core
 (T-0010); its Surface is `runner` (module exists and is registered, not

@@ -1,0 +1,29 @@
+{
+  "number": 1,
+  "url": "https://github.com/example/example/pull/1",
+  "title": "example",
+  "isDraft": false,
+  "state": "open",
+  "author": { "login": "pr-author", "isBot": false },
+  "baseRef": "main",
+  "headRef": "task/example-self-posted",
+  "headSha": null,
+  "mergedAt": null,
+  "mergeable": "mergeable",
+  "checks": { "rollup": "success", "failing": [], "failingUrls": [] },
+  "reviewDecision": null,
+  "activity": [
+    {
+      "id": "c1",
+      "kind": "comment",
+      "author": { "login": "pr-author", "isBot": false },
+      "at": "2026-05-21T18:00:00Z",
+      "editedAt": null,
+      "body": "Orchestrator-authored reply posted via post_self_comment.sh; must be filtered when the cursor's self_posted_at carries this timestamp.",
+      "reviewState": null,
+      "location": null
+    }
+  ],
+  "behind": null,
+  "ahead": null
+}

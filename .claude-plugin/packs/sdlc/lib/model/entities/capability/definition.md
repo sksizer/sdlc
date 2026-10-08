@@ -15,6 +15,12 @@ tree: a root capability (e.g. Executable Task) decomposes into the
 sub-capabilities that support it. `parent_key` is the only stored
 direction; children are derived by inverting it ([[T-SJH1]]).
 
+Nesting is a modelling aid, not a rule. A capability sits under another
+only when its own definition makes it part of that one; the tree exists
+so each level stays small enough to hold in mind. A corpus can have
+several roots, and a capability can stay unnested. No check requires a
+parent.
+
 A Capability is *not*:
 
 - A Task (a Task delivers or changes a capability; the Capability
@@ -47,6 +53,7 @@ A Capability is *not*:
 | `last_reviewed` | optional | ISO date |  |  |
 | `parent_key` | optional | `[[C-NNNN]]` or `null` | `null` | Parent capability; null marks a tree root. The only stored tree direction — children are derived by inversion |
 | `locations` | optional | list of Location strings | `[]` | Code anchors realizing the capability. See Locations grammar |
+| `product` | optional | `[[PR-XXXX]]` | unset | Product this capability belongs to; with `audience: user` it is the features lens for planning. `entities audit` flags a missing product file |
 | `related` | optional | list of wikilinks | `[]` | Cross-references to other entities |
 | `tags` | required | list of strings | `[]` |  |
 | `need_human_review` | optional | bool | `false` |  |
@@ -190,10 +197,10 @@ Transitions:
 
 | Operation | Surface | Signature | Pointer | Description |
 |---|---|---|---|---|
-| create | `sdlc capability create` | `(title, fields…) → {path, id}` | `ops/create.ts` | Author a new instance through the shared create factory: slug from the title, incrementing `C-NNNN` id, curated frontmatter validated before write, body from `body-template.eta`. |
-| preview-id | `sdlc capability preview-id` | `(input) → PreviewIdResult` | `ops/preview-id.ts` | Read-only: the slug and id `create` would mint, with exact and similar slug collisions. |
-| update | `sdlc capability update` | `(capability, --set json) → {path, changed, wrote}` | `ops/update.ts` | Apply JSON frontmatter updates through the shared update engine; the merge must validate against the schema, the body is byte-untouched, `null` deletes a key. |
-| graph | `sdlc capability graph` | `() → CapabilityGraph` | `ops/graph.ts` | The corpus as one graph: `parent_key` inverted into containment, `related` links as edges between capabilities, a ghost node per dangling `parent_key`. Also served as `GET /api/capabilities/graph` by the dashboard service and drawn by SDF's System page (`?source=capabilities`). |
+| create | `sdlc capability create` | `(title, fields…) → {path, id}` | `noun.ts` | Author a new instance through the shared create factory: slug from the title, incrementing `C-NNNN` id, curated frontmatter validated before write, body from `body-template.eta`. |
+| preview-id | `sdlc capability preview-id` | `(input) → PreviewIdResult` | `noun.ts` | Read-only: the slug and id `create` would mint, with exact and similar slug collisions. |
+| update | `sdlc capability update` | `(capability, --set json) → {path, changed, wrote}` | `noun.ts` | Apply JSON frontmatter updates through the shared update engine; the merge must validate against the schema, the body is byte-untouched, `null` deletes a key. |
+| graph | `sdlc capability graph` | `(--audience user\|system, --tree, --depth N, --unnested) → CapabilityGraph` | `ops/graph.ts` | The corpus as one graph: `parent_key` inverted into containment, `related` links as edges between capabilities, a ghost node per dangling `parent_key`. Text output is the tab-separated table by default; `--tree` prints the indented containment tree (`--depth N` caps the levels and marks hidden children `(+K)`), and `--unnested` lists capabilities with no parent and a kind other than `system` as information, never a warning (alone it replaces the table). `--tree` and `--unnested` shape text output only and are ignored under `--output json`; `--depth` without `--tree` is refused in every mode. Also served as `GET /api/capabilities/graph` by the dashboard service and drawn by SDF's System page (`?source=capabilities`). |
 | coverage | `sdlc capability coverage` | `(--scope dir\|C-NNNN) → CapabilityCoverage` | `ops/coverage.ts` | Read-only join of the corpus against the manifest walk's packages and crates: which units no capability anchors, which capabilities anchor nothing, anchor rot, and per-capability attachments (inbound wikilinks plus resolved locations). |
 
 ## Position in the entity model

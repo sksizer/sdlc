@@ -36,6 +36,6 @@ plus a required level-1 title.
 
 The model is bootstrapped from an existing Claude surface with
 `importClaude(pluginRoot)` (an alias for `deriveHarnessModel`): it reads
-`skills/`, `conventions/`, and the control plane in `.claude/settings.json` +
+`skills/`, `conventions/`, and the harness config in `.claude/settings.json` +
 `.mcp.json`. Use it to introspect what a built plugin actually carries — it is
 a read of the surface, not a second way to produce one.

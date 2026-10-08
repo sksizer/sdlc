@@ -17,7 +17,7 @@
  * wikilinks — the section's heading spelling doesn't matter, only whether it
  * contains links to milestones.
  *
- * Exactly four consistency rules are implemented (nothing broader — no
+ * Exactly four milestone/task consistency rules are implemented (nothing broader — no
  * "is this version shipped" reconciliation, which needs a documented
  * mapping from milestone state to "shipped" this brief left undefined):
  *
@@ -35,11 +35,19 @@
  *       carries no note (no text beyond the bare wikilink) explaining why
  *       it is still listed.
  *
- * Plus one defensive, non-brief-mandated finding: `invalid_roadmap`, when
+ * Plus `missing_capability` — a resolved milestone's `capabilities:` entry
+ * does not resolve to an existing capability file (the milestone-to-capability
+ * link used for planning on the capability graph) — and `missing_plan_note` —
+ * the roadmap's `plan_doc` does not resolve to an existing Note file — and one
+ * defensive, non-brief-mandated finding: `invalid_roadmap`, when
  * the roadmap file itself fails its own frontmatter/body contract — the
  * body is still walked best-effort (the raw text is available either way),
  * so a roadmap with drifted frontmatter still gets its cross-reference
  * findings.
+ *
+ * With `--strict-order` it also runs the ordered-flow rules in `../order.ts`
+ * (`unroadmapped_milestone`, `version_section_mismatch`,
+ * `task_without_milestone`); each finding message ends with its remedy.
  *
  * Never hand-rolls entity reading: milestone/task existence and state come
  * from the shared corpus loader + `resolveTarget` (`@lib/model/corpus`, the
@@ -58,9 +66,11 @@ import type { OpIo } from '@lib/registry'
 import { cmpStr } from '@lib/util/strings'
 import { unwrapWikilink } from '@lib/util/wikilinks'
 import { loadCorpus, resolveTarget } from '@lib/model/corpus'
+import type { CorpusEntry } from '@lib/model/corpus'
 import { readEntity, readRawFrontmatter } from '@lib/model/read'
 import type { EntityReadResult } from '@lib/model/read'
 
+import { checkCorpusOrder, checkVersionSections } from '../order'
 import { resolveRoadmapPaths, scanTopLevelMilestoneLinks } from '../sections'
 import type { MilestoneLinkOccurrence } from '../sections'
 
@@ -71,14 +81,22 @@ import type { MilestoneLinkOccurrence } from '../sections'
 const FINDING_KINDS = [
   'missing_milestone',
   'missing_task',
+  'missing_capability',
   'duplicate_milestone',
   'stale_milestone_link',
+  'missing_plan_note',
   'invalid_roadmap',
+  // Ordered-flow rules, `--strict-order` only (see ../order.ts).
+  'unroadmapped_milestone',
+  'version_section_mismatch',
+  'task_without_milestone',
 ] as const
 
 export const RoadmapCheckFinding = z.object({
   /** The roadmap this finding is about (its `id`, or its basename when the
-   *  roadmap's own frontmatter is unreadable). */
+   *  roadmap's own frontmatter is unreadable); for the corpus-wide
+   *  `unroadmapped_milestone` / `task_without_milestone` rules, the
+   *  milestone or task basename the finding names. */
   id: z.string(),
   kind: z.enum(FINDING_KINDS),
   message: z.string(),
@@ -258,17 +276,74 @@ function checkMissingTasks(
   return findings
 }
 
+/** `missing_capability` — a resolved milestone's `capabilities:` entry must
+ *  resolve to an existing capability file (unlike `tasks:`, the field is
+ *  capability-only, so a non-capability target is also a finding). */
+function checkMissingCapabilities(
+  sectionsByMilestone: Map<string, Set<string>>,
+  projectRoot: string,
+  planningRoot: string,
+  corpus: ReadonlyMap<string, { type: string }>,
+  roadmapId: string,
+): RoadmapCheckFinding[] {
+  const findings: RoadmapCheckFinding[] = []
+  const names = new Set(corpus.keys())
+  for (const basename of [...sectionsByMilestone.keys()].sort(cmpStr)) {
+    const milestonePath = join(planningRoot, 'milestones', `${basename}.md`)
+    const fm = readRawFrontmatter(milestonePath)
+    const caps = fm !== null && Array.isArray(fm['capabilities']) ? fm['capabilities'] : []
+    for (const raw of caps) {
+      if (typeof raw !== 'string') continue
+      const target = unwrapWikilink(raw) ?? raw
+      const resolved = resolveTarget(target, names)
+      if (resolved === null || corpus.get(resolved)?.type !== 'capability') {
+        findings.push({
+          id: roadmapId,
+          kind: 'missing_capability',
+          message: `milestone ${basename} (linked from this roadmap) names ${target} in its capabilities:, which does not resolve to an existing capability file`,
+          location: relative(projectRoot, milestonePath),
+        })
+      }
+    }
+  }
+  return findings
+}
+
+/** `missing_plan_note` — `plan_doc` must resolve to an existing Note file. */
+function checkPlanNote(
+  fm: Record<string, unknown> | null,
+  corpus: ReadonlyMap<string, { type: string }>,
+  roadmapId: string,
+  relPath: string,
+): RoadmapCheckFinding[] {
+  const raw = fm !== null ? fm['plan_doc'] : undefined
+  if (typeof raw !== 'string') return [] // absent/malformed: `invalid_roadmap` covers it
+  const target = unwrapWikilink(raw) ?? raw
+  const resolved = resolveTarget(target, new Set(corpus.keys()))
+  if (resolved !== null && corpus.get(resolved)?.type === 'note') return []
+  return [
+    {
+      id: roadmapId,
+      kind: 'missing_plan_note',
+      message: `plan_doc ${target} does not resolve to an existing note file`,
+      location: relPath,
+    },
+  ]
+}
+
 /** Thin orchestrator: read the roadmap, validate its own contract, scan its
  *  top-level sections for milestone links, then run the four lettered
- *  cross-reference checks (a-d) against those links, aggregating every
- *  finding. */
+ *  cross-reference checks (a-d) against those links plus the plan-note check
+ *  (`checkPlanNote`), aggregating every finding. */
 function checkOneRoadmap(
   path: string,
   projectRoot: string,
   planningRoot: string,
-  corpusBasenames: Set<string>,
+  corpus: ReadonlyMap<string, CorpusEntry>,
+  strictOrder: boolean,
 ): RoadmapCheckFinding[] {
   const relPath = relative(projectRoot, path)
+  const corpusBasenames = new Set(corpus.keys())
 
   const res = readEntity('roadmap', path, { projectRoot })
   if (res === null) return [] // vanished between listing and read; nothing to report
@@ -281,6 +356,7 @@ function checkOneRoadmap(
 
   return [
     ...checkContract(res, roadmapId, relPath),
+    ...checkPlanNote(res.fm, corpus, roadmapId, relPath),
     ...checkMissingMilestones(occurrences, roadmapId, relPath),
     ...checkDuplicateMilestones(sectionsByMilestone, roadmapId, relPath),
     ...checkStaleMilestoneLinks(occurrences, planningRoot, roadmapId, relPath),
@@ -291,7 +367,29 @@ function checkOneRoadmap(
       corpusBasenames,
       roadmapId,
     ),
+    ...checkMissingCapabilities(sectionsByMilestone, projectRoot, planningRoot, corpus, roadmapId),
+    ...(strictOrder ? checkVersionSections(occurrences, planningRoot, roadmapId, relPath) : []),
   ]
+}
+
+/** The corpus-wide ordered-flow findings: gathers every milestone any of
+ *  `roadmapPaths` links, then hands off to `checkCorpusOrder`. */
+function corpusOrderFindings(
+  roadmapPaths: string[],
+  projectRoot: string,
+  planningRoot: string,
+  corpus: ReadonlyMap<string, CorpusEntry>,
+): RoadmapCheckFinding[] {
+  const names = new Set(corpus.keys())
+  const linked = new Set<string>()
+  for (const path of roadmapPaths) {
+    const res = readEntity('roadmap', path, { projectRoot })
+    if (res === null) continue
+    for (const occ of scanTopLevelMilestoneLinks(res.text, names)) {
+      if (occ.resolved !== null) linked.add(occ.resolved)
+    }
+  }
+  return checkCorpusOrder(linked, corpus, planningRoot, projectRoot)
 }
 
 // ---------------------------------------------------------------------------
@@ -303,6 +401,10 @@ const input = z.object({
   /** A specific roadmap (path / project-relative path / bare id or
    *  basename). Every roadmap under `docs/planning/roadmaps/` when omitted. */
   id: z.string().optional(),
+  /** Also run the ordered-flow rules (`../order.ts`). Off by default so a
+   *  corpus that predates them keeps passing. The corpus-wide rules run only
+   *  when no `id` is given: "on no roadmap" needs every roadmap. */
+  strictOrder: z.boolean().default(false),
 })
 
 const output = z.object({
@@ -329,6 +431,11 @@ export default defineOp({
   output,
   cli: {
     positionals: ['id'],
+    flags: {
+      strictOrder: {
+        help: 'Also report ordered-flow findings: open milestones on no roadmap (and not tagged deferred), milestone version vs section heading, open tasks claimed by no open milestone. The first and third run only when no roadmap id is given.',
+      },
+    },
     render: renderCheck,
   },
   handler: (args, ctx) => {
@@ -336,11 +443,15 @@ export default defineOp({
     const paths = resolveRoadmapPaths(ctx.projectRoot, planningRoot, args.id)
 
     const corpus = loadCorpus(planningRoot)
-    const corpusBasenames = new Set(corpus.keys())
 
     const findings: RoadmapCheckFinding[] = []
     for (const path of paths) {
-      findings.push(...checkOneRoadmap(path, ctx.projectRoot, planningRoot, corpusBasenames))
+      findings.push(
+        ...checkOneRoadmap(path, ctx.projectRoot, planningRoot, corpus, args.strictOrder),
+      )
+    }
+    if (args.strictOrder && args.id === undefined) {
+      findings.push(...corpusOrderFindings(paths, ctx.projectRoot, planningRoot, corpus))
     }
 
     return {

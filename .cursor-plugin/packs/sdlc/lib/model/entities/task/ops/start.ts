@@ -32,8 +32,8 @@
  * rebases.
  */
 
-import { existsSync } from 'node:fs'
-import { basename as pathBasename, join, resolve } from 'node:path'
+import { existsSync, realpathSync } from 'node:fs'
+import { basename as pathBasename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { z } from 'zod'
 
@@ -193,10 +193,25 @@ export function startTask(opts: StartTaskOptions): number {
     )
   }
 
-  // The task file lives under the MAIN repo's planning tree; we identify it
-  // by basename and operate on origin/main's copy, never this checkout's.
+  // The task file lives in SOME planning root of the repo: the git root's, or a
+  // nested one (`<gitroot>/solutions/x/docs/planning/tasks/`). The positional
+  // may be this checkout's copy or the worktree's, so take its path relative to
+  // ITS OWN checkout root and re-anchor that on `mainRepo` (a git root: the
+  // `.git` check above). Every checkout of the repo shares one layout, so the
+  // result is the same file's path on origin/main, read from the main
+  // checkout's git root — never this checkout's own copy.
   const basename = pathBasename(taskPath).replace(/\.md$/, '')
-  const taskRel = join('docs', 'planning', 'tasks', `${basename}.md`)
+  const taskCheckout = new Git(dirname(taskPath), { runner }).topLevel()
+  if (taskCheckout === null) {
+    throw new StartTaskError(`task file is not inside a git checkout: ${taskPath}`, EXIT.error)
+  }
+  const taskRel = relative(realpathSync(taskCheckout), realpathSync(taskPath))
+  if (taskRel.startsWith('..') || isAbsolute(taskRel)) {
+    throw new StartTaskError(
+      `task file ${taskPath} is outside its checkout root ${taskCheckout}`,
+      EXIT.error,
+    )
+  }
 
   // Source of truth is origin/main, NOT the (possibly stale or dirty) primary
   // checkout. Read origin/main's copy through the typed entity read layer to
@@ -211,7 +226,7 @@ export function startTask(opts: StartTaskOptions): number {
     opts.io.stderr(fetchMain.error.result.stderr)
     throw new StartTaskError(`git fetch origin main failed in ${mainRepo}`, EXIT.error)
   }
-  const originRead = readTask(basename, {
+  const originRead = readTask(taskRel, {
     projectRoot: mainRepo,
     at: 'origin/main',
     git: runner,

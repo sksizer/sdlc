@@ -18,7 +18,7 @@ import type { OpCtx } from '@lib/registry'
 import { readRawFrontmatter } from '@lib/model/read'
 import { Git } from '@sksizer/easy-git'
 import { openPrsForBranch, pickPrForBranch } from '@sksizer/easy-gh'
-import { worktreeDir } from '@lib/util/git'
+import { worktreeDirFor } from '@lib/util/git'
 import { TaskLifecycleLeaseSchema, validateDict } from '@lib/services/lease'
 
 // ── filesystem probes ───────────────────────────────────────────────────────
@@ -37,9 +37,15 @@ export function taskBranch(basename: string): string {
   return `task/${basename}`
 }
 
-/** Absolute worktree path `/sdlc:task-work` parks a basename's worktree at. */
-export function worktreePath(projectRoot: string, basename: string): string {
-  return worktreeDir(projectRoot, basename)
+/**
+ * Absolute worktree path `/sdlc:task-work` parks a basename's worktree at:
+ * `<primary-checkout>/.sdlc/worktrees/<basename>`. Rooted at the git primary
+ * checkout, NOT `projectRoot` (the nearest `sdlc.yaml`, possibly nested), so
+ * every op agrees with `task start`. Keep `projectRoot` for the task file,
+ * branches and lease.
+ */
+export function worktreePath(projectRoot: string, basename: string, ctx: OpCtx): string {
+  return worktreeDirFor(projectRoot, basename, { runner: ctx.git })
 }
 
 /** Absolute path of a basename's task document under docs/planning/tasks. */

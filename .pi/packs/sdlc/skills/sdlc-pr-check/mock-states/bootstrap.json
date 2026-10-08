@@ -1,0 +1,29 @@
+{
+  "number": 1,
+  "url": "https://github.com/example/example/pull/1",
+  "title": "example",
+  "isDraft": false,
+  "state": "open",
+  "author": { "login": "pr-author", "isBot": false },
+  "baseRef": "main",
+  "headRef": "task/example-bootstrap",
+  "headSha": null,
+  "mergedAt": null,
+  "mergeable": "mergeable",
+  "checks": { "rollup": "success", "failing": [], "failingUrls": [] },
+  "reviewDecision": null,
+  "activity": [
+    {
+      "id": "c1",
+      "kind": "comment",
+      "author": { "login": "drive-by-reviewer", "isBot": false },
+      "at": "2026-05-21T17:58:04Z",
+      "editedAt": null,
+      "body": "Pre-existing third-party comment that the bootstrap path must surface as NEEDS-RESPONSE.",
+      "reviewState": null,
+      "location": null
+    }
+  ],
+  "behind": null,
+  "ahead": null
+}

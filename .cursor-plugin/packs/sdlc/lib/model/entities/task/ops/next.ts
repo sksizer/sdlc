@@ -24,6 +24,7 @@
  *     `@lib/model/corpus` (`SATISFIED_BY_TYPE`/`isSatisfied`) is dropped and
  *     recorded in `skipped_blocked`. An unresolved target (no such entity) is
  *     treated as unsatisfied (fail-safe). `--include-blocked` disables this pass.
+ *     {@link checkDependsOn} applies the same rule to one named task at launch.
  *
  * Two further selection predicates implement the settled orchestrator-selection
  * rule of [[D-VSLI-distributed-work-runner-architecture]] ([[T-JOXA]]):
@@ -63,6 +64,7 @@ import { scanEntities } from '@lib/model/read'
 import { resolveTarget } from '@lib/model/corpus/resolve'
 import { isSatisfied, CLOSED_PREFIX } from '@lib/model/corpus/satisfied'
 import { buildEdges, findCycles } from '@lib/model/corpus/graph'
+import { readTask } from '../read.ts'
 
 // ---------------------------------------------------------------------------
 // Sort key helpers (algorithm unchanged from the pre-rename `task sort`)
@@ -248,6 +250,23 @@ function unsatisfiedTargets(
   return out
 }
 
+export type DependsOnCheck = { ok: true } | { ok: false; unsatisfied: string[] }
+
+/**
+ * Re-read one task's `depends_on` against the current corpus, by the same
+ * rule the dispatchability filter uses. Throws when the task or its
+ * frontmatter cannot be read.
+ */
+export function checkDependsOn(projectRoot: string, basename: string): DependsOnCheck {
+  const task = readTask(basename, { projectRoot })
+  if (task === null) throw new Error(`task not found: ${basename}`)
+  const fm = task.fm
+  if (fm === null) throw new Error(`cannot read frontmatter for task ${basename}`)
+  const corpus = loadCorpus(join(projectRoot, 'docs', 'planning'))
+  const unsatisfied = unsatisfiedTargets(fm, corpus, new Set(corpus.keys()))
+  return unsatisfied.length === 0 ? { ok: true } : { ok: false, unsatisfied }
+}
+
 function liftSortKeys(
   candidates: Set<string>,
   baseKeys: Map<string, SortKey>,
@@ -429,7 +448,7 @@ export default defineOp({
 
     // The registry adapter always injects `--project-root` into `args.projectRoot`
     // (see registry_adapter.ts §GLOBAL_FLAGS injection); when empty (direct
-    // invokeOp calls), fall back to ctx.projectRoot (which defaults to cwd).
+    // invokeOp calls), fall back to ctx.projectRoot (which resolveProjectRoot sets to the nearest sdlc.yaml at or above the cwd, else the cwd).
     const projectRoot = resolveProjectRoot(
       args.projectRoot !== '' ? args.projectRoot : ctx.projectRoot,
     )

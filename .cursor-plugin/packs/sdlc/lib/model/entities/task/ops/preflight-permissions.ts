@@ -80,7 +80,7 @@ import { resolveProjectManagers } from '@sksizer/detect-runners'
 import { checkoutRoot } from '@sksizer/easy-git'
 import { claudeUserSettingsPath } from '@lib/util/claude-home'
 import { isFile } from '@lib/util/fs'
-import { worktreeDir } from '@lib/util/git'
+import { worktreeDirFor } from '@lib/util/git'
 import { escapeRegExp } from '@lib/util/strings'
 import { isRecord } from '@lib/util/guards'
 import { defineOp, type OpCtx } from '@lib/registry'
@@ -608,7 +608,7 @@ export async function main(argv: readonly string[], ctx: CliContext): Promise<nu
   }
 
   // File-mutation probe. The implementer always needs Write/Edit on the
-  // worktree Step 4 will create at <repo-root>/.sdlc/worktrees/<basename>,
+  // worktree Step 4 will create at <primary-checkout>/.sdlc/worktrees/<basename>,
   // so probe unconditionally (independent of Bash signals).
   const worktreePath = worktreeDirForTaskFile(taskPath)
   if (worktreePath !== null) {
@@ -636,17 +636,19 @@ export async function main(argv: readonly string[], ctx: CliContext): Promise<nu
 
 /**
  * The worktree directory `/sdlc:task-work` Step 4 will create for the
- * task at `taskPath`: `<repo-root>/.sdlc/worktrees/<task-basename>`. The
- * basename is the task filename without its `.md` extension. Returns
- * `null` when the repo root cannot be resolved (so the probe simply
- * skips the file-mutation check rather than guessing a path).
+ * task at `taskPath`: `<primary-checkout>/.sdlc/worktrees/<task-basename>`
+ * (the primary checkout, not the checkout containing `taskPath`, which inside
+ * a linked worktree is that worktree). The basename is the task filename
+ * without its `.md` extension. Returns `null` when the repo root cannot be
+ * resolved (so the probe simply skips the file-mutation check rather than
+ * guessing a path).
  */
 export function worktreeDirForTaskFile(taskPath: string): string | null {
   const root = findRepoRoot(taskPath)
   if (root === null) return null
   const name = taskPath.split(/[/\\]/).pop() ?? taskPath
   const basename = name.endsWith('.md') ? name.slice(0, -3) : name
-  return worktreeDir(root, basename)
+  return worktreeDirFor(root, basename)
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,109 @@
+/*
+ * GENERATED FILE — do not edit by hand.
+ * Regenerate with: bun scripts/seed-projection.ts
+ *
+ * The default seed palette, in Starlight's vocabulary.
+ *
+ * Projected from the un-attributed default blocks of the design system's
+ * tokens.css — whichever theme currently holds the default — so this skin
+ * follows the default rather than pinning a named theme.
+ *
+ * Values are resolved literals: a doc site does not load the token layer,
+ * so var(--d-*) would not resolve here.
+ *
+ * Starlight states its DARK values on a bare :root and its LIGHT values
+ * under :root[data-theme='light']. The blocks below follow that order.
+ */
+
+/* Type stacks. Mode-invariant, so stated once. */
+:root {
+  --sl-font:      -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  --sl-font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+}
+
+/* DARK. Starlight's convention: dark on the bare root, light behind an
+   attribute. Do not swap these two blocks. */
+:root,
+::backdrop {
+  --sl-color-white:          #eaeaee; /* the ink end of the scale, not a literal white */
+  --sl-color-gray-1:         #eaeaee; /* headings, strong ink */
+  --sl-color-gray-2:         #bcbcc4; /* body text */
+  --sl-color-gray-3:         #a8a8b0; /* muted text, pulled toward the ink far enough to read at body size */
+  --sl-color-gray-4:         #7e7f88; /* scrollbar thumbs and other faint furniture — never text */
+  --sl-color-gray-5:         #3b3c46; /* rules, card and table borders */
+  --sl-color-gray-6:         #26272c; /* faint surface: code blocks, file trees, search keys */
+  --sl-color-gray-7:         #202126; /* the faintest surface, one step off the ground */
+  --sl-color-black:          #1a1b20; /* the ground end of the scale, not a literal black */
+  --sl-color-bg:             #1a1b20; /* the page */
+  --sl-color-bg-nav:         #1f2026; /* the top bar */
+  --sl-color-bg-sidebar:     #1c1d23; /* the nav sidebar */
+  --sl-color-bg-inline-code: #262730; /* inline code chips */
+  --sl-color-hairline:       #272831; /* the faintest rule */
+  --sl-color-hairline-light: #31323c; /* the ordinary rule */
+  --sl-color-hairline-shade: #3b3c46; /* one step firmer than the ordinary rule, in both modes */
+  --sl-color-text:           #bcbcc4; /* body copy */
+  --sl-color-text-invert:    #24252d; /* ink on a solid accent fill — the layer's own --d-accent-fg */
+  --sl-color-accent:         #6a9bff; /* the accent as FILL — buttons, rings, the search key */
+  --sl-color-accent-high:    #8eb1fa; /* the accent as INK — the fill seed is not a text colour */
+  --sl-color-accent-low:     #262e41; /* the accent washed into the page ground */
+  --sl-color-text-accent:    #8eb1fa; /* links and active nav — the accent as ink, stated in both modes */
+  --sl-color-bg-accent:      #6a9bff; /* solid accent fills */
+  --sl-color-blue:           #6a9bff; /* --d-status-info — note asides, informational badges */
+  --sl-color-blue-high:      #8eb1fa; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-blue-low:       #262e41; /* the hue washed into the page ground */
+  --sl-color-green:          #3fb27f; /* --d-status-success — success badges */
+  --sl-color-green-high:     #6fc29e; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-green-low:      #20322e; /* the hue washed into the page ground */
+  --sl-color-orange:         #e0af68; /* --d-status-warning — caution asides */
+  --sl-color-orange-high:    #e3c08e; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-orange-low:     #38312b; /* the hue washed into the page ground */
+  --sl-color-red:            #f7768e; /* --d-status-error — danger asides */
+  --sl-color-red-high:       #f396a9; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-red-low:        #3b2931; /* the hue washed into the page ground */
+  --sl-color-purple:         #bd53ee; /* Starlight's own purple mid-point — tip asides carry no status meaning */
+  --sl-color-purple-high:    #ca7dee; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-purple-low:     #32233f; /* the hue washed into the page ground */
+}
+
+/* LIGHT. */
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+  --sl-color-white:          #1a1a1c; /* the ink end of the scale, not a literal white */
+  --sl-color-gray-1:         #1a1a1c; /* headings, strong ink */
+  --sl-color-gray-2:         #45454b; /* body text */
+  --sl-color-gray-3:         #606066; /* muted text, pulled toward the ink far enough to read at body size */
+  --sl-color-gray-4:         #90909a; /* scrollbar thumbs and other faint furniture — never text */
+  --sl-color-gray-5:         #d6d6de; /* rules, card and table borders */
+  --sl-color-gray-6:         #ebebed; /* faint surface: code blocks, file trees, search keys */
+  --sl-color-gray-7:         #f1f1f3; /* the faintest surface, one step off the ground */
+  --sl-color-black:          #f8f8fa; /* the ground end of the scale, not a literal black */
+  --sl-color-bg:             #f8f8fa; /* the page */
+  --sl-color-bg-nav:         #f4f4f7; /* the top bar */
+  --sl-color-bg-sidebar:     #f8f8fa; /* the nav sidebar */
+  --sl-color-bg-inline-code: #f1f1f5; /* inline code chips */
+  --sl-color-hairline:       #ebebf0; /* the faintest rule */
+  --sl-color-hairline-light: #e0e0e6; /* the ordinary rule */
+  --sl-color-hairline-shade: #d6d6de; /* one step firmer than the ordinary rule, in both modes */
+  --sl-color-text:           #45454b; /* body copy */
+  --sl-color-text-invert:    #ffffff; /* ink on a solid accent fill — the layer's own --d-accent-fg */
+  --sl-color-accent:         #1d59d8; /* the accent as FILL — buttons, rings, the search key */
+  --sl-color-accent-high:    #1c47a3; /* the accent as INK — the fill seed is not a text colour */
+  --sl-color-accent-low:     #d7e0f5; /* the accent washed into the page ground */
+  --sl-color-text-accent:    #1c47a3; /* links and active nav — the accent as ink, stated in both modes */
+  --sl-color-bg-accent:      #1d59d8; /* solid accent fills */
+  --sl-color-blue:           #1d59d8; /* --d-status-info — note asides, informational badges */
+  --sl-color-blue-high:      #1c47a3; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-blue-low:       #d7e0f5; /* the hue washed into the page ground */
+  --sl-color-green:          #188a46; /* --d-status-success — success badges */
+  --sl-color-green-high:     #196b3a; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-green-low:      #d6e8df; /* the hue washed into the page ground */
+  --sl-color-orange:         #b06a00; /* --d-status-warning — caution asides */
+  --sl-color-orange-high:    #865408; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-orange-low:     #ede3d5; /* the hue washed into the page ground */
+  --sl-color-red:            #d70015; /* --d-status-error — danger asides */
+  --sl-color-red-high:       #a20717; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-red-low:        #f3d3d8; /* the hue washed into the page ground */
+  --sl-color-purple:         #bd53ee; /* Starlight's own purple mid-point — tip asides carry no status meaning */
+  --sl-color-purple-high:    #8f43b3; /* the hue pulled toward the ink, to read on its own wash */
+  --sl-color-purple-low:     #efdff8; /* the hue washed into the page ground */
+}

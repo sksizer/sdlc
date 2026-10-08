@@ -59,7 +59,7 @@ export const ProductSchema = CommonFrontmatter.extend({
     .default([])
     .describe(
       'Cross-references as wikilinks. Products may link narrative docs ' +
-        '([[vision]]) as well as entities, so any wikilink target is legal.',
+        '([[N-41AZ-vision]]) as well as entities, so any wikilink target is legal.',
     ),
 }).strict()
 

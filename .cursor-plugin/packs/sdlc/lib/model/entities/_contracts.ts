@@ -17,6 +17,7 @@ import { CapabilityContract } from './capability/schema.ts'
 import { DecisionContract } from './decision/schema.ts'
 import { DriverContract } from './driver/schema.ts'
 import { MilestoneContract } from './milestone/schema.ts'
+import { NoteContract } from './note/schema.ts'
 import { PrincipleContract } from './principle/schema.ts'
 import { ProductContract } from './product/schema.ts'
 import { ReferenceContract } from './reference/schema.ts'
@@ -32,6 +33,7 @@ const CONTRACTS: Readonly<Record<string, Contract>> = {
   decision: DecisionContract,
   driver: DriverContract,
   milestone: MilestoneContract,
+  note: NoteContract,
   principle: PrincipleContract,
   product: ProductContract,
   reference: ReferenceContract,

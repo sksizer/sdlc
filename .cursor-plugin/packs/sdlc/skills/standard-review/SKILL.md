@@ -17,8 +17,8 @@ rendered through `sdlc report render` from a schema-contracted payload. With
 
 Usage:
 
-- `/sdlc:standard-review` — report only; read-only on the project.
-- `/sdlc:standard-review --propose` — report, then a PR of proposed edits.
+- `/standard-review` — report only; read-only on the project.
+- `/standard-review --propose` — report, then a PR of proposed edits.
 
 ## Steps
 

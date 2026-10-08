@@ -1,0 +1,59 @@
+<!--
+  Decision body template (Eta). Body-only — frontmatter is synthesized
+  from the entity's Zod schema by the authoring pipeline (lib/model/authoring.ts),
+  which strips this comment from rendered instances.
+-->
+
+# <%= it.title ?? "<Title>" %>
+
+## Summary
+
+*Pending — outcomes to be populated when this decision is accepted.*
+
+^summary
+
+## Context
+
+<The situation that prompts this decision. Current state, forces at
+play, constraints. One short paragraph or a few bullets.>
+
+## Decision
+
+<What was decided, in one paragraph. The core resolution.>
+
+## Why
+
+<Rationale. Why this and not a plausible alternative.>
+
+## Options considered
+
+<Optional. Use when the decision is a choice between alternatives.>
+
+### Option A: <name>
+
+<Tradeoffs, pros, cons.>
+
+### Option B: <name>
+
+<Tradeoffs, pros, cons.>
+
+## Consequences
+
+<Downstream effects — what becomes easier, what becomes harder,
+what binds future work. Optional.>
+
+## Migration
+
+<If current state needs to move to the decided state, how. Optional.>
+
+## Open questions
+
+<Unresolved sub-decisions, gaps the decision doesn't address. Delete
+if there are none.>
+
+- <question>
+
+## Notes
+
+<Caveats, references to related discussions, context that doesn't
+fit elsewhere. Delete if there's nothing to add.>

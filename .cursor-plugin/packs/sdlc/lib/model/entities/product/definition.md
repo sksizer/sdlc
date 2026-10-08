@@ -8,8 +8,8 @@ need_human_review: true
 
 ## Purpose
 
-A Product is a thing this project builds and ships — the SDLC plugin
-itself, an OSS library extracted from it, the harness. The project is
+A Product is a thing this project builds and ships — Ontological
+itself, the Foreman engine, a library such as intersect. The project is
 multi-product: each Product scopes the Drivers (and, when the type
 ships, Goals) beneath it, so the why chain
 ([[D-7F2M-why-what-verify-chain]]) always roots in a concrete shipped
@@ -41,7 +41,7 @@ A Product is *not*:
 | `title` | required | string |  | Product name |
 | `created` | required | ISO date |  | First-authored date |
 | `last_reviewed` | optional | ISO date |  |  |
-| `related` | optional | list of wikilinks | `[]` | May link narrative docs (`[[vision]]`) as well as entities |
+| `related` | optional | list of wikilinks | `[]` | May link narrative docs (`[[N-41AZ-vision]]`) as well as entities |
 | `tags` | required | list of strings | `[]` |  |
 | `need_human_review` | optional | bool | `false` |  |
 | `created_at` | optional | ISO 8601 datetime |  | When the entity was authored, finer than `created` |
@@ -87,7 +87,7 @@ Transitions:
 - **Product ← Milestone**: Milestones are releases of a Product
   (single-product today; a product field on Milestone is a future
   decision if multi-product milestones appear).
-- **Product ↔ narrative docs**: the why lives in [[vision]]; the
+- **Product ↔ narrative docs**: the why lives in [[N-41AZ-vision]]; the
   Product entity is the how, linked via `related:`.
 
 ## Operations
@@ -112,5 +112,5 @@ scope anchor: Drivers root beneath it, and the SDLC layer
 - Lifecycle: `open/draft | open/active | closed/sunset`.
 - Body: Summary / What it is / Boundary pinned; the middle is
   free-form (`allow_unknown: true`) for per-product exposition.
-- `related:` may target narrative docs (`[[vision]]`), not just
+- `related:` may target narrative docs (`[[N-41AZ-vision]]`), not just
   entities.

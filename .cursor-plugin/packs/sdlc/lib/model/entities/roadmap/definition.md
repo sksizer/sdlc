@@ -21,9 +21,8 @@ A Roadmap is *not*:
 - A Milestone (the delivery vehicle — target date, success criteria,
   member tasks). A Roadmap only references milestones by wikilink; it
   carries no delivery semantics of its own.
-- The rationale/plan doc it points at via `plan_doc` (a plain planning
-  doc, not an entity) — the Roadmap is the structured, checkable index
-  over that doc's version sections, not the narrative itself.
+- The rationale/plan doc it points at via `plan_doc` (a Note) — the Roadmap is the structured,
+  checkable index over that doc's version sections, not the narrative itself.
 - The generated `/roadmap/` site page ([[T-9LHH-site-roadmap-generated]]),
   which is a milestone-derived view assembled at site-build time and is
   unrelated to this entity type.
@@ -45,7 +44,7 @@ A Roadmap is *not*:
 | `id` | required | `RM<NNNN>` |  | Immutable; matches filename |
 | `title` | required | string |  | Human-readable headline |
 | `state` | required | enum (see Lifecycle) | `open/draft` |  |
-| `plan_doc` | required | wikilink |  | Rationale/planning doc this roadmap tracks against (non-entity doc, e.g. `[[sdlc-0.8-plan]]`) |
+| `plan_doc` | required | note wikilink |  | The Note holding the rationale/plan this roadmap tracks against (e.g. `[[N-4F2K-sdlc-0-8-plan]]`); `roadmap check` reports one that resolves to no note |
 | `created` | required | ISO date |  | First-authored date |
 | `last_reviewed` | optional | ISO date |  | Last triage date |
 | `related` | optional | list of wikilinks | `[]` | Other entities or planning docs |
@@ -93,8 +92,8 @@ a living tracking document, not a shippable unit; it stays
 - **Roadmap → Milestone** (1:N, via body wikilinks under each version
   H2). Not stored in frontmatter (see the schema's design-choice note):
   the body's version sections ARE the membership list.
-- **Roadmap → plan doc** (1:1, via `plan_doc`). The rationale/planning
-  doc this roadmap's version structure tracks against.
+- **Roadmap → Note** (1:1, via `plan_doc`). The plan Note this roadmap's
+  version structure tracks against.
 - **Roadmap ↔ Roadmap** (M:N, via `related:`). A superseding roadmap
   should link back via `related` in addition to `completion_note`.
 

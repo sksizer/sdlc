@@ -111,18 +111,18 @@ Transitions:
 
 | Name | Surface | Signature | Pointer | Description |
 |---|---|---|---|---|
-| create | runner | `standard create [<slug>] [...]` | `solutions/ontological/lib/model/entities/standard/ops/create.ts` | Scaffold a new instance; state starts `open/proposed` (the relocated `new_standard.ts` core); slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
-| preview-id | cli | `sdlc standard preview-id <title>` | `solutions/ontological/lib/model/entities/standard/ops/preview-id.ts` | Read-only: report the slug + `S-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
+| create | runner | `standard create [<slug>] [...]` | `solutions/ontological/lib/model/entities/standard/noun.ts` | Scaffold a new instance; state starts `open/proposed` (the relocated `new_standard.ts` core); slug optional — derived from `--title` via the shared `deriveSlug` when omitted |
+| preview-id | cli | `sdlc standard preview-id <title>` | `solutions/ontological/lib/model/entities/standard/noun.ts` | Read-only: report the slug + `S-NNNN` id `create` would assign for a title, plus exact/similar same-type slug collisions (writes nothing) |
 | new | skill | `/sdlc:standard-new` | `solutions/ontological/plugin/plugins/sdlc/skills/standard-new/` | LLM head over `create`; scaffolder shim forwards to the op |
-| update | cli | `sdlc standard update <standard> --set <json>` | `solutions/ontological/lib/model/entities/standard/ops/update.ts` | Apply JSON frontmatter updates, schema-validated (entity-agnostic engine in `model/ops/_update.ts`) |
+| update | cli | `sdlc standard update <standard> --set <json>` | `solutions/ontological/lib/model/entities/standard/noun.ts` | Apply JSON frontmatter updates, schema-validated (entity-agnostic engine in `model/ops/_update.ts`) |
 | supersede | cli | `sdlc standard supersede <standard> --by <id>` | `solutions/ontological/lib/model/entities/standard/ops/supersede.ts` | Delete the predecessor; the deletion commit names the successor; no-ops on a missing predecessor. (Implementation still tombstones; slated to match this contract) |
-| activate | cli | `sdlc standard update <standard> --set '{"state":"open/active"}'` | `solutions/ontological/lib/model/entities/standard/ops/update.ts` | Transition `open/proposed → open/active` (via `update`) |
-| deprecate | cli | `sdlc standard update <standard> --set '{"state":"closed/deprecated","deprecation_note":"…"}'` | `solutions/ontological/lib/model/entities/standard/ops/update.ts` | Set to `closed/deprecated` with `deprecation_note:` (via `update`) |
+| activate | cli | `sdlc standard update <standard> --set '{"state":"open/active"}'` | `solutions/ontological/lib/model/entities/standard/noun.ts` | Transition `open/proposed → open/active` (via `update`) |
+| deprecate | cli | `sdlc standard update <standard> --set '{"state":"closed/deprecated","deprecation_note":"…"}'` | `solutions/ontological/lib/model/entities/standard/noun.ts` | Set to `closed/deprecated` with `deprecation_note:` (via `update`) |
 | validate | cli | `sdlc entities validate <path>` | `solutions/ontological/lib/model/ops/validate.ts` | Frontmatter + body manifest check (generic cross-entity op) |
 | review | skill | `/sdlc:standard-review [--propose]` | `solutions/ontological/plugin/plugins/sdlc/skills/standard-review/` | Check bound files against each Rule, standards against each other and their principles, and prose against the descriptive-yet-succinct rubric; renders the `standard-review` report kind (`reports/review/`); `--propose` opens a PR of text edits |
 
 The `create` deterministic core is the relocated `standard create` op
-(`solutions/ontological/lib/model/entities/standard/ops/create.ts`, Surface `runner`
+(`solutions/ontological/lib/model/entities/standard/noun.ts`, Surface `runner`
 — registered but not yet a CLI subcommand; T-0010, the born-in-lib
 directive's poster child); `skills/standard-new/new_standard.ts` and
 `/sdlc:standard-new` are the shim and LLM head over it. `update` and

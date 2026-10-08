@@ -1,0 +1,18 @@
+{
+  "number": 1,
+  "url": "https://github.com/example/example/pull/1",
+  "title": "example",
+  "isDraft": false,
+  "state": "merged",
+  "author": null,
+  "baseRef": "main",
+  "headRef": "task/example-merged",
+  "headSha": null,
+  "mergedAt": "2026-05-21T12:00:00Z",
+  "mergeable": "mergeable",
+  "checks": { "rollup": "success", "failing": [], "failingUrls": [] },
+  "reviewDecision": "approved",
+  "activity": [],
+  "behind": null,
+  "ahead": null
+}

@@ -39,7 +39,7 @@ import { z } from 'zod'
 import { buildEdges, findCycles, loadCorpus, resolveTarget } from '@lib/model/corpus'
 import { parseCanonicalFilename } from '@lib/model/identifier'
 import { scanEntityDir } from '@lib/model/read'
-import { defineOp, type OpIo } from '@lib/registry'
+import { OpError, defineOp, type OpIo } from '@lib/registry'
 import { dirName, entityDirs } from '@lib/util/markdown_extract'
 import { cmpStr } from '@lib/util/strings'
 import { unwrapWikilink } from '@lib/util/wikilinks'
@@ -50,6 +50,11 @@ export const CapabilityGraphNode = CapabilityEntity.extend({
   /** The segment before `/` in `state`: `open`, `closed`, or `unknown`. */
   state_group: z.string(),
   audience: z.string(),
+  /** Resolved `product` wikilink as a basename, null when unassigned. */
+  product: z.string().nullable(),
+  /** Set only under `--audience`: the node failed the filter and is shown
+   *  just because a kept descendant needs it to stay connected. */
+  ancestor_only: z.boolean(),
   locations: z.array(z.string()),
   /** Resolved `related` targets as basenames, any entity type. */
   related: z.array(z.string()),
@@ -160,6 +165,12 @@ function bodyWikilinkTargets(rawText: string): string[] {
   return targets
 }
 
+/** `[[PR-0001-slug]]` → `PR-0001-slug`; null when absent. */
+function productBasename(value: unknown): string | null {
+  const raw = str(value)
+  return raw === null ? null : linkTarget(raw)
+}
+
 /** The id half of a basename: `C-D2GO-readiness-scheduling` → `C-D2GO`. */
 function idOfBasename(basename: string): string {
   return parseCanonicalFilename(basename)?.id ?? basename
@@ -216,6 +227,8 @@ function scanCapabilityRows(
         state_group: state === '' ? 'unknown' : (state.split('/', 1)[0] as string),
         kind: str(fm['kind']),
         audience: str(fm['audience']) ?? 'system',
+        product: productBasename(fm['product']),
+        ancestor_only: false,
         parent: null,
         locations: strList(fm['locations']),
         related: [],
@@ -293,6 +306,8 @@ function resolveContainment(
         state_group: 'unknown',
         kind: null,
         audience: 'system',
+        product: null,
+        ancestor_only: false,
         parent: null,
         locations: [],
         related: [],
@@ -462,20 +477,164 @@ export function buildCapabilityGraph(root: string): CapabilityGraph {
   }
 }
 
-function renderGraph(out: CapabilityGraph, io: OpIo): number {
-  for (const n of out.nodes) {
-    io.stdout(
-      `${n.id}\t${n.parent ?? '-'}\t${n.kind ?? '-'}\t${n.state || '-'}\t${n.ghost ? '(ghost) ' : ''}${n.title}\n`,
+/**
+ * Keep only nodes of `audience` plus every ancestor of a kept node (so the
+ * tree stays connected), marking the ancestors `ancestor_only`. Edges are
+ * restricted to surviving nodes. Planning use: `audience: user` is the
+ * features lens.
+ */
+export function filterByAudience(graph: CapabilityGraph, audience: string): CapabilityGraph {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]))
+  const keep = new Set<string>()
+  const matched = new Set(
+    graph.nodes.filter((n) => !n.ghost && n.audience === audience).map((n) => n.id),
+  )
+  for (const id of matched) {
+    // Parent chains are acyclic (`cutParentCycles`), so this terminates.
+    for (
+      let cur: string | null = id;
+      cur !== null && !keep.has(cur);
+      cur = byId.get(cur)?.parent ?? null
+    ) {
+      keep.add(cur)
+    }
+  }
+  const nodes = graph.nodes
+    .filter((n) => keep.has(n.id))
+    .map((n) => (matched.has(n.id) ? n : { ...n, ancestor_only: true }))
+  const edges = graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to))
+  return { ...graph, nodes, edges }
+}
+
+/** The `[kind, audience]` suffix of a tree or unnested line; none for a ghost, which has neither. */
+function bracket(n: CapabilityGraphNode): string {
+  if (n.ghost) return ''
+  return ` [${n.kind === null ? n.audience : `${n.kind}, ${n.audience}`}]`
+}
+
+/** One capability as a tree or unnested line: id, title, brackets, then the `·` ancestor marker. */
+function describeNode(n: CapabilityGraphNode): string {
+  return `${n.id} ${n.ghost ? '(ghost) ' : ''}${n.title}${bracket(n)}${n.ancestor_only ? ' ·' : ''}`
+}
+
+/**
+ * The containment tree, one capability per line, two spaces per level,
+ * children in id order (`graph.nodes` is already id-sorted). Roots are the
+ * nodes with no parent in the graph, ghosts included — a ghost is the parent
+ * of real nodes. `depth` caps the levels shown, roots being level 1; a node
+ * with hidden children carries `(+K)`, K the hidden descendants. Parent chains
+ * are acyclic after `cutParentCycles`, so the walk terminates.
+ */
+export function renderTree(graph: CapabilityGraph, depth?: number): string[] {
+  const ids = new Set(graph.nodes.map((n) => n.id))
+  const children = new Map<string | null, CapabilityGraphNode[]>()
+  for (const n of graph.nodes) {
+    const key = n.parent !== null && ids.has(n.parent) ? n.parent : null
+    const siblings = children.get(key)
+    if (siblings === undefined) children.set(key, [n])
+    else siblings.push(n)
+  }
+  const descendants = (id: string): number =>
+    (children.get(id) ?? []).reduce((sum, c) => sum + 1 + descendants(c.id), 0)
+
+  const lines: string[] = []
+  const walk = (n: CapabilityGraphNode, level: number): void => {
+    const kids = children.get(n.id) ?? []
+    const hidden = depth !== undefined && level >= depth && kids.length > 0
+    lines.push(
+      `${'  '.repeat(level - 1)}${describeNode(n)}${hidden ? ` (+${descendants(n.id)})` : ''}`,
     )
+    if (hidden) return
+    for (const c of kids) walk(c, level + 1)
+  }
+  for (const root of children.get(null) ?? []) walk(root, 1)
+  return lines
+}
+
+/**
+ * Capabilities outside the containment tree: real (non-ghost) nodes with no
+ * parent whose kind is not `system`. Unnested capabilities are allowed, so
+ * this is information for the reader, never a warning.
+ */
+export function unnestedOf(graph: CapabilityGraph): CapabilityGraphNode[] {
+  return graph.nodes.filter((n) => !n.ghost && n.parent === null && n.kind !== 'system')
+}
+
+type GraphRenderInput = Pick<z.infer<typeof GraphInput>, 'tree' | 'depth' | 'unnested'>
+
+/**
+ * Text render. Default is the tab-separated table (the stable surface other
+ * tools read); `tree` swaps it for the containment tree, `unnested` adds the
+ * informational list of capabilities outside the tree (alone, it replaces the
+ * table). An audience filter shows fewer capabilities than were scanned,
+ * which the output cannot otherwise tell apart from an unfiltered run, so the
+ * footer reads `shown=N of capabilities=M` whenever the non-ghost node count
+ * falls short of `scanned`. `--unnested` never touches the footer's
+ * `warnings=` count or the exit code.
+ */
+export function renderGraph(
+  out: CapabilityGraph,
+  io: OpIo,
+  flags: GraphRenderInput = { tree: false, unnested: false },
+): number {
+  if (flags.tree) {
+    for (const line of renderTree(out, flags.depth)) io.stdout(`${line}\n`)
+  } else if (!flags.unnested) {
+    for (const n of out.nodes) {
+      io.stdout(
+        `${n.id}\t${n.parent ?? '-'}\t${n.kind ?? '-'}\t${n.audience}\t${n.state || '-'}\t${n.ghost ? '(ghost) ' : ''}${n.title}${n.ancestor_only ? ' ·' : ''}\n`,
+      )
+    }
+  }
+  if (flags.unnested) {
+    const unnested = unnestedOf(out)
+    io.stdout(
+      `unnested capabilities (information, not a warning; nesting is optional): ${unnested.length}\n`,
+    )
+    for (const n of unnested) io.stdout(`  ${describeNode(n)}\n`)
   }
   const relatedCount = out.edges.filter((e) => e.kind === 'related').length
   const wikilinkCount = out.edges.filter((e) => e.kind === 'wikilink').length
+  const shown = out.nodes.filter((n) => !n.ghost).length
+  const count =
+    shown === out.scanned
+      ? `capabilities=${out.scanned}`
+      : `shown=${shown} of capabilities=${out.scanned}`
   io.stdout(
-    `capabilities=${out.scanned} ghosts=${out.nodes.length - out.scanned} related-edges=${relatedCount} wikilink-edges=${wikilinkCount} warnings=${out.warnings.length}\n`,
+    `${count} ghosts=${out.nodes.filter((n) => n.ghost).length} related-edges=${relatedCount} wikilink-edges=${wikilinkCount} warnings=${out.warnings.length}\n`,
   )
   for (const w of out.warnings) io.stdout(`warning: ${w}\n`)
   return 0
 }
+
+const GraphInput = z.object({
+  audience: z
+    .enum(['user', 'system'])
+    .optional()
+    .describe(
+      'Show only this audience (`user` = the features lens), keeping ancestors so the tree stays connected; ancestors that fail the filter are marked `·`. Applies to every output mode.',
+    ),
+  tree: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Print the containment tree instead of the table: one capability per line, indented two spaces per level, children in id order. Text output only: ignored under `--output json`.',
+    ),
+  depth: z.coerce
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'With --tree, show only the first N levels (roots are level 1); a node with hidden children shows `(+K)` for its K hidden descendants. Text output only; refused without --tree, even under `--output json`.',
+    ),
+  unnested: z
+    .boolean()
+    .default(false)
+    .describe(
+      'List capabilities with no parent_key and a kind other than `system`, as information (never a warning or an exit-code change). Text output only: ignored under `--output json`. Alone it replaces the table.',
+    ),
+})
 
 export default defineOp({
   path: ['capability', 'graph'],
@@ -483,8 +642,14 @@ export default defineOp({
   // Read-only: reads the capability corpus and reports its graph; writes
   // nothing.
   mutating: false,
-  input: z.object({}),
+  input: GraphInput,
   output: CapabilityGraph,
   cli: { render: renderGraph },
-  handler: (_args, ctx) => buildCapabilityGraph(ctx.projectRoot),
+  handler: (args, ctx) => {
+    if (args.depth !== undefined && !args.tree) {
+      throw new OpError('INVALID_INPUT', '--depth requires --tree')
+    }
+    const graph = buildCapabilityGraph(ctx.projectRoot)
+    return args.audience === undefined ? graph : filterByAudience(graph, args.audience)
+  },
 })

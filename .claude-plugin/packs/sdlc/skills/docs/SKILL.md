@@ -33,7 +33,7 @@ selectable too but Cloudflare-owned — see "The site artifact" below.
 Two parts:
 
 - **Narrative (fixed pointer)** — a short fixed pointer block to the
-  prose docs: vision (the why), PR-0001-sdlc (what it is and
+  prose docs: N-41AZ-vision (the why), PR-0001-sdlc (what it is and
   how it's designed), D-VSLI-distributed-work-runner-architecture (the
   architecture). The prose lives in those docs; the index neither
   copies nor transcludes it.

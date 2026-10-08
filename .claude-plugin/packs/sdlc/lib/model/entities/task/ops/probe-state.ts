@@ -203,7 +203,7 @@ export default defineOp({
     const { basename } = args
     const branch = taskBranch(basename)
 
-    const wtPath = worktreePath(projectRoot, basename)
+    const wtPath = worktreePath(projectRoot, basename, ctx)
     const worktreeExists = isDir(wtPath)
     const branchPresent = branchExists(basename, projectRoot, ctx)
 

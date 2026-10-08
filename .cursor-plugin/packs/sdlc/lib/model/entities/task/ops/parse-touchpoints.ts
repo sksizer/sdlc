@@ -47,12 +47,12 @@
 import { parse, sectionsAt, blocksOfKind } from 'markdown-contract'
 import type { SectionNode } from 'markdown-contract'
 import { z } from 'zod'
+import { rowCellTexts } from '@sksizer/gfm-table'
 
 import { defineOp } from '@lib/registry'
 import { repr } from '@lib/util/diagnostics'
 import { taskSectionLookup, taskSectionsByKey } from '@lib/model/entities/task/schema'
 
-import { splitTableRow } from './_table_cells.ts'
 import { readTaskDoc } from './_task_doc.ts'
 
 const FENCE_RE = /^(```+|~~~+)/
@@ -207,12 +207,7 @@ function parseTableRows(section: Section, expectedColumns: number): [string[][],
     for (let i = 0; i < tableBlock.rows.length; i++) {
       const srcLine = section.docLines[tableBlock.rowPos(i).line - 1] ?? ''
       const stripped = srcLine.trim()
-      // NOTE: kept the local `splitTableRow` (NOT the library's `rawTableRow`)
-      // here: this parser's cell split is escape-aware (`\|` → literal `|`),
-      // which `rawTableRow`/`rawTableRows` deliberately do NOT reproduce (their
-      // `splitRow` is scoped to the Operations-table parser). Swapping it would
-      // change cell text for escaped-pipe rows, so it stays.
-      const cells = splitTableRow(stripped)
+      const cells = rowCellTexts(stripped)
       if (cells.length !== expectedColumns) {
         errors.push(`row has ${cells.length} cells, expected ${expectedColumns}: ${repr(stripped)}`)
         continue
@@ -254,7 +249,7 @@ function parseTableRows(section: Section, expectedColumns: number): [string[][],
       sepSeen = true
       continue
     }
-    const cells = splitTableRow(stripped)
+    const cells = rowCellTexts(stripped)
     if (!headerSeen) {
       headerSeen = true
       continue
