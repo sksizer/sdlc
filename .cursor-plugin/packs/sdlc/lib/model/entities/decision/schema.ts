@@ -110,6 +110,7 @@ export const DecisionContract = contract({
     optionalSection('Status'),
     optionalSection(['Context', 'What this is', 'Background']),
     optionalSection(['Why', 'Rationale']),
+    optionalSection(['Prior art', 'Alternatives elsewhere']),
     optionalSection('Options considered'),
     optionalSection(['Consequences', 'Implications']),
     optionalSection('Migration'),

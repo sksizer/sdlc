@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-08
+
+New `craft` skills, and the public repository now tags its own releases. The `sdlc` plugin and CLI
+are unchanged from 0.10.0. `craft` ships as 0.3.0.
+
+### Added
+
+- `craft` gains three skills for reviewing work as a page:
+  - `canvas` checks, renders and serves a typed document as one reviewable page: click a numbered
+    node, read its section in the walkthrough, comment on selected words, answer the agent's
+    questions, and the answers land in a JSON sidecar the agent reads back. Documents are lists of
+    typed blocks (`prose`, `annotated-text`, `schema`, `operations`). Its peer scripts run under
+    bun, Node 23.6+ or Deno with no dependencies and no build step.
+  - `explain` writes one canvas document with no questions, for a reader who needs to understand
+    something.
+  - `propose-solution` writes one canvas document that ends in a decision, with a recommended
+    answer for every trade-off the reviewer must ratify, so the page can be approved or sent back.
+  - Both take a domain as their first argument and read `domains/<domain>.md` beside the skill;
+    `sql` is the first domain (queries and schemas under `explain`, changes under
+    `propose-solution`).
+  ([#2935](https://github.com/sksizer/dev/pull/2935))
+- The public `sksizer/sdlc` repository tags a release when its pull request merges: on a push to
+  `main` it creates the annotated `v<version>` tag from the marketplace manifest, once
+  `CHANGELOG.md` has a section for that version.
+  ([#2939](https://github.com/sksizer/dev/pull/2939))
+
 ## [0.10.0] - 2026-10-08
 
 The public `sksizer/sdlc` repository becomes a two-plugin marketplace. The `sdlc`

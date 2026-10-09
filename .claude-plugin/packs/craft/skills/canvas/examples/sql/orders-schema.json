@@ -1,0 +1,337 @@
+{
+  "id": "orders-schema",
+  "title": "Orders database",
+  "summary": "The four tables behind checkout and fulfilment, as they are today in Postgres 16.",
+  "created": "2026-10-08",
+  "blocks": [
+    {
+      "id": "schema",
+      "type": "schema",
+      "dialect": "postgres",
+      "groups": [
+        {
+          "id": "commerce",
+          "title": "Commerce",
+          "tables": ["customers", "orders", "order_items"]
+        },
+        {
+          "id": "catalog",
+          "title": "Catalog",
+          "tables": ["products"]
+        }
+      ],
+      "tables": [
+        {
+          "id": "customers",
+          "name": "customers",
+          "purpose": "One row per account that can place an order. Guest checkouts get a row too, flagged by `is_guest`.",
+          "rows": 420000,
+          "primaryKey": ["id"],
+          "columns": [
+            {
+              "id": "customers.id",
+              "name": "id",
+              "type": "bigint",
+              "pk": true,
+              "default": "generated always as identity"
+            },
+            {
+              "id": "customers.email",
+              "name": "email",
+              "type": "citext",
+              "nullable": false,
+              "flags": ["unique"],
+              "purpose": "Login and notification address. Case-insensitive via citext."
+            },
+            {
+              "id": "customers.is_guest",
+              "name": "is_guest",
+              "type": "boolean",
+              "nullable": false,
+              "default": "false"
+            },
+            {
+              "id": "customers.created_at",
+              "name": "created_at",
+              "type": "timestamptz",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "indexes": [
+            {
+              "id": "customers_email_key",
+              "name": "customers_email_key",
+              "columns": ["email"],
+              "unique": true,
+              "purpose": "Login lookup."
+            }
+          ],
+          "source": {
+            "uri": "db/schema.sql",
+            "range": {
+              "start": {
+                "line": 0,
+                "character": 0
+              },
+              "end": {
+                "line": 8,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "orders",
+          "name": "orders",
+          "purpose": "A checkout that reached payment. Status moves `pending → paid → shipped → delivered`, or to `cancelled` from pending or paid.",
+          "rows": 3100000,
+          "primaryKey": ["id"],
+          "columns": [
+            {
+              "id": "orders.id",
+              "name": "id",
+              "type": "bigint",
+              "pk": true,
+              "default": "generated always as identity"
+            },
+            {
+              "id": "orders.customer_id",
+              "name": "customer_id",
+              "type": "bigint",
+              "nullable": false,
+              "references": {
+                "table": "customers",
+                "column": "id"
+              },
+              "flags": ["indexed"]
+            },
+            {
+              "id": "orders.status",
+              "name": "status",
+              "type": "text",
+              "nullable": false,
+              "default": "'pending'",
+              "purpose": "Free text today; a check constraint limits it to five values. See the proposed change."
+            },
+            {
+              "id": "orders.shipped",
+              "name": "shipped",
+              "type": "boolean",
+              "nullable": false,
+              "default": "false",
+              "purpose": "Legacy flag, set by the warehouse job. Redundant with `status` once status is reliable."
+            },
+            {
+              "id": "orders.total_cents",
+              "name": "total_cents",
+              "type": "integer",
+              "nullable": false,
+              "purpose": "Sum of item line totals at checkout time, in minor units. Not recomputed later."
+            },
+            {
+              "id": "orders.placed_at",
+              "name": "placed_at",
+              "type": "timestamptz",
+              "nullable": false,
+              "default": "now()",
+              "flags": ["indexed"]
+            }
+          ],
+          "indexes": [
+            {
+              "id": "orders_customer_id_idx",
+              "name": "orders_customer_id_idx",
+              "columns": ["customer_id"],
+              "purpose": "Account page: a customer's orders."
+            },
+            {
+              "id": "orders_placed_at_idx",
+              "name": "orders_placed_at_idx",
+              "columns": ["placed_at"],
+              "purpose": "Reporting ranges."
+            },
+            {
+              "id": "orders_status_pending_idx",
+              "name": "orders_status_pending_idx",
+              "columns": ["status"],
+              "where": "status = 'pending'",
+              "purpose": "The payment-retry worker's queue."
+            }
+          ],
+          "notes": [
+            "`total_cents` can disagree with the sum of `order_items` after a partial refund. Refunds are recorded elsewhere."
+          ],
+          "source": {
+            "uri": "db/schema.sql",
+            "range": {
+              "start": {
+                "line": 9,
+                "character": 0
+              },
+              "end": {
+                "line": 19,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "order_items",
+          "name": "order_items",
+          "purpose": "Line items. Price is copied from the product at checkout, so later catalog changes do not alter history.",
+          "rows": 8900000,
+          "primaryKey": ["id"],
+          "columns": [
+            {
+              "id": "order_items.id",
+              "name": "id",
+              "type": "bigint",
+              "pk": true,
+              "default": "generated always as identity"
+            },
+            {
+              "id": "order_items.order_id",
+              "name": "order_id",
+              "type": "bigint",
+              "nullable": false,
+              "references": {
+                "table": "orders",
+                "column": "id"
+              },
+              "flags": ["indexed"]
+            },
+            {
+              "id": "order_items.product_id",
+              "name": "product_id",
+              "type": "bigint",
+              "nullable": false,
+              "references": {
+                "table": "products",
+                "column": "id"
+              }
+            },
+            {
+              "id": "order_items.quantity",
+              "name": "quantity",
+              "type": "integer",
+              "nullable": false
+            },
+            {
+              "id": "order_items.unit_price_cents",
+              "name": "unit_price_cents",
+              "type": "integer",
+              "nullable": false
+            }
+          ],
+          "indexes": [
+            {
+              "id": "order_items_order_id_idx",
+              "name": "order_items_order_id_idx",
+              "columns": ["order_id"],
+              "purpose": "Expanding an order into its lines."
+            }
+          ],
+          "source": {
+            "uri": "db/schema.sql",
+            "range": {
+              "start": {
+                "line": 20,
+                "character": 0
+              },
+              "end": {
+                "line": 29,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "products",
+          "name": "products",
+          "purpose": "The catalog. Soft-deleted via `retired_at` so historical order items keep resolving.",
+          "rows": 12000,
+          "primaryKey": ["id"],
+          "columns": [
+            {
+              "id": "products.id",
+              "name": "id",
+              "type": "bigint",
+              "pk": true,
+              "default": "generated always as identity"
+            },
+            {
+              "id": "products.sku",
+              "name": "sku",
+              "type": "text",
+              "nullable": false,
+              "flags": ["unique"]
+            },
+            {
+              "id": "products.name",
+              "name": "name",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "products.price_cents",
+              "name": "price_cents",
+              "type": "integer",
+              "nullable": false
+            },
+            {
+              "id": "products.retired_at",
+              "name": "retired_at",
+              "type": "timestamptz",
+              "nullable": true
+            }
+          ],
+          "source": {
+            "uri": "db/schema.sql",
+            "range": {
+              "start": {
+                "line": 30,
+                "character": 0
+              },
+              "end": {
+                "line": 39,
+                "character": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "q-refund-source",
+      "prompt": "`orders.total_cents` drifts from line items after refunds. Where should the canonical total live?",
+      "kind": "single",
+      "about": "orders.total_cents",
+      "recommended": "view",
+      "options": [
+        {
+          "id": "view",
+          "label": "Derive it in a view over order_items plus refunds",
+          "detail": "No write path to keep in sync; a little slower on the account page."
+        },
+        {
+          "id": "trigger",
+          "label": "Keep the column, maintain it with a trigger on refunds",
+          "detail": "Fast reads; one more trigger to reason about."
+        },
+        {
+          "id": "leave",
+          "label": "Leave as is and document the drift",
+          "detail": "Zero work now; reporting keeps special-casing it."
+        }
+      ]
+    }
+  ],
+  "repo": {
+    "remote": "https://github.com/sksizer/dev",
+    "commit": "de9a5c420a3b7f1c9d2e8a4b6c0d1e2f3a4b5c6d",
+    "root": "/path/to/repo"
+  }
+}

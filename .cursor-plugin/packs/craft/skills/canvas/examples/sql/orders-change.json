@@ -1,0 +1,228 @@
+{
+  "id": "orders-change",
+  "title": "Replace orders.shipped with a fulfillment_status enum",
+  "summary": "Four operations in two phases, each one online, to retire the legacy boolean without a long lock on a 3M-row table.",
+  "created": "2026-10-08",
+  "blocks": [
+    {
+      "id": "motivation",
+      "type": "prose",
+      "title": "Motivation",
+      "text": "`orders.shipped` and `orders.status` can disagree: the warehouse job sets the flag while a cancelled order keeps `status = 'cancelled'`. Reporting special-cases both. One typed column, `fulfillment_status`, replaces the flag and the free-text status check.\n\nThe table has ~3.1M rows and takes writes continuously, so every step must avoid an `ACCESS EXCLUSIVE` lock held for longer than a few milliseconds.",
+      "source": {
+        "uri": "docs/planning/decisions/D-0042-fulfillment-status.md"
+      }
+    },
+    {
+      "id": "ops",
+      "type": "operations",
+      "title": "Operations",
+      "language": "sql",
+      "operations": [
+        {
+          "id": "op-type",
+          "kind": "raw",
+          "target": "orders",
+          "title": "Create the enum type",
+          "code": "CREATE TYPE fulfillment_status AS ENUM\n  ('pending', 'paid', 'shipped', 'delivered', 'cancelled');",
+          "detail": "A Postgres enum. Adding a value later is `ALTER TYPE ... ADD VALUE`, which is online but cannot run inside a transaction block before Postgres 12. Removing a value is not supported; that is the cost of an enum over a lookup table.",
+          "risk": "low",
+          "locks": "None on orders.",
+          "reversible": true,
+          "rollback": "DROP TYPE fulfillment_status;",
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 0,
+                "character": 0
+              },
+              "end": {
+                "line": 2,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "op-add",
+          "kind": "add-column",
+          "target": "orders.fulfillment_status",
+          "title": "Add the column, nullable, no default",
+          "code": "ALTER TABLE orders\n  ADD COLUMN fulfillment_status fulfillment_status;",
+          "before": "status        text    not null default 'pending'\nshipped       boolean not null default false",
+          "after": "status             text               not null default 'pending'\nshipped            boolean            not null default false\nfulfillment_status fulfillment_status null",
+          "detail": "Adding a nullable column with no default is a catalog-only change: the lock is `ACCESS EXCLUSIVE` but held for microseconds, no rewrite.\n\nA `NOT NULL` or a non-constant default here would rewrite the table. The constraint comes later, after the backfill.",
+          "risk": "low",
+          "locks": "ACCESS EXCLUSIVE for the catalog update only; waits behind long-running transactions, so run with `lock_timeout = '2s'` and retry.",
+          "reversible": true,
+          "rollback": "ALTER TABLE orders DROP COLUMN fulfillment_status;",
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 4,
+                "character": 0
+              },
+              "end": {
+                "line": 6,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "op-backfill",
+          "kind": "backfill",
+          "target": "orders.fulfillment_status",
+          "title": "Backfill in batches of 10k by id",
+          "code": "UPDATE orders\nSET fulfillment_status = CASE\n  WHEN status = 'cancelled' THEN 'cancelled'\n  WHEN shipped AND status = 'delivered' THEN 'delivered'\n  WHEN shipped THEN 'shipped'\n  ELSE status::fulfillment_status\nEND\nWHERE id BETWEEN $1 AND $1 + 9999\n  AND fulfillment_status IS NULL;",
+          "detail": "Run from a script that walks `id` in 10k steps with a short sleep between batches. Each batch touches one index range, holds row locks only, and commits.\n\nThe `CASE` encodes the precedence: `cancelled` wins over the flag, and the flag promotes `shipped` only when status has not already moved past it. The application starts writing `fulfillment_status` on every insert and update **before** this runs, so the backfill only has to cover old rows; the `IS NULL` guard makes it safe to re-run.",
+          "risk": "medium",
+          "locks": "Row locks per batch. Bloat from ~3.1M updated rows; autovacuum handles it, or run a manual VACUUM after.",
+          "reversible": true,
+          "rollback": "Nothing to undo: dropping the column (op 2 rollback) discards the data.",
+          "warnings": [
+            "Orders inserted between the column add and the application deploy will have NULL until the backfill reaches them. Verify with `SELECT count(*) FROM orders WHERE fulfillment_status IS NULL` before phase 2."
+          ],
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 8,
+                "character": 0
+              },
+              "end": {
+                "line": 17,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "op-notnull",
+          "kind": "add-constraint",
+          "target": "orders.fulfillment_status",
+          "title": "Enforce NOT NULL without a full scan lock",
+          "code": "ALTER TABLE orders\n  ADD CONSTRAINT orders_fulfillment_status_nn\n  CHECK (fulfillment_status IS NOT NULL) NOT VALID;\n\nALTER TABLE orders\n  VALIDATE CONSTRAINT orders_fulfillment_status_nn;\n\nALTER TABLE orders\n  ALTER COLUMN fulfillment_status SET NOT NULL;\n\nALTER TABLE orders\n  DROP CONSTRAINT orders_fulfillment_status_nn;",
+          "detail": "The direct `SET NOT NULL` scans the table under `ACCESS EXCLUSIVE`. The four-statement form adds the check `NOT VALID` (instant), validates it under a `SHARE UPDATE EXCLUSIVE` lock that allows writes, and then `SET NOT NULL` recognises the validated check and skips its own scan (Postgres 12+).",
+          "risk": "low",
+          "locks": "SHARE UPDATE EXCLUSIVE during VALIDATE; brief ACCESS EXCLUSIVE for the other three statements.",
+          "reversible": true,
+          "rollback": "ALTER TABLE orders ALTER COLUMN fulfillment_status DROP NOT NULL;",
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 19,
+                "character": 0
+              },
+              "end": {
+                "line": 31,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "op-drop",
+          "kind": "drop-column",
+          "target": "orders.shipped",
+          "title": "Drop the legacy flag",
+          "code": "ALTER TABLE orders DROP COLUMN shipped;",
+          "before": "shipped            boolean            not null default false\nfulfillment_status fulfillment_status not null",
+          "after": "fulfillment_status fulfillment_status not null",
+          "detail": "Catalog-only; the data stays on disk until rows are rewritten. Do this one release after the application stops reading `shipped`, so a rollback of the app does not meet a missing column.",
+          "risk": "high",
+          "locks": "Brief ACCESS EXCLUSIVE.",
+          "reversible": false,
+          "rollback": "Re-add the column and recompute it from fulfillment_status: `shipped = fulfillment_status IN ('shipped','delivered')`. The original values are lost, but they are derivable.",
+          "warnings": [
+            "Not reversible without a backfill. Search the codebase and dashboards for `shipped` before merging."
+          ],
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 33,
+                "character": 0
+              },
+              "end": {
+                "line": 34,
+                "character": 0
+              }
+            }
+          }
+        }
+      ],
+      "phases": [
+        {
+          "id": "phase-1",
+          "title": "Phase 1 · additive, this release",
+          "detail": "Deploy the app change that writes both columns, then run ops 1 to 4.",
+          "ops": ["op-type", "op-add", "op-backfill", "op-notnull"]
+        },
+        {
+          "id": "phase-2",
+          "title": "Phase 2 · destructive, next release",
+          "detail": "After one release with no reader of `shipped`.",
+          "ops": ["op-drop"]
+        }
+      ],
+      "source": {
+        "uri": "db/migrations/0042_fulfillment_status.sql"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "id": "q-enum-vs-table",
+      "prompt": "Enum type or lookup table for the status set?",
+      "kind": "single",
+      "about": "op-type",
+      "recommended": "enum",
+      "options": [
+        {
+          "id": "enum",
+          "label": "Postgres enum",
+          "detail": "Compact, typed, no join. Values cannot be removed."
+        },
+        {
+          "id": "table",
+          "label": "Lookup table with FK",
+          "detail": "Values editable at runtime; one more join on hot paths."
+        }
+      ]
+    },
+    {
+      "id": "q-batch",
+      "prompt": "Backfill batch size and pacing. Pick what the write load tolerates.",
+      "kind": "single",
+      "about": "op-backfill",
+      "recommended": "10k",
+      "options": [
+        {
+          "id": "10k",
+          "label": "10k rows, 100ms sleep",
+          "detail": "~5 minutes total."
+        },
+        {
+          "id": "50k",
+          "label": "50k rows, 250ms sleep",
+          "detail": "~2 minutes; longer row-lock windows."
+        }
+      ]
+    },
+    {
+      "id": "q-drop-timing",
+      "prompt": "Anything else that reads `orders.shipped` that the agent should know about before phase 2?",
+      "kind": "text",
+      "about": "op-drop"
+    }
+  ],
+  "repo": {
+    "remote": "https://github.com/sksizer/dev",
+    "commit": "de9a5c420a3b7f1c9d2e8a4b6c0d1e2f3a4b5c6d",
+    "root": "/path/to/repo"
+  }
+}

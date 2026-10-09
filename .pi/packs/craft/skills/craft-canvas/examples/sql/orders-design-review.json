@@ -1,0 +1,916 @@
+{
+  "id": "orders-design-review",
+  "title": "Fulfillment status design review",
+  "summary": "The whole review on one page: why the change, the tables as they are, the migration, the worker that writes the flag, and the report that reads it. Every block type in series.",
+  "created": "2026-10-09",
+  "repo": {
+    "remote": "https://github.com/sksizer/dev",
+    "commit": "de9a5c420a3b7f1c9d2e8a4b6c0d1e2f3a4b5c6d",
+    "root": "/path/to/repo"
+  },
+  "blocks": [
+    {
+      "id": "intro",
+      "type": "prose",
+      "title": "Summary",
+      "text": "`orders.shipped` and `orders.status` disagree in about **0.4%** of rows, enough to put cancelled orders in the VIP report and to hide shipped ones from the warehouse dashboard. This page proposes one typed column, `fulfillment_status`, shows the migration that gets there without a long lock, and walks the two code paths that have to change.\n\nRead top to bottom, or jump with the navigation. Comment on any section, or select words and comment on those. The questions at the end are the decisions I need from you."
+    },
+    {
+      "id": "schema",
+      "type": "schema",
+      "title": "The tables today",
+      "dialect": "postgres",
+      "groups": [
+        {
+          "id": "commerce",
+          "title": "Commerce",
+          "tables": ["customers", "orders", "order_items"]
+        },
+        {
+          "id": "catalog",
+          "title": "Catalog",
+          "tables": ["products"]
+        }
+      ],
+      "tables": [
+        {
+          "id": "customers",
+          "name": "customers",
+          "purpose": "One row per account that can place an order. Guest checkouts get a row too, flagged by `is_guest`.",
+          "rows": 420000,
+          "primaryKey": ["id"],
+          "columns": [
+            {
+              "id": "customers.id",
+              "name": "id",
+              "type": "bigint",
+              "pk": true,
+              "default": "generated always as identity"
+            },
+            {
+              "id": "customers.email",
+              "name": "email",
+              "type": "citext",
+              "nullable": false,
+              "flags": ["unique"],
+              "purpose": "Login and notification address. Case-insensitive via citext."
+            },
+            {
+              "id": "customers.is_guest",
+              "name": "is_guest",
+              "type": "boolean",
+              "nullable": false,
+              "default": "false"
+            },
+            {
+              "id": "customers.created_at",
+              "name": "created_at",
+              "type": "timestamptz",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "indexes": [
+            {
+              "id": "customers_email_key",
+              "name": "customers_email_key",
+              "columns": ["email"],
+              "unique": true,
+              "purpose": "Login lookup."
+            }
+          ],
+          "source": {
+            "uri": "db/schema.sql",
+            "range": {
+              "start": {
+                "line": 0,
+                "character": 0
+              },
+              "end": {
+                "line": 8,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "orders",
+          "name": "orders",
+          "purpose": "A checkout that reached payment. Status moves `pending → paid → shipped → delivered`, or to `cancelled` from pending or paid.",
+          "rows": 3100000,
+          "primaryKey": ["id"],
+          "columns": [
+            {
+              "id": "orders.id",
+              "name": "id",
+              "type": "bigint",
+              "pk": true,
+              "default": "generated always as identity"
+            },
+            {
+              "id": "orders.customer_id",
+              "name": "customer_id",
+              "type": "bigint",
+              "nullable": false,
+              "references": {
+                "table": "customers",
+                "column": "id"
+              },
+              "flags": ["indexed"]
+            },
+            {
+              "id": "orders.status",
+              "name": "status",
+              "type": "text",
+              "nullable": false,
+              "default": "'pending'",
+              "purpose": "Free text today; a check constraint limits it to five values. See the proposed change."
+            },
+            {
+              "id": "orders.shipped",
+              "name": "shipped",
+              "type": "boolean",
+              "nullable": false,
+              "default": "false",
+              "purpose": "Legacy flag, set by the warehouse job. Redundant with `status` once status is reliable."
+            },
+            {
+              "id": "orders.total_cents",
+              "name": "total_cents",
+              "type": "integer",
+              "nullable": false,
+              "purpose": "Sum of item line totals at checkout time, in minor units. Not recomputed later."
+            },
+            {
+              "id": "orders.placed_at",
+              "name": "placed_at",
+              "type": "timestamptz",
+              "nullable": false,
+              "default": "now()",
+              "flags": ["indexed"]
+            }
+          ],
+          "indexes": [
+            {
+              "id": "orders_customer_id_idx",
+              "name": "orders_customer_id_idx",
+              "columns": ["customer_id"],
+              "purpose": "Account page: a customer's orders."
+            },
+            {
+              "id": "orders_placed_at_idx",
+              "name": "orders_placed_at_idx",
+              "columns": ["placed_at"],
+              "purpose": "Reporting ranges."
+            },
+            {
+              "id": "orders_status_pending_idx",
+              "name": "orders_status_pending_idx",
+              "columns": ["status"],
+              "where": "status = 'pending'",
+              "purpose": "The payment-retry worker's queue."
+            }
+          ],
+          "notes": [
+            "`total_cents` can disagree with the sum of `order_items` after a partial refund. Refunds are recorded elsewhere."
+          ],
+          "source": {
+            "uri": "db/schema.sql",
+            "range": {
+              "start": {
+                "line": 9,
+                "character": 0
+              },
+              "end": {
+                "line": 19,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "order_items",
+          "name": "order_items",
+          "purpose": "Line items. Price is copied from the product at checkout, so later catalog changes do not alter history.",
+          "rows": 8900000,
+          "primaryKey": ["id"],
+          "columns": [
+            {
+              "id": "order_items.id",
+              "name": "id",
+              "type": "bigint",
+              "pk": true,
+              "default": "generated always as identity"
+            },
+            {
+              "id": "order_items.order_id",
+              "name": "order_id",
+              "type": "bigint",
+              "nullable": false,
+              "references": {
+                "table": "orders",
+                "column": "id"
+              },
+              "flags": ["indexed"]
+            },
+            {
+              "id": "order_items.product_id",
+              "name": "product_id",
+              "type": "bigint",
+              "nullable": false,
+              "references": {
+                "table": "products",
+                "column": "id"
+              }
+            },
+            {
+              "id": "order_items.quantity",
+              "name": "quantity",
+              "type": "integer",
+              "nullable": false
+            },
+            {
+              "id": "order_items.unit_price_cents",
+              "name": "unit_price_cents",
+              "type": "integer",
+              "nullable": false
+            }
+          ],
+          "indexes": [
+            {
+              "id": "order_items_order_id_idx",
+              "name": "order_items_order_id_idx",
+              "columns": ["order_id"],
+              "purpose": "Expanding an order into its lines."
+            }
+          ],
+          "source": {
+            "uri": "db/schema.sql",
+            "range": {
+              "start": {
+                "line": 20,
+                "character": 0
+              },
+              "end": {
+                "line": 29,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "products",
+          "name": "products",
+          "purpose": "The catalog. Soft-deleted via `retired_at` so historical order items keep resolving.",
+          "rows": 12000,
+          "primaryKey": ["id"],
+          "columns": [
+            {
+              "id": "products.id",
+              "name": "id",
+              "type": "bigint",
+              "pk": true,
+              "default": "generated always as identity"
+            },
+            {
+              "id": "products.sku",
+              "name": "sku",
+              "type": "text",
+              "nullable": false,
+              "flags": ["unique"]
+            },
+            {
+              "id": "products.name",
+              "name": "name",
+              "type": "text",
+              "nullable": false
+            },
+            {
+              "id": "products.price_cents",
+              "name": "price_cents",
+              "type": "integer",
+              "nullable": false
+            },
+            {
+              "id": "products.retired_at",
+              "name": "retired_at",
+              "type": "timestamptz",
+              "nullable": true
+            }
+          ],
+          "source": {
+            "uri": "db/schema.sql",
+            "range": {
+              "start": {
+                "line": 30,
+                "character": 0
+              },
+              "end": {
+                "line": 39,
+                "character": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "problem",
+      "type": "prose",
+      "title": "What goes wrong",
+      "text": "The warehouse job sets `shipped = true` when a label prints. Cancellation sets `status = 'cancelled'` and leaves the flag alone. A cancelled-after-label order is therefore both shipped and cancelled, and every consumer picks one:\n\n- The VIP report trusts `status`, so the order counts as revenue.\n- The warehouse dashboard trusts `shipped`, so it is hidden.\n- Support sees both and asks engineering.\n\nTwo sources of truth is the bug; the fix is one column with the precedence written down."
+    },
+    {
+      "id": "ops",
+      "type": "operations",
+      "title": "The migration",
+      "language": "sql",
+      "operations": [
+        {
+          "id": "op-type",
+          "kind": "raw",
+          "target": "orders",
+          "title": "Create the enum type",
+          "code": "CREATE TYPE fulfillment_status AS ENUM\n  ('pending', 'paid', 'shipped', 'delivered', 'cancelled');",
+          "detail": "A Postgres enum. Adding a value later is `ALTER TYPE ... ADD VALUE`, which is online but cannot run inside a transaction block before Postgres 12. Removing a value is not supported; that is the cost of an enum over a lookup table.",
+          "risk": "low",
+          "locks": "None on orders.",
+          "reversible": true,
+          "rollback": "DROP TYPE fulfillment_status;",
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 0,
+                "character": 0
+              },
+              "end": {
+                "line": 2,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "op-add",
+          "kind": "add-column",
+          "target": "orders.fulfillment_status",
+          "title": "Add the column, nullable, no default",
+          "code": "ALTER TABLE orders\n  ADD COLUMN fulfillment_status fulfillment_status;",
+          "before": "status        text    not null default 'pending'\nshipped       boolean not null default false",
+          "after": "status             text               not null default 'pending'\nshipped            boolean            not null default false\nfulfillment_status fulfillment_status null",
+          "detail": "Adding a nullable column with no default is a catalog-only change: the lock is `ACCESS EXCLUSIVE` but held for microseconds, no rewrite.\n\nA `NOT NULL` or a non-constant default here would rewrite the table. The constraint comes later, after the backfill.",
+          "risk": "low",
+          "locks": "ACCESS EXCLUSIVE for the catalog update only; waits behind long-running transactions, so run with `lock_timeout = '2s'` and retry.",
+          "reversible": true,
+          "rollback": "ALTER TABLE orders DROP COLUMN fulfillment_status;",
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 4,
+                "character": 0
+              },
+              "end": {
+                "line": 6,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "op-backfill",
+          "kind": "backfill",
+          "target": "orders.fulfillment_status",
+          "title": "Backfill in batches of 10k by id",
+          "code": "UPDATE orders\nSET fulfillment_status = CASE\n  WHEN status = 'cancelled' THEN 'cancelled'\n  WHEN shipped AND status = 'delivered' THEN 'delivered'\n  WHEN shipped THEN 'shipped'\n  ELSE status::fulfillment_status\nEND\nWHERE id BETWEEN $1 AND $1 + 9999\n  AND fulfillment_status IS NULL;",
+          "detail": "Run from a script that walks `id` in 10k steps with a short sleep between batches. Each batch touches one index range, holds row locks only, and commits.\n\nThe `CASE` encodes the precedence: `cancelled` wins over the flag, and the flag promotes `shipped` only when status has not already moved past it. The application starts writing `fulfillment_status` on every insert and update **before** this runs, so the backfill only has to cover old rows; the `IS NULL` guard makes it safe to re-run.",
+          "risk": "medium",
+          "locks": "Row locks per batch. Bloat from ~3.1M updated rows; autovacuum handles it, or run a manual VACUUM after.",
+          "reversible": true,
+          "rollback": "Nothing to undo: dropping the column (op 2 rollback) discards the data.",
+          "warnings": [
+            "Orders inserted between the column add and the application deploy will have NULL until the backfill reaches them. Verify with `SELECT count(*) FROM orders WHERE fulfillment_status IS NULL` before phase 2."
+          ],
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 8,
+                "character": 0
+              },
+              "end": {
+                "line": 17,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "op-notnull",
+          "kind": "add-constraint",
+          "target": "orders.fulfillment_status",
+          "title": "Enforce NOT NULL without a full scan lock",
+          "code": "ALTER TABLE orders\n  ADD CONSTRAINT orders_fulfillment_status_nn\n  CHECK (fulfillment_status IS NOT NULL) NOT VALID;\n\nALTER TABLE orders\n  VALIDATE CONSTRAINT orders_fulfillment_status_nn;\n\nALTER TABLE orders\n  ALTER COLUMN fulfillment_status SET NOT NULL;\n\nALTER TABLE orders\n  DROP CONSTRAINT orders_fulfillment_status_nn;",
+          "detail": "The direct `SET NOT NULL` scans the table under `ACCESS EXCLUSIVE`. The four-statement form adds the check `NOT VALID` (instant), validates it under a `SHARE UPDATE EXCLUSIVE` lock that allows writes, and then `SET NOT NULL` recognises the validated check and skips its own scan (Postgres 12+).",
+          "risk": "low",
+          "locks": "SHARE UPDATE EXCLUSIVE during VALIDATE; brief ACCESS EXCLUSIVE for the other three statements.",
+          "reversible": true,
+          "rollback": "ALTER TABLE orders ALTER COLUMN fulfillment_status DROP NOT NULL;",
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 19,
+                "character": 0
+              },
+              "end": {
+                "line": 31,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "op-drop",
+          "kind": "drop-column",
+          "target": "orders.shipped",
+          "title": "Drop the legacy flag",
+          "code": "ALTER TABLE orders DROP COLUMN shipped;",
+          "before": "shipped            boolean            not null default false\nfulfillment_status fulfillment_status not null",
+          "after": "fulfillment_status fulfillment_status not null",
+          "detail": "Catalog-only; the data stays on disk until rows are rewritten. Do this one release after the application stops reading `shipped`, so a rollback of the app does not meet a missing column.",
+          "risk": "high",
+          "locks": "Brief ACCESS EXCLUSIVE.",
+          "reversible": false,
+          "rollback": "Re-add the column and recompute it from fulfillment_status: `shipped = fulfillment_status IN ('shipped','delivered')`. The original values are lost, but they are derivable.",
+          "warnings": [
+            "Not reversible without a backfill. Search the codebase and dashboards for `shipped` before merging."
+          ],
+          "source": {
+            "uri": "db/migrations/0042_fulfillment_status.sql",
+            "range": {
+              "start": {
+                "line": 33,
+                "character": 0
+              },
+              "end": {
+                "line": 34,
+                "character": 0
+              }
+            }
+          }
+        }
+      ],
+      "phases": [
+        {
+          "id": "phase-1",
+          "title": "Phase 1 · additive, this release",
+          "detail": "Deploy the app change that writes both columns, then run ops 1 to 4.",
+          "ops": ["op-type", "op-add", "op-backfill", "op-notnull"]
+        },
+        {
+          "id": "phase-2",
+          "title": "Phase 2 · destructive, next release",
+          "detail": "After one release with no reader of `shipped`.",
+          "ops": ["op-drop"]
+        }
+      ],
+      "source": {
+        "uri": "db/migrations/0042_fulfillment_status.sql"
+      }
+    },
+    {
+      "id": "writer",
+      "type": "prose",
+      "title": "The writer",
+      "text": "One code path writes the flag today. It becomes a status transition with the precedence from the migration's `CASE`, and it stops writing `shipped` one release before the column is dropped."
+    },
+    {
+      "id": "worker",
+      "type": "annotated-text",
+      "title": "warehouse/mark-shipped.ts",
+      "language": "ts",
+      "source": {
+        "uri": "services/warehouse/mark-shipped.ts",
+        "range": {
+          "start": {
+            "line": 11,
+            "character": 0
+          },
+          "end": {
+            "line": 19,
+            "character": 0
+          }
+        }
+      },
+      "text": "export async function markShipped(orderId: number) {\n  const order = await db.orders.get(orderId)\n  if (!order) throw new NotFound(orderId)\n  if (order.status === 'cancelled') return order\n  await db.orders.update(orderId, { shipped: true })\n  await events.emit('order.shipped', { orderId })\n  return { ...order, shipped: true }\n}",
+      "steps": [
+        {
+          "id": "w-load",
+          "title": "Load the order",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "const order = await db.orders.get(orderId)"
+          },
+          "summary": "One primary-key read.",
+          "detail": "Reads the row once. After the change this is also where the current `fulfillment_status` comes from, so the transition below can refuse an impossible move."
+        },
+        {
+          "id": "w-cancel",
+          "title": "Cancelled orders are left alone",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "if (order.status === 'cancelled') return order"
+          },
+          "summary": "The guard that the flag write bypasses today.",
+          "detail": "The guard exists, but it is checked **before** the label prints, and a cancellation that lands after it still gets the flag. With one column the write below becomes a transition `paid → shipped`, and `cancelled → shipped` is refused by the database, not by this line.",
+          "warnings": ["This is the race that produces the 0.4%."]
+        },
+        {
+          "id": "w-write",
+          "title": "The flag write",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "await db.orders.update(orderId, { shipped: true })"
+          },
+          "summary": "Becomes a status transition.",
+          "detail": "Replace with `update(orderId, { fulfillment_status: 'shipped' })` guarded by `WHERE fulfillment_status = 'paid'`. Zero rows updated means the order moved on; return it unchanged and skip the event.",
+          "source": {
+            "uri": "services/warehouse/mark-shipped.ts",
+            "range": {
+              "start": {
+                "line": 15,
+                "character": 0
+              },
+              "end": {
+                "line": 16,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "w-event",
+          "title": "The event",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "await events.emit('order.shipped', { orderId })"
+          },
+          "summary": "Unchanged, but only on a real transition.",
+          "detail": "Consumers of `order.shipped` today sometimes receive it for a cancelled order. Emitting only when the transition updated a row fixes that for free."
+        }
+      ]
+    },
+    {
+      "id": "reader",
+      "type": "prose",
+      "title": "The reader",
+      "text": "The VIP report is the consumer that matters most; it decides who gets the quarterly gift. Its status filter is the one line that changes."
+    },
+    {
+      "id": "query",
+      "type": "annotated-text",
+      "title": "reports/vip.sql",
+      "language": "sql",
+      "source": {
+        "uri": "reports/vip.sql",
+        "range": {
+          "start": {
+            "line": 0,
+            "character": 0
+          },
+          "end": {
+            "line": 24,
+            "character": 0
+          }
+        }
+      },
+      "text": "WITH recent AS (\n  SELECT o.customer_id,\n         o.id AS order_id,\n         o.total_cents\n  FROM orders o\n  WHERE o.placed_at >= now() - interval '90 days'\n    AND o.status IN ('paid', 'shipped', 'delivered')\n),\nspend AS (\n  SELECT customer_id,\n         COUNT(*)         AS order_count,\n         SUM(total_cents) AS spend_cents\n  FROM recent\n  GROUP BY customer_id\n)\nSELECT c.email,\n       s.order_count,\n       s.spend_cents,\n       RANK() OVER (ORDER BY s.spend_cents DESC) AS spend_rank\nFROM spend s\nJOIN customers c ON c.id = s.customer_id\nWHERE NOT c.is_guest\nORDER BY s.spend_cents DESC\nLIMIT 100;",
+      "steps": [
+        {
+          "id": "s-recent",
+          "title": "Narrow orders to the last 90 days",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "WITH recent AS (\n  SELECT o.customer_id,\n         o.id AS order_id,\n         o.total_cents\n  FROM orders o\n  WHERE o.placed_at >= now() - interval '90 days'\n    AND o.status IN ('paid', 'shipped', 'delivered')\n)"
+          },
+          "summary": "A CTE that keeps only recent, money-bearing orders.",
+          "detail": "The CTE reads `orders` once and keeps three columns. Postgres 12+ inlines a single-reference CTE, so this behaves like a subquery, not a materialised temp table.\n\nThe date predicate is **sargable**: `placed_at >= <constant>` uses `orders_placed_at_idx` as a range scan. Writing it as `now() - placed_at <= interval '90 days'` would not.",
+          "touches": [
+            {
+              "table": "orders",
+              "column": "placed_at"
+            },
+            {
+              "table": "orders",
+              "column": "status"
+            },
+            {
+              "table": "orders",
+              "column": "total_cents"
+            }
+          ],
+          "cost": {
+            "rows": 410000,
+            "note": "About 13% of orders fall in a 90-day window."
+          },
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 0,
+                "character": 0
+              },
+              "end": {
+                "line": 8,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-status",
+          "title": "Keep only orders that count as revenue",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "o.status IN ('paid', 'shipped', 'delivered')"
+          },
+          "summary": "Excludes pending and cancelled orders.",
+          "detail": "`status` is free text with a check constraint, so the three literals must match exactly. If the proposed `fulfillment_status` enum lands, this becomes `o.status <> 'pending' AND o.status <> 'cancelled'` or a join to the status table.\n\nThe filter is applied after the index range scan, row by row. There is no index on `status` beyond the partial `pending` index, which this predicate cannot use.",
+          "touches": [
+            {
+              "table": "orders",
+              "column": "status"
+            }
+          ],
+          "warnings": [
+            "A new status value added later will silently drop out of the report unless this list is updated."
+          ],
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 6,
+                "character": 0
+              },
+              "end": {
+                "line": 7,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-spend",
+          "title": "Aggregate spend per customer",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "spend AS (\n  SELECT customer_id,\n         COUNT(*)         AS order_count,\n         SUM(total_cents) AS spend_cents\n  FROM recent\n  GROUP BY customer_id\n)"
+          },
+          "summary": "One row per customer with order count and total.",
+          "detail": "A hash aggregate over `recent`. `total_cents` is the checkout-time total, so refunds are **not** subtracted; see the open question on the schema page.\n\nAbout 410k rows collapse to roughly 95k customers.",
+          "touches": [
+            {
+              "table": "orders",
+              "column": "customer_id"
+            }
+          ],
+          "cost": {
+            "rows": 95000
+          },
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 8,
+                "character": 0
+              },
+              "end": {
+                "line": 15,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-join",
+          "title": "Attach the customer's email",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "FROM spend s\nJOIN customers c ON c.id = s.customer_id"
+          },
+          "summary": "Inner join to customers on the primary key.",
+          "detail": "The planner builds a hash on the smaller side. `spend` has ~95k rows and `customers` ~420k, so it hashes `spend` and probes it while scanning customers, or uses the pk index when the estimate is low. Either way this is cheap relative to the first step.",
+          "touches": [
+            {
+              "table": "customers",
+              "column": "id"
+            },
+            {
+              "table": "customers",
+              "column": "email"
+            }
+          ],
+          "cost": {
+            "rows": 95000
+          },
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 19,
+                "character": 0
+              },
+              "end": {
+                "line": 21,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-guest",
+          "title": "Drop guest accounts",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "WHERE NOT c.is_guest"
+          },
+          "summary": "Guests cannot be VIPs.",
+          "detail": "Applied after the join. Guests are about a third of customers but a smaller share of repeat spend, so this removes a modest number of rows. Pushing this into the CTE would require joining customers earlier and would not help.",
+          "touches": [
+            {
+              "table": "customers",
+              "column": "is_guest"
+            }
+          ],
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 21,
+                "character": 0
+              },
+              "end": {
+                "line": 22,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-rank",
+          "title": "Rank by spend",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "RANK() OVER (ORDER BY s.spend_cents DESC) AS spend_rank"
+          },
+          "summary": "Window function; ties share a rank.",
+          "detail": "`RANK()` gives tied customers the same number and skips the next (1, 2, 2, 4). Use `DENSE_RANK()` for 1, 2, 2, 3 or `ROW_NUMBER()` for a strict ordering.\n\nThe window sorts all surviving rows by spend once. The final `ORDER BY` below uses the same key, so Postgres reuses that sort rather than sorting twice.",
+          "cost": {
+            "note": "One in-memory sort of ~60k rows."
+          },
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 18,
+                "character": 0
+              },
+              "end": {
+                "line": 19,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-limit",
+          "title": "Keep the top 100",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "ORDER BY s.spend_cents DESC\nLIMIT 100;"
+          },
+          "summary": "Final ordering and cut-off.",
+          "detail": "Because the window function needs every row to compute ranks, the `LIMIT` cannot be pushed below it. The whole ranked set is built, then 100 rows are emitted. For a much larger customer base, a two-stage query (top-N by spend first, rank second) would avoid ranking rows that are thrown away.",
+          "warnings": [
+            "LIMIT after RANK can cut a tie group in half: customers 99 and 100 may share a rank with customer 101, who is not shown."
+          ],
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 22,
+                "character": 0
+              },
+              "end": {
+                "line": 24,
+                "character": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "rollout",
+      "type": "prose",
+      "title": "Rollout and risk",
+      "text": "Phase 1 is additive and ships with the worker change in the same release; phase 2 drops `shipped` one release later, after a week of no reads. The backfill touches 3.1M rows in 10k batches and is safe to re-run.\n\nThe one thing I cannot verify from here is whether any dashboard outside this repo reads `shipped`. That is the last question below."
+    }
+  ],
+  "questions": [
+    {
+      "id": "q-enum-vs-table",
+      "prompt": "Enum type or lookup table for the status set?",
+      "kind": "single",
+      "about": "op-type",
+      "recommended": "enum",
+      "options": [
+        {
+          "id": "enum",
+          "label": "Postgres enum",
+          "detail": "Compact, typed, no join. Values cannot be removed."
+        },
+        {
+          "id": "table",
+          "label": "Lookup table with FK",
+          "detail": "Values editable at runtime; one more join on hot paths."
+        }
+      ]
+    },
+    {
+      "id": "q-batch",
+      "prompt": "Backfill batch size and pacing. Pick what the write load tolerates.",
+      "kind": "single",
+      "about": "op-backfill",
+      "recommended": "10k",
+      "options": [
+        {
+          "id": "10k",
+          "label": "10k rows, 100ms sleep",
+          "detail": "~5 minutes total."
+        },
+        {
+          "id": "50k",
+          "label": "50k rows, 250ms sleep",
+          "detail": "~2 minutes; longer row-lock windows."
+        }
+      ]
+    },
+    {
+      "id": "q-rank-fn",
+      "prompt": "Ties at the cut-off: which ranking semantics does the report want?",
+      "kind": "single",
+      "about": "s-rank",
+      "recommended": "rank",
+      "options": [
+        {
+          "id": "rank",
+          "label": "RANK() as written",
+          "detail": "Ties share a rank; gaps follow."
+        },
+        {
+          "id": "dense",
+          "label": "DENSE_RANK()",
+          "detail": "Ties share a rank; no gaps."
+        },
+        {
+          "id": "rownum",
+          "label": "ROW_NUMBER() with a tie-break on customer id",
+          "detail": "Strict ordering; stable across runs."
+        }
+      ]
+    },
+    {
+      "id": "q-refund-source",
+      "prompt": "`orders.total_cents` drifts from line items after refunds. Where should the canonical total live?",
+      "kind": "single",
+      "about": "orders.total_cents",
+      "recommended": "view",
+      "options": [
+        {
+          "id": "view",
+          "label": "Derive it in a view over order_items plus refunds",
+          "detail": "No write path to keep in sync; a little slower on the account page."
+        },
+        {
+          "id": "trigger",
+          "label": "Keep the column, maintain it with a trigger on refunds",
+          "detail": "Fast reads; one more trigger to reason about."
+        },
+        {
+          "id": "leave",
+          "label": "Leave as is and document the drift",
+          "detail": "Zero work now; reporting keeps special-casing it."
+        }
+      ]
+    },
+    {
+      "id": "q-drop-timing",
+      "prompt": "Anything else that reads `orders.shipped` that the agent should know about before phase 2?",
+      "kind": "text",
+      "about": "op-drop"
+    }
+  ]
+}

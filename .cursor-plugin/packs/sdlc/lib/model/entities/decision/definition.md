@@ -60,6 +60,7 @@ A Decision is *not*:
 | Status | optional | | Narrative status; authoritative state is the frontmatter `state:` field |
 | Context | optional | What this is, Background | Situation that prompted the decision |
 | Why | optional | Rationale | Why this and not a plausible alternative |
+| Prior art | optional | Alternatives elsewhere | How existing tools, libraries, standards and past decisions solve the problem; one row per system or pattern with a source and a verdict (adopt, borrow, reject). `/[[decision-make]]` writes it |
 | Options considered | optional | | Alternatives weighed before landing on the decision |
 | Consequences | optional | Implications | What becomes easier, what binds future work |
 | Migration | optional | | How current state moves to the decided state |
