@@ -5,6 +5,18 @@
   },
   "plugins": [
     {
+      "name": "craft",
+      "source": {
+        "source": "local",
+        "path": "./.agents/packs/craft"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
       "name": "sdlc",
       "source": {
         "source": "local",

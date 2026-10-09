@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-08
+
+The public `sksizer/sdlc` repository becomes a two-plugin marketplace. The `sdlc`
+plugin and CLI are unchanged from 0.9.0.
+
+### Added
+
+- The public `sksizer/sdlc` repository now also publishes the `craft` plugin
+  (script-free, portable skills) beside `sdlc`, for Claude Code, Codex,
+  Cursor and Pi. Install it with `/plugin install craft@sdlc`. `craft` is
+  versioned on its own and ships as 0.2.0, with seven skills: `research`,
+  `decision-make`, `capability-groom`, `explore-codebase`,
+  `api-enhancement-scan`, `skill-author` and `skill-review`.
+- `craft`'s `skill-review` grades one skill or a plugin's skills against the
+  `skill-author` checks and against each other (drift, dead references,
+  overlap, two processes, orphans, vocabulary) and reports one
+  recommendation per finding; `--fix` hands marked skills to `skill-author`.
+  ([#2928](https://github.com/sksizer/dev/pull/2928))
+
+### Changed
+
+- `craft`'s `skill-author` calls other skills by wikilink, keeps prose short
+  and maps non-linear flow; its agent-pants rules apply only when agent-pants
+  is installed. ([#2928](https://github.com/sksizer/dev/pull/2928))
+
 ## [0.9.0] - 2026-10-08
 
 Adoption, sessions and a safer orchestrator: the setup wizard becomes real

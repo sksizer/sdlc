@@ -1,0 +1,397 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MapPage",
+  "description": "The data a codebase map page is rendered from. Emit this as JSON and run render_map.mjs over it; never hand-write the HTML.",
+  "type": "object",
+  "required": ["title", "lede", "sections"],
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "The subject, as short as it can be. Usually the repo or package name."
+    },
+    "lede": {
+      "type": "string",
+      "description": "One sentence naming what the thing is."
+    },
+    "meta": {
+      "type": "string",
+      "description": "Provenance line: scope surveyed, size, date."
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/section"
+      }
+    }
+  },
+  "$defs": {
+    "inline": {
+      "type": "string",
+      "description": "Plain text. `backticks` render as code and **stars** as bold; everything else is escaped."
+    },
+    "section": {
+      "type": "object",
+      "required": ["heading", "blocks"],
+      "additionalProperties": false,
+      "properties": {
+        "heading": {
+          "$ref": "#/$defs/inline"
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        }
+      }
+    },
+    "block": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "text"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "p"
+            },
+            "text": {
+              "$ref": "#/$defs/inline"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "items"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "ul"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inline"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "head", "rows"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "table"
+            },
+            "head": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inline"
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/inline"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "heading", "blocks"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "panel"
+            },
+            "heading": {
+              "$ref": "#/$defs/inline"
+            },
+            "blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/block"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "caption", "diagram"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "figure"
+            },
+            "caption": {
+              "$ref": "#/$defs/inline"
+            },
+            "cite": {
+              "type": "string",
+              "description": "path:line where this diagram can be verified."
+            },
+            "diagram": {
+              "$ref": "#/$defs/diagram"
+            }
+          }
+        }
+      ]
+    },
+    "box": {
+      "type": "object",
+      "required": ["title"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Detail lines under the title. Two or three; this is a diagram, not a paragraph."
+        },
+        "accent": {
+          "enum": ["none", "good", "warn", "bad"],
+          "description": "Colours the box's rule. Default none."
+        }
+      }
+    },
+    "diagram": {
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Rows of boxes stacked top to bottom, optionally cut by a labelled boundary. For layered architectures and anything separated by a seam.",
+          "required": ["kind", "layers"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "layers"
+            },
+            "layers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["boxes"],
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "boxes": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/box"
+                    }
+                  }
+                }
+              }
+            },
+            "boundary": {
+              "type": "object",
+              "required": ["after", "label"],
+              "additionalProperties": false,
+              "properties": {
+                "after": {
+                  "type": "integer",
+                  "description": "Index of the layer the boundary sits below."
+                },
+                "label": {
+                  "type": "string"
+                }
+              }
+            },
+            "arrows": {
+              "enum": ["none", "down"],
+              "description": "Draw arrows from each layer to the next. Default down."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Ordered stages left to right, optionally fanning out to terminal outputs. For pipelines and traced flows.",
+          "required": ["kind", "stages"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "pipeline"
+            },
+            "stages": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/box"
+              }
+            },
+            "outputs": {
+              "type": "object",
+              "required": ["label", "boxes"],
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "boxes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/box"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "A labelled container holding a grid of named items. For module rosters and anything whose point is membership.",
+          "required": ["kind", "label", "items"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "inventory"
+            },
+            "label": {
+              "type": "string"
+            },
+            "sublabel": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 6,
+              "description": "Default 5."
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "accent": {
+                    "enum": ["none", "good", "warn", "bad"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Nested boxes: what contains what. For a module tree, a package layout, or any structure whose nesting is itself the finding.",
+          "required": ["kind", "groups"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "containment"
+            },
+            "columns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "description": "Top-level groups per row. Default 2."
+            },
+            "groups": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/group"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Hand-authored SVG. The escape hatch. Prefer a kind above; adding a kind is cheaper than maintaining loose SVG, and raw markup skips every guarantee the renderer makes about theming and scale.",
+          "required": ["kind", "svg", "viewBox"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "raw"
+            },
+            "svg": {
+              "type": "string",
+              "description": "Inner markup only, no <svg> wrapper. Use var(--r-*) tokens for every colour."
+            },
+            "viewBox": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "group": {
+      "type": "object",
+      "description": "A titled box holding either a roster of names or more groups. Never both: a group that mixes them has no honest layout.",
+      "required": ["title"],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": ["items"]
+        },
+        {
+          "required": ["groups"]
+        }
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "sublabel": {
+          "type": "string"
+        },
+        "accent": {
+          "enum": ["none", "good", "warn", "bad"],
+          "description": "Colours this group's rule."
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "description": "Child groups per row. Default 2. Ignored when the group holds items, which fill the width."
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "accent": {
+                "enum": ["none", "good", "warn", "bad"]
+              }
+            }
+          }
+        },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/group"
+          },
+          "description": "Nested groups. Three levels deep at most."
+        }
+      }
+    }
+  }
+}
