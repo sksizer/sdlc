@@ -1,0 +1,263 @@
+{
+  "id": "orders-query-explained",
+  "title": "Top customers by 90-day spend, explained",
+  "summary": "The same query walkthrough with nothing to decide: an explanatory page, comments only.",
+  "created": "2026-10-08",
+  "blocks": [
+    {
+      "id": "plan",
+      "type": "prose",
+      "title": "Plan",
+      "text": "Index range scan on placed_at, hash join to customers, hash aggregate, sort. About 1,200 rows out, cost ~48k."
+    },
+    {
+      "id": "query",
+      "type": "annotated-text",
+      "title": "The query",
+      "language": "sql",
+      "text": "WITH recent AS (\n  SELECT o.customer_id,\n         o.id AS order_id,\n         o.total_cents\n  FROM orders o\n  WHERE o.placed_at >= now() - interval '90 days'\n    AND o.status IN ('paid', 'shipped', 'delivered')\n),\nspend AS (\n  SELECT customer_id,\n         COUNT(*)         AS order_count,\n         SUM(total_cents) AS spend_cents\n  FROM recent\n  GROUP BY customer_id\n)\nSELECT c.email,\n       s.order_count,\n       s.spend_cents,\n       RANK() OVER (ORDER BY s.spend_cents DESC) AS spend_rank\nFROM spend s\nJOIN customers c ON c.id = s.customer_id\nWHERE NOT c.is_guest\nORDER BY s.spend_cents DESC\nLIMIT 100;",
+      "steps": [
+        {
+          "id": "s-recent",
+          "title": "Narrow orders to the last 90 days",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "WITH recent AS (\n  SELECT o.customer_id,\n         o.id AS order_id,\n         o.total_cents\n  FROM orders o\n  WHERE o.placed_at >= now() - interval '90 days'\n    AND o.status IN ('paid', 'shipped', 'delivered')\n)"
+          },
+          "summary": "A CTE that keeps only recent, money-bearing orders.",
+          "detail": "The CTE reads `orders` once and keeps three columns. Postgres 12+ inlines a single-reference CTE, so this behaves like a subquery, not a materialised temp table.\n\nThe date predicate is **sargable**: `placed_at >= <constant>` uses `orders_placed_at_idx` as a range scan. Writing it as `now() - placed_at <= interval '90 days'` would not.",
+          "touches": [
+            {
+              "table": "orders",
+              "column": "placed_at"
+            },
+            {
+              "table": "orders",
+              "column": "status"
+            },
+            {
+              "table": "orders",
+              "column": "total_cents"
+            }
+          ],
+          "cost": {
+            "rows": 410000,
+            "note": "About 13% of orders fall in a 90-day window."
+          },
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 0,
+                "character": 0
+              },
+              "end": {
+                "line": 8,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-status",
+          "title": "Keep only orders that count as revenue",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "o.status IN ('paid', 'shipped', 'delivered')"
+          },
+          "summary": "Excludes pending and cancelled orders.",
+          "detail": "`status` is free text with a check constraint, so the three literals must match exactly. If the proposed `fulfillment_status` enum lands, this becomes `o.status <> 'pending' AND o.status <> 'cancelled'` or a join to the status table.\n\nThe filter is applied after the index range scan, row by row. There is no index on `status` beyond the partial `pending` index, which this predicate cannot use.",
+          "touches": [
+            {
+              "table": "orders",
+              "column": "status"
+            }
+          ],
+          "warnings": [
+            "A new status value added later will silently drop out of the report unless this list is updated."
+          ],
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 6,
+                "character": 0
+              },
+              "end": {
+                "line": 7,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-spend",
+          "title": "Aggregate spend per customer",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "spend AS (\n  SELECT customer_id,\n         COUNT(*)         AS order_count,\n         SUM(total_cents) AS spend_cents\n  FROM recent\n  GROUP BY customer_id\n)"
+          },
+          "summary": "One row per customer with order count and total.",
+          "detail": "A hash aggregate over `recent`. `total_cents` is the checkout-time total, so refunds are **not** subtracted; see the open question on the schema page.\n\nAbout 410k rows collapse to roughly 95k customers.",
+          "touches": [
+            {
+              "table": "orders",
+              "column": "customer_id"
+            }
+          ],
+          "cost": {
+            "rows": 95000
+          },
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 8,
+                "character": 0
+              },
+              "end": {
+                "line": 15,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-join",
+          "title": "Attach the customer's email",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "FROM spend s\nJOIN customers c ON c.id = s.customer_id"
+          },
+          "summary": "Inner join to customers on the primary key.",
+          "detail": "The planner builds a hash on the smaller side. `spend` has ~95k rows and `customers` ~420k, so it hashes `spend` and probes it while scanning customers, or uses the pk index when the estimate is low. Either way this is cheap relative to the first step.",
+          "touches": [
+            {
+              "table": "customers",
+              "column": "id"
+            },
+            {
+              "table": "customers",
+              "column": "email"
+            }
+          ],
+          "cost": {
+            "rows": 95000
+          },
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 19,
+                "character": 0
+              },
+              "end": {
+                "line": 21,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-guest",
+          "title": "Drop guest accounts",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "WHERE NOT c.is_guest"
+          },
+          "summary": "Guests cannot be VIPs.",
+          "detail": "Applied after the join. Guests are about a third of customers but a smaller share of repeat spend, so this removes a modest number of rows. Pushing this into the CTE would require joining customers earlier and would not help.",
+          "touches": [
+            {
+              "table": "customers",
+              "column": "is_guest"
+            }
+          ],
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 21,
+                "character": 0
+              },
+              "end": {
+                "line": 22,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-rank",
+          "title": "Rank by spend",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "RANK() OVER (ORDER BY s.spend_cents DESC) AS spend_rank"
+          },
+          "summary": "Window function; ties share a rank.",
+          "detail": "`RANK()` gives tied customers the same number and skips the next (1, 2, 2, 4). Use `DENSE_RANK()` for 1, 2, 2, 3 or `ROW_NUMBER()` for a strict ordering.\n\nThe window sorts all surviving rows by spend once. The final `ORDER BY` below uses the same key, so Postgres reuses that sort rather than sorting twice.",
+          "cost": {
+            "note": "One in-memory sort of ~60k rows."
+          },
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 18,
+                "character": 0
+              },
+              "end": {
+                "line": 19,
+                "character": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "s-limit",
+          "title": "Keep the top 100",
+          "anchor": {
+            "type": "TextQuoteSelector",
+            "exact": "ORDER BY s.spend_cents DESC\nLIMIT 100;"
+          },
+          "summary": "Final ordering and cut-off.",
+          "detail": "Because the window function needs every row to compute ranks, the `LIMIT` cannot be pushed below it. The whole ranked set is built, then 100 rows are emitted. For a much larger customer base, a two-stage query (top-N by spend first, rank second) would avoid ranking rows that are thrown away.",
+          "warnings": [
+            "LIMIT after RANK can cut a tie group in half: customers 99 and 100 may share a rank with customer 101, who is not shown."
+          ],
+          "source": {
+            "uri": "reports/vip.sql",
+            "range": {
+              "start": {
+                "line": 22,
+                "character": 0
+              },
+              "end": {
+                "line": 24,
+                "character": 0
+              }
+            }
+          }
+        }
+      ],
+      "source": {
+        "uri": "reports/vip.sql",
+        "range": {
+          "start": {
+            "line": 0,
+            "character": 0
+          },
+          "end": {
+            "line": 24,
+            "character": 0
+          }
+        }
+      }
+    }
+  ],
+  "repo": {
+    "remote": "https://github.com/sksizer/dev",
+    "commit": "de9a5c420a3b7f1c9d2e8a4b6c0d1e2f3a4b5c6d",
+    "root": "/path/to/repo"
+  }
+}

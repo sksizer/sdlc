@@ -25,6 +25,17 @@ play, constraints. One short paragraph or a few bullets.>
 
 <Rationale. Why this and not a plausible alternative.>
 
+## Prior art
+
+<How others solve this: tools, libraries, standards, and this repo's own
+past decisions. One row per system or pattern, with a source and a
+verdict. When nothing applies, keep the section and write
+`None found: <why>`.>
+
+| System or pattern | What it does | Source | Verdict |
+| --- | --- | --- | --- |
+| <name> | <one line> | <URL or path, date read> | <adopt, borrow or reject: why> |
+
 ## Options considered
 
 <Optional. Use when the decision is a choice between alternatives.>
