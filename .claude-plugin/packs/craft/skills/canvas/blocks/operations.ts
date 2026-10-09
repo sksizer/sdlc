@@ -19,13 +19,28 @@ ${op.warnings?.map((w) => `<div class="warn">${escapeHtml(w)}</div>`).join('') ?
 export function render(b: OperationsBlock): BlockOut {
   const byId = new Map(b.operations.map((op) => [op.id, op]))
   const number = new Map(b.operations.map((op, i) => [op.id, i + 1]))
-  const phases = b.phases ?? [{ id: `${b.id}-all`, title: 'Operations', ops: b.operations.map((o) => o.id) }]
+  const phases = b.phases ?? [
+    { id: `${b.id}-all`, title: 'Operations', ops: b.operations.map((o) => o.id) },
+  ]
   const row = (op: Operation) =>
     `<li class="row" data-node="${escapeHtml(op.id)}"><span class="badge">${number.get(op.id)}</span><div><div class="title">${escapeHtml(op.title)}</div><div class="sub"><span class="chips"><span class="chip">${escapeHtml(op.kind)}</span><span class="chip ${op.risk}">${op.risk}</span></span>${op.target ? ` <code>${escapeHtml(op.target)}</code>` : ''}</div></div></li>`
   const left = phases
-    .map((p) => `<div class="group"><h2>${escapeHtml(p.title)}</h2>${prose(p.detail)}<ol class="rows">${p.ops.map((id) => byId.get(id)).filter((o): o is Operation => !!o).map(row).join('')}</ol></div>`)
+    .map(
+      (p) =>
+        `<div class="group"><h2>${escapeHtml(p.title)}</h2>${prose(p.detail)}<ol class="rows">${p.ops
+          .map((id) => byId.get(id))
+          .filter((o): o is Operation => !!o)
+          .map(row)
+          .join('')}</ol></div>`,
+    )
     .join('')
-  const sections = b.operations.map((op, i) => ({ id: op.id, n: i + 1, title: op.title, html: opHtml(op, i + 1, b.language), source: op.source }))
+  const sections = b.operations.map((op, i) => ({
+    id: op.id,
+    n: i + 1,
+    title: op.title,
+    html: opHtml(op, i + 1, b.language),
+    source: op.source,
+  }))
   return { left, sections }
 }
 
@@ -35,10 +50,14 @@ export function check(b: OperationsBlock): string[] {
   const ops = new Set<string>()
   for (const op of b.operations ?? []) {
     ops.add(op.id)
-    for (const k of ['kind', 'title', 'detail', 'risk'] as const) if (!op[k]) errors.push(`operation ${op.id}: ${k} is required`)
-    if (!['low', 'medium', 'high'].includes(op.risk)) errors.push(`operation ${op.id}: risk must be low, medium or high`)
-    if (typeof op.reversible !== 'boolean') errors.push(`operation ${op.id}: reversible must be true or false`)
-    if (op.reversible === false && !op.rollback) errors.push(`operation ${op.id}: not reversible, so say what the rollback would take`)
+    for (const k of ['kind', 'title', 'detail', 'risk'] as const)
+      if (!op[k]) errors.push(`operation ${op.id}: ${k} is required`)
+    if (!['low', 'medium', 'high'].includes(op.risk))
+      errors.push(`operation ${op.id}: risk must be low, medium or high`)
+    if (typeof op.reversible !== 'boolean')
+      errors.push(`operation ${op.id}: reversible must be true or false`)
+    if (op.reversible === false && !op.rollback)
+      errors.push(`operation ${op.id}: not reversible, so say what the rollback would take`)
   }
   const placed = new Set<string>()
   for (const ph of b.phases ?? []) {
@@ -47,7 +66,8 @@ export function check(b: OperationsBlock): string[] {
       placed.add(id)
     }
   }
-  if (b.phases) for (const id of ops) if (!placed.has(id)) errors.push(`operation ${id} is in no phase`)
+  if (b.phases)
+    for (const id of ops) if (!placed.has(id)) errors.push(`operation ${id} is in no phase`)
   return errors
 }
 

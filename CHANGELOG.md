@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-09
+
+A change-statistics command for pull requests, and the same tool as a `craft` skill. `craft` ships
+as 0.4.0.
+
+### Added
+
+- `sdlc pr stats <pr>` (and `--base <ref>` for a branch) summarizes a pull request beyond GitHub's
+  +/-: lines added and removed by code, comments, blank and prose, with generated bundles counted
+  apart; a change-category breakdown (added, deleted, renamed, tests, docs, generated,
+  formatting-only, comment-only, logic); dependency and exported-API changes; and the
+  cyclomatic-complexity movers. `--write` puts the table in the PR body as a `## Change statistics`
+  section between `<!-- sdlc-pr-stats:start -->` and `<!-- sdlc-pr-stats:end -->` markers, before
+  the lease footer, and re-running replaces it in place; `--detail` adds the per-file list and
+  `--json` prints the report. ([#2911](https://github.com/sksizer/dev/pull/2911))
+- `craft` gains the `pr-stats` skill: the same measurement from one bundled script that needs only
+  plain Node, git and `gh`, and no other plugin. Complexity for languages other than
+  TypeScript needs `lizard` on PATH.
+  ([#2911](https://github.com/sksizer/dev/pull/2911))
+
+### Changed
+
+- The `task-work` skill adds the change statistics to the PR body after opening it, best-effort: a
+  failure is noted in the final report and never blocks the run.
+  ([#2911](https://github.com/sksizer/dev/pull/2911))
+
 ## [0.11.0] - 2026-10-08
 
 New `craft` skills, and the public repository now tags its own releases. The `sdlc` plugin and CLI

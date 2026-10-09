@@ -13,14 +13,23 @@ function derivedRelations(b: SchemaBlock): Relation[] {
     for (const c of t.columns) {
       if (!c.references) continue
       const unique = c.pk || c.flags?.includes('unique')
-      rels.push({ id: `rel-${t.name}-${c.name}`, from: { table: t.name, column: c.name }, to: c.references, cardinality: unique ? '1-1' : '1-n' })
+      rels.push({
+        id: `rel-${t.name}-${c.name}`,
+        from: { table: t.name, column: c.name },
+        to: c.references,
+        cardinality: unique ? '1-1' : '1-n',
+      })
     }
   }
   return rels
 }
 
 function columnRow(t: Table, c: Column): string {
-  const flags = [c.pk ? 'pk' : '', c.nullable === false || c.pk ? 'not null' : 'null', ...(c.flags ?? [])].filter(Boolean)
+  const flags = [
+    c.pk ? 'pk' : '',
+    c.nullable === false || c.pk ? 'not null' : 'null',
+    ...(c.flags ?? []),
+  ].filter(Boolean)
   return `<tr data-node="${escapeHtml(colId(t, c))}"><td class="mono">${escapeHtml(c.name)}</td><td class="mono">${escapeHtml(c.type)}${c.default != null ? `<br><span class="muted">= ${escapeHtml(c.default)}</span>` : ''}</td><td><span class="chips">${flags.map((f) => `<span class="chip">${escapeHtml(f)}</span>`).join('')}</span></td><td>${c.references ? `<span class="xref" data-select="${escapeHtml(c.references.table)}">${escapeHtml(ref(c.references))}</span>` : ''}${c.purpose ? `<div class="muted">${escapeHtml(c.purpose)}</div>` : ''}</td></tr>`
 }
 
@@ -44,14 +53,32 @@ export function render(b: SchemaBlock): BlockOut {
   const groups = [...(b.groups ?? [])]
   const grouped = new Set(groups.flatMap((g) => g.tables))
   const rest = b.tables.filter((t) => !grouped.has(t.name)).map((t) => t.name)
-  if (rest.length) groups.push({ id: `${b.id}-other`, title: groups.length ? 'Other' : 'Tables', tables: rest })
+  if (rest.length)
+    groups.push({ id: `${b.id}-other`, title: groups.length ? 'Other' : 'Tables', tables: rest })
   const card = (t: Table) =>
     `<div class="card" data-node="${escapeHtml(t.id)}"><div class="name">${escapeHtml(t.name)}</div><div class="purpose">${prose(t.purpose.split(/\n/)[0]).replace(/^<p>|<\/p>$/g, '')}</div><div class="meta">${t.columns.length} cols${t.rows != null ? ` · ~${t.rows.toLocaleString()} rows` : ''}${t.columns.some((c) => c.references) ? ` · ${t.columns.filter((c) => c.references).length} fk` : ''}</div></div>`
   const left = `
-${groups.map((g) => `<div class="group"><h2>${escapeHtml(g.title)}</h2><div class="cards">${g.tables.map((n) => byName.get(n)).filter((t): t is Table => !!t).map(card).join('')}</div></div>`).join('')}
+${groups
+  .map(
+    (g) =>
+      `<div class="group"><h2>${escapeHtml(g.title)}</h2><div class="cards">${g.tables
+        .map((n) => byName.get(n))
+        .filter((t): t is Table => !!t)
+        .map(card)
+        .join('')}</div></div>`,
+  )
+  .join('')}
 ${rels.length ? `<div class="group"><h2>Relations</h2><div class="rels">${rels.map((r) => `<div class="rel" data-select="${escapeHtml(r.from.table)}"><span>${escapeHtml(ref(r.from))}</span> <span class="arrow">${r.cardinality === '1-n' ? '»' : r.cardinality === 'n-n' ? '«»' : '='}</span> <span>${escapeHtml(ref(r.to))}</span></div>`).join('')}</div></div>` : ''}`
-  const sections = b.tables.map((t) => ({ id: t.id, title: t.name, summary: t.purpose, html: tableHtml(t, rels), source: t.source }))
-  const titles = Object.fromEntries(b.tables.flatMap((t) => t.columns.map((c) => [colId(t, c), `${t.name}.${c.name}`])))
+  const sections = b.tables.map((t) => ({
+    id: t.id,
+    title: t.name,
+    summary: t.purpose,
+    html: tableHtml(t, rels),
+    source: t.source,
+  }))
+  const titles = Object.fromEntries(
+    b.tables.flatMap((t) => t.columns.map((c) => [colId(t, c), `${t.name}.${c.name}`])),
+  )
   return { left, sections, titles }
 }
 
@@ -66,19 +93,31 @@ export function check(b: SchemaBlock): string[] {
       // A block may hold part of a schema; only a reference into a table it does hold is checked.
       const target = c.references && tables.get(c.references.table)
       if (c.references && target && !target.columns.some((x) => x.name === c.references!.column))
-        errors.push(`column ${t.name}.${c.name}: references ${ref(c.references)}, which does not exist`)
+        errors.push(
+          `column ${t.name}.${c.name}: references ${ref(c.references)}, which does not exist`,
+        )
     }
-    for (const k of t.primaryKey ?? []) if (!cols.has(k)) errors.push(`table ${t.name}: primary key column "${k}" does not exist`)
-    for (const i of t.indexes ?? []) for (const k of i.columns) if (!cols.has(k)) errors.push(`index ${i.name}: column "${k}" does not exist`)
+    for (const k of t.primaryKey ?? [])
+      if (!cols.has(k)) errors.push(`table ${t.name}: primary key column "${k}" does not exist`)
+    for (const i of t.indexes ?? [])
+      for (const k of i.columns)
+        if (!cols.has(k)) errors.push(`index ${i.name}: column "${k}" does not exist`)
   }
-  for (const g of b.groups ?? []) for (const n of g.tables) if (!tables.has(n)) errors.push(`group ${g.id}: table "${n}" does not exist`)
+  for (const g of b.groups ?? [])
+    for (const n of g.tables)
+      if (!tables.has(n)) errors.push(`group ${g.id}: table "${n}" does not exist`)
   for (const r of b.relations ?? [])
     for (const end of [r.from, r.to])
-      if (!tables.get(end.table)?.columns.some((c) => c.name === end.column)) errors.push(`relation ${r.id}: ${ref(end)} does not exist`)
+      if (!tables.get(end.table)?.columns.some((c) => c.name === end.column))
+        errors.push(`relation ${r.id}: ${ref(end)} does not exist`)
   return errors
 }
 
 /** Node ids this block owns beyond its sections: columns and relations. */
 export function nodeIds(b: SchemaBlock): string[] {
-  return [...b.tables.flatMap((t) => t.columns.map((c) => colId(t, c))), ...(b.relations ?? []).map((r) => r.id), ...(b.groups ?? []).map((g) => g.id)]
+  return [
+    ...b.tables.flatMap((t) => t.columns.map((c) => colId(t, c))),
+    ...(b.relations ?? []).map((r) => r.id),
+    ...(b.groups ?? []).map((g) => g.id),
+  ]
 }
