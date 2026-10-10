@@ -37469,6 +37469,7 @@ var init_schema4 = __esm(() => {
       optionalSection("Status"),
       optionalSection(["Context", "What this is", "Background"]),
       optionalSection(["Why", "Rationale"]),
+      optionalSection(["Prior art", "Alternatives elsewhere"]),
       optionalSection("Options considered"),
       optionalSection(["Consequences", "Implications"]),
       optionalSection("Migration"),
@@ -102439,8 +102440,8 @@ var require_dist = __commonJS(function(exports, module) {
 });
 
 // solutions/ontological/lib/services/quality/baseline.ts
-import { mkdirSync as mkdirSync21, readdirSync as readdirSync39, readFileSync as readFileSync82, statSync as statSync29, unlinkSync as unlinkSync7, writeFileSync as writeFileSync31 } from "node:fs";
-import { join as join143 } from "node:path";
+import { mkdirSync as mkdirSync21, readdirSync as readdirSync39, readFileSync as readFileSync82, statSync as statSync29, unlinkSync as unlinkSync7, writeFileSync as writeFileSync32 } from "node:fs";
+import { join as join144 } from "node:path";
 function normalizeFinding(line) {
   let out = line;
   const tmpRoots = new Set(["/tmp", "/private/tmp"]);
@@ -102507,8 +102508,8 @@ async function capture(repoRoot, projectRoot, baselineDir, sha, name = "check", 
     captured_at: rfc3339(nowUtc()),
     verbs: verbsPayload
   };
-  const outPath = join143(baselineDir, `${sha}.json`);
-  writeFileSync31(outPath, `${JSON.stringify(sortKeysDeep(payload), null, 2)}
+  const outPath = join144(baselineDir, `${sha}.json`);
+  writeFileSync32(outPath, `${JSON.stringify(sortKeysDeep(payload), null, 2)}
 `, "utf-8");
   prune(baselineDir);
   return outPath;
@@ -102563,7 +102564,7 @@ function prune(baselineDir, keep = 5) {
     return [];
   }
   const files = names.map((n) => {
-    const p = join143(baselineDir, n);
+    const p = join144(baselineDir, n);
     return { path: p, mtime: statSync29(p).mtimeMs };
   });
   files.sort((a, b) => b.mtime - a.mtime);
@@ -132523,8 +132524,8 @@ defineNoun({
 init_zod();
 init_registry3();
 init_easy_git();
-init_command();
-init_paths();
+
+// packages/ts/pr-stats/src/heuristic.ts
 var SOURCE_EXT = [
   ".ts",
   ".tsx",
@@ -132557,12 +132558,1047 @@ var COMMENT_START = ["//", "/*", "*/", "*", "#", "<!--", "-->", "--", ";"];
 function isSource(path) {
   return SOURCE_EXT.some((ext) => path.endsWith(ext));
 }
-function isCommentOrBlank(line) {
+function isBlank(line) {
+  return line.trim() === "";
+}
+function isCommentLine(line) {
   const s = line.trim();
-  if (s === "")
-    return true;
   return COMMENT_START.some((c) => s.startsWith(c));
 }
+function isCommentOrBlank(line) {
+  return isBlank(line) || isCommentLine(line);
+}
+// packages/ts/pr-stats/src/run.ts
+init_easy_gh();
+init_command_seam();
+init_easy_git();
+
+// packages/ts/pr-stats/src/types.ts
+init_zod();
+var LINE_KINDS = ["code", "comment", "blank", "prose"];
+var FILE_GROUPS = ["source", "tests", "docs", "generated", "other"];
+var CATEGORIES = [
+  "added",
+  "deleted",
+  "renamed",
+  "generated",
+  "dependencies",
+  "config",
+  "docs",
+  "tests",
+  "formatting",
+  "comments",
+  "logic"
+];
+var delta = object({ added: number2(), removed: number2() });
+var groupStats = delta.extend({ files: number2() });
+var reportSchema = object({
+  source: string2().describe("What was measured: `PR #N` or `<base>...HEAD`."),
+  files: number2().describe("Files changed, generated included."),
+  lines: object({
+    kinds: object({ code: delta, comment: delta, blank: delta, prose: delta }).describe("Changed lines by kind, generated files excluded."),
+    groups: object({
+      source: groupStats,
+      tests: groupStats,
+      docs: groupStats,
+      generated: groupStats,
+      other: groupStats
+    }).describe("Changed files and lines by file group, generated included.")
+  }),
+  categories: array(object({
+    category: _enum(CATEGORIES),
+    files: number2(),
+    added: number2(),
+    removed: number2(),
+    top: array(string2()).describe("Files with the most changed lines, at most five.")
+  })).describe("Every file in exactly one category; empty categories are omitted."),
+  fileList: array(object({
+    path: string2(),
+    oldPath: string2().nullable(),
+    category: _enum(CATEGORIES),
+    group: _enum(FILE_GROUPS),
+    similarity: number2().nullable().describe("Rename similarity, percent."),
+    added: number2(),
+    removed: number2()
+  })),
+  dependencies: array(object({
+    file: string2(),
+    added: array(object({ name: string2(), version: string2() })),
+    removed: array(object({ name: string2(), version: string2() })),
+    bumped: array(object({ name: string2(), from: string2(), to: string2() }))
+  })),
+  api: object({
+    status: _enum(["ok", "skipped"]),
+    note: string2().nullable(),
+    changes: array(object({
+      file: string2(),
+      language: _enum(["ts", "rust"]),
+      entry: boolean2().describe("A package entry point (`index.*`); false for other modules."),
+      added: array(string2()),
+      removed: array(string2()),
+      changed: array(string2())
+    }))
+  }),
+  complexity: object({
+    status: _enum(["ok", "skipped"]),
+    note: string2().nullable(),
+    analyzers: array(string2()),
+    totalBefore: number2(),
+    totalAfter: number2(),
+    functionsChanged: number2(),
+    files: array(object({
+      path: string2(),
+      before: number2(),
+      after: number2(),
+      functionsBefore: number2(),
+      functionsAfter: number2()
+    })),
+    movers: array(object({
+      path: string2(),
+      name: string2(),
+      before: number2().nullable(),
+      after: number2().nullable(),
+      delta: number2(),
+      anonymous: boolean2().describe("An unnamed function, matched by enclosing scope and ordinal; shown only in --detail unless it exists on both sides.")
+    }))
+  }),
+  notes: array(string2()).describe("Anything skipped or capped, and why.")
+});
+
+// packages/ts/pr-stats/src/lines.ts
+var PROSE_EXT = [".md", ".mdx", ".txt", ".rst"];
+var LOCKFILES2 = new Set([
+  "bun.lock",
+  "bun.lockb",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "Cargo.lock",
+  "Gemfile.lock",
+  "poetry.lock",
+  "uv.lock",
+  "go.sum"
+]);
+function basename22(path) {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+function isGenerated(path) {
+  const base = basename22(path);
+  return LOCKFILES2.has(base) || base.includes(".min.") || base === "list-ops.js" || path === "cli/sdlc.js" || path.endsWith("/cli/sdlc.js") || path.includes("/_generated/") || path.startsWith("_generated/") || path.includes("/packs/") || path.startsWith("packs/");
+}
+function isProse(path) {
+  return PROSE_EXT.some((e) => path.endsWith(e));
+}
+function isTest(path) {
+  return /\.(test|spec)\.[^/]+$/.test(path) || /(^|\/)(tests?|__tests__)\//.test(path);
+}
+function fileGroup(path) {
+  if (isGenerated(path))
+    return "generated";
+  if (isProse(path))
+    return "docs";
+  if (isTest(path))
+    return "tests";
+  if (isSource(path))
+    return "source";
+  return "other";
+}
+function classifyLine(path, line) {
+  if (isBlank(line))
+    return "blank";
+  if (isProse(path))
+    return "prose";
+  if (isSource(path) && isCommentLine(line))
+    return "comment";
+  return "code";
+}
+function computeLineStats(files) {
+  const kinds = {};
+  for (const k of LINE_KINDS)
+    kinds[k] = { added: 0, removed: 0 };
+  const groups = {};
+  for (const g of FILE_GROUPS)
+    groups[g] = { files: 0, added: 0, removed: 0 };
+  for (const f of files) {
+    const group = fileGroup(f.path);
+    const g = groups[group];
+    g.files += 1;
+    g.added += f.added.length;
+    g.removed += f.removed.length;
+    if (group === "generated")
+      continue;
+    for (const l of f.added)
+      kinds[classifyLine(f.path, l)].added += 1;
+    for (const l of f.removed)
+      kinds[classifyLine(f.path, l)].removed += 1;
+  }
+  return { kinds, groups };
+}
+
+// packages/ts/pr-stats/src/ts-loader.ts
+import { createRequire as createRequire3 } from "node:module";
+var cache3;
+function loadTs() {
+  if (cache3 !== undefined)
+    return cache3;
+  cache3 = null;
+  for (const base of [`${process.cwd()}/`, import.meta.url]) {
+    try {
+      cache3 = createRequire3(base)("typescript");
+      break;
+    } catch {}
+  }
+  return cache3;
+}
+
+// packages/ts/pr-stats/src/api.ts
+var TS_ENTRY = /^index\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/;
+var TS_FILE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+function apiLanguage(path) {
+  if (path.endsWith(".rs"))
+    return "rust";
+  if (TS_FILE.test(path) && !path.endsWith(".d.ts") && !/\.(?:test|spec)\./.test(path))
+    return "ts";
+  return null;
+}
+function isEntryPoint(path) {
+  return TS_ENTRY.test(basename22(path)) && !path.endsWith(".d.ts");
+}
+function membersAvailable() {
+  return loadTs() !== null;
+}
+function tsMembers(path, source) {
+  const out = new Map;
+  const ts = loadTs();
+  if (ts === null || !/\bexport\b/.test(source))
+    return out;
+  const sf = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+  for (const st of sf.statements) {
+    if (!ts.isClassDeclaration(st) && !ts.isInterfaceDeclaration(st))
+      continue;
+    const mods = ts.canHaveModifiers(st) ? ts.getModifiers(st) : undefined;
+    if (!mods?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) || st.name === undefined)
+      continue;
+    for (const m of st.members) {
+      const name = m.name;
+      if (name === undefined || ts.isPrivateIdentifier(name))
+        continue;
+      const mm = ts.canHaveModifiers(m) ? ts.getModifiers(m) : undefined;
+      if (mm?.some((x) => x.kind === ts.SyntaxKind.PrivateKeyword || x.kind === ts.SyntaxKind.ProtectedKeyword)) {
+        continue;
+      }
+      const body = "body" in m && m.body !== undefined ? m.body : null;
+      const init = "initializer" in m && m.initializer !== undefined ? m.initializer : null;
+      const end = body?.getStart(sf) ?? init?.getStart(sf) ?? m.end;
+      out.set(`${st.name.text}.${name.getText(sf)}`, norm(source.slice(m.getStart(sf), end)).replace(/[;,]$/, ""));
+    }
+  }
+  return out;
+}
+var norm = (s) => s.replace(/\s+/g, " ").trim();
+var TS_DECL = /^export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(function\*?|class|interface|type|enum|const enum|const|let|var|namespace)\s+([A-Za-z0-9_$]+)(.*)$/;
+var TS_LIST = /export\s+(type\s+)?\{([^}]*)\}(?:\s*from\s*['"]([^'"]+)['"])?/g;
+var TS_STAR = /export\s+\*(?:\s+as\s+([A-Za-z0-9_$]+))?\s+from\s+['"]([^'"]+)['"]/g;
+var RUST_DECL = /^\s*pub\s+(?:async\s+)?(?:unsafe\s+)?(fn|struct|enum|trait|const|static|type|mod|union)\s+([A-Za-z0-9_]+)(.*)$/;
+function extractApi(language, source, path = "x.ts") {
+  const out = new Map;
+  if (language === "rust") {
+    for (const line of source.split(`
+`)) {
+      const m = RUST_DECL.exec(line);
+      if (m === null)
+        continue;
+      const rest = norm(m[3].split(/[{;]/)[0]);
+      out.set(`${m[1]} ${m[2]}`, norm(`${m[1]} ${m[2]}${rest}`));
+    }
+    return out;
+  }
+  const stripped = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  for (const line of stripped.split(`
+`)) {
+    const m = TS_DECL.exec(line);
+    if (m === null)
+      continue;
+    const kind = m[1];
+    let rest = m[3];
+    if (kind === "const" || kind === "let" || kind === "var")
+      rest = rest.split("=")[0];
+    else if (["class", "interface", "enum", "namespace"].includes(kind))
+      rest = rest.split("{")[0];
+    out.set(m[2], norm(`${kind} ${m[2]}${rest}`));
+  }
+  for (const m of stripped.matchAll(TS_LIST)) {
+    const from = m[3] ?? "";
+    for (const item of m[2].split(",")) {
+      const part = norm(item).replace(/^type\s+/, "");
+      if (part === "")
+        continue;
+      const exported = part.split(/\s+as\s+/).pop();
+      out.set(exported, norm(`${m[1] ?? ""}{ ${part} } ${from}`));
+    }
+  }
+  for (const m of stripped.matchAll(TS_STAR)) {
+    out.set(m[1] ?? `* from ${m[2]}`, `export * from ${m[2]}`);
+  }
+  if (/^export\s+default\b/m.test(stripped))
+    out.set("default", "export default");
+  for (const [k, v] of tsMembers(path, source))
+    out.set(k, v);
+  return out;
+}
+function diffApi(before, after) {
+  const delta = { added: [], removed: [], changed: [] };
+  for (const [name, sig] of after) {
+    const old = before.get(name);
+    if (old === undefined)
+      delta.added.push(name);
+    else if (old !== sig)
+      delta.changed.push(name);
+  }
+  for (const name of before.keys())
+    if (!after.has(name))
+      delta.removed.push(name);
+  return delta;
+}
+
+// packages/ts/pr-stats/src/categories.ts
+var VERSIONISH = /^(?:[\^~<>=*]|\d|workspace:|npm:|github:|git\+|file:|link:|catalog:)/;
+var PKG_LINE = /^\s*"([^"]+)"\s*:\s*"([^"]*)"\s*,?\s*$/;
+var CARGO_SKIP = new Set([
+  "name",
+  "version",
+  "edition",
+  "license",
+  "description",
+  "authors",
+  "repository",
+  "homepage",
+  "readme",
+  "rust-version",
+  "resolver",
+  "path",
+  "publish"
+]);
+var CARGO_LINE = /^\s*([A-Za-z0-9_-]+)\s*=\s*(?:"([^"]+)"|\{.*?version\s*=\s*"([^"]+)".*\})\s*$/;
+function depEntries(file, lines) {
+  const base = basename22(file);
+  const out = [];
+  for (const l of lines) {
+    if (base === "package.json") {
+      const m = PKG_LINE.exec(l);
+      if (m !== null && m[1] !== "version" && m[1] !== "url" && VERSIONISH.test(m[2])) {
+        out.push({ name: m[1], version: m[2] });
+      }
+    } else if (base === "Cargo.toml") {
+      const m = CARGO_LINE.exec(l);
+      if (m !== null && !CARGO_SKIP.has(m[1])) {
+        out.push({ name: m[1], version: m[2] ?? m[3] ?? "" });
+      }
+    }
+  }
+  return out;
+}
+function dependencyChange(f) {
+  const base = basename22(f.path);
+  if (base !== "package.json" && base !== "Cargo.toml")
+    return null;
+  const add = depEntries(f.path, f.added);
+  const rem = depEntries(f.path, f.removed);
+  if (add.length === 0 && rem.length === 0)
+    return null;
+  const remBy = new Map(rem.map((e) => [e.name, e.version]));
+  const addBy = new Map(add.map((e) => [e.name, e.version]));
+  const change = { file: f.path, added: [], removed: [], bumped: [] };
+  for (const e of add) {
+    const before = remBy.get(e.name);
+    if (before === undefined)
+      change.added.push(e);
+    else if (before !== e.version)
+      change.bumped.push({ name: e.name, from: before, to: e.version });
+  }
+  for (const e of rem)
+    if (!addBy.has(e.name))
+      change.removed.push(e);
+  return change;
+}
+var squash = (lines) => lines.join("").replace(/\s+/g, "");
+function categorize(f) {
+  const group = fileGroup(f.path);
+  if (group === "generated")
+    return "generated";
+  if (f.status === "deleted")
+    return "deleted";
+  if (f.status === "added")
+    return "added";
+  if (f.status === "renamed")
+    return "renamed";
+  if (dependencyChange(f) !== null)
+    return "dependencies";
+  if (group === "docs")
+    return "docs";
+  if (group === "tests")
+    return "tests";
+  const changed = f.added.length + f.removed.length;
+  if (changed > 0 && squash(f.added) === squash(f.removed))
+    return "formatting";
+  if (group === "other")
+    return "config";
+  if (changed > 0 && isSource(f.path) && f.added.every(isCommentOrBlank) && f.removed.every(isCommentOrBlank)) {
+    return "comments";
+  }
+  return "logic";
+}
+
+// packages/ts/pr-stats/src/complexity.ts
+init_command_seam();
+import { mkdtempSync as mkdtempSync7, rmSync as rmSync14, writeFileSync as writeFileSync25 } from "node:fs";
+import { tmpdir as tmpdir10 } from "node:os";
+import { extname as extname2, join as join117 } from "node:path";
+function uniqueName(map, name) {
+  if (!map.has(name))
+    return name;
+  let n = 2;
+  while (map.has(`${name}#${n}`))
+    n += 1;
+  return `${name}#${n}`;
+}
+var TS_EXT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+var typescriptAnalyzer = {
+  name: "typescript",
+  available: () => loadTs() !== null,
+  handles: (path) => TS_EXT.some((e) => path.endsWith(e)) && !path.endsWith(".d.ts"),
+  analyze(path, source) {
+    const loaded = loadTs();
+    const out = new Map;
+    if (loaded === null)
+      return out;
+    const ts = loaded;
+    const ext = extname2(path);
+    const kind = ext === ".tsx" ? ts.ScriptKind.TSX : ext === ".jsx" ? ts.ScriptKind.JSX : ext === ".ts" || ext === ".mts" || ext === ".cts" ? ts.ScriptKind.TS : ts.ScriptKind.JS;
+    const sf = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, kind);
+    const K = ts.SyntaxKind;
+    const nameOf = (n) => n !== undefined && (ts.isIdentifier(n) || ts.isStringLiteral(n) || ts.isPrivateIdentifier(n)) ? n.text : null;
+    const anon = new Map;
+    function fnName(node, scope) {
+      let own = null;
+      if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node))
+        own = nameOf(node.name);
+      else if (ts.isGetAccessorDeclaration(node))
+        own = `get ${nameOf(node.name) ?? "?"}`;
+      else if (ts.isSetAccessorDeclaration(node))
+        own = `set ${nameOf(node.name) ?? "?"}`;
+      else if (ts.isConstructorDeclaration(node))
+        own = "constructor";
+      else {
+        const p = node.parent;
+        if (p !== undefined) {
+          if (ts.isVariableDeclaration(p))
+            own = nameOf(p.name);
+          else if (ts.isPropertyAssignment(p) || ts.isPropertyDeclaration(p))
+            own = nameOf(p.name);
+        }
+      }
+      if (own === null) {
+        const n = (anon.get(scope) ?? 0) + 1;
+        anon.set(scope, n);
+        const label = `<anonymous ${n}>`;
+        return { full: scope === "" ? label : `${scope}.${label}`, named: false };
+      }
+      return { full: scope === "" ? own : `${scope}.${own}`, named: true };
+    }
+    function walk(node, scope, acc) {
+      const fnLike = ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node) || ts.isConstructorDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
+      if (fnLike) {
+        const { full, named } = fnName(node, scope);
+        const mine = { cc: 1 };
+        ts.forEachChild(node, (c) => walk(c, named ? full : scope, mine));
+        out.set(uniqueName(out, full), mine.cc);
+        return;
+      }
+      if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
+        const cls = nameOf(node.name) ?? `<class>`;
+        const next = scope === "" ? cls : `${scope}.${cls}`;
+        ts.forEachChild(node, (c) => walk(c, next, null));
+        return;
+      }
+      if (acc !== null) {
+        switch (node.kind) {
+          case K.IfStatement:
+          case K.ForStatement:
+          case K.ForInStatement:
+          case K.ForOfStatement:
+          case K.WhileStatement:
+          case K.DoStatement:
+          case K.CaseClause:
+          case K.CatchClause:
+          case K.ConditionalExpression:
+            acc.cc += 1;
+            break;
+          case K.BinaryExpression: {
+            const op = node.operatorToken.kind;
+            if (op === K.AmpersandAmpersandToken || op === K.BarBarToken || op === K.QuestionQuestionToken) {
+              acc.cc += 1;
+            }
+            break;
+          }
+        }
+      }
+      ts.forEachChild(node, (c) => walk(c, scope, acc));
+    }
+    walk(sf, "", null);
+    return out;
+  }
+};
+var LIZARD_EXT = [
+  ".rs",
+  ".py",
+  ".go",
+  ".java",
+  ".kt",
+  ".swift",
+  ".c",
+  ".h",
+  ".cc",
+  ".cpp",
+  ".hpp",
+  ".cs",
+  ".php",
+  ".rb",
+  ".scala"
+];
+function splitCsv(line) {
+  const out = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0;i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else if (c === '"')
+        quoted = false;
+      else
+        cur += c;
+    } else if (c === '"')
+      quoted = true;
+    else if (c === ",") {
+      out.push(cur);
+      cur = "";
+    } else
+      cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+function parseLizardCsv(csv) {
+  const out = new Map;
+  for (const line of csv.split(`
+`)) {
+    if (line.trim() === "")
+      continue;
+    const cols = splitCsv(line);
+    const ccn = Number(cols[1]);
+    const name = cols[7];
+    if (cols.length < 8 || !Number.isFinite(ccn) || name === undefined || name === "")
+      continue;
+    out.set(uniqueName(out, name), ccn);
+  }
+  return out;
+}
+function lizardAnalyzer(runner = spawnRunner("lizard")) {
+  let ok;
+  return {
+    name: "lizard",
+    available() {
+      if (ok === undefined) {
+        try {
+          ok = runner.run(["--version"], { cwd: tmpdir10() }).exitCode === 0;
+        } catch {
+          ok = false;
+        }
+      }
+      return ok;
+    },
+    handles: (path) => LIZARD_EXT.some((e) => path.endsWith(e)),
+    analyze(path, source) {
+      const dir = mkdtempSync7(join117(tmpdir10(), "pr-stats-lizard-"));
+      try {
+        const file = join117(dir, `src${extname2(path)}`);
+        writeFileSync25(file, source);
+        const r = runner.run(["--csv", file], { cwd: dir, timeoutMs: 30000 });
+        return r.exitCode === 0 ? parseLizardCsv(r.stdout) : new Map;
+      } finally {
+        rmSync14(dir, { recursive: true, force: true });
+      }
+    }
+  };
+}
+function defaultAnalyzers() {
+  return [typescriptAnalyzer, lizardAnalyzer()];
+}
+
+// packages/ts/pr-stats/src/diff.ts
+var HUNK = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/;
+function headerPath(line) {
+  const i = line.lastIndexOf(" b/");
+  return i < 0 ? null : line.slice(i + 3);
+}
+function parseDiff(diff) {
+  const files = [];
+  let cur = null;
+  let oldLeft = 0;
+  let newLeft = 0;
+  for (const raw of diff.split(`
+`)) {
+    if (oldLeft > 0 || newLeft > 0) {
+      if (raw.startsWith("\\"))
+        continue;
+      const sign = raw[0];
+      if (sign === "-" && oldLeft > 0) {
+        oldLeft -= 1;
+        cur?.removed.push(raw.slice(1));
+        continue;
+      }
+      if (sign === "+" && newLeft > 0) {
+        newLeft -= 1;
+        cur?.added.push(raw.slice(1));
+        continue;
+      }
+      if (sign === " ") {
+        oldLeft -= 1;
+        newLeft -= 1;
+        continue;
+      }
+      oldLeft = 0;
+      newLeft = 0;
+    }
+    if (raw.startsWith("diff --git ")) {
+      const path = headerPath(raw);
+      cur = {
+        path: path ?? "",
+        oldPath: null,
+        status: "modified",
+        similarity: null,
+        binary: false,
+        added: [],
+        removed: []
+      };
+      files.push(cur);
+    } else if (cur === null) {
+      continue;
+    } else if (raw.startsWith("new file mode")) {
+      cur.status = "added";
+    } else if (raw.startsWith("deleted file mode")) {
+      cur.status = "deleted";
+    } else if (raw.startsWith("similarity index ")) {
+      cur.similarity = Number.parseInt(raw.slice("similarity index ".length), 10);
+    } else if (raw.startsWith("rename from ")) {
+      cur.status = "renamed";
+      cur.oldPath = raw.slice("rename from ".length);
+    } else if (raw.startsWith("rename to ")) {
+      cur.path = raw.slice("rename to ".length);
+    } else if (raw.startsWith("Binary files ") || raw.startsWith("GIT binary patch")) {
+      cur.binary = true;
+    } else if (raw.startsWith("+++ ") && raw !== "+++ /dev/null") {
+      cur.path = raw.slice(6);
+    } else if (raw.startsWith("--- ") && raw !== "--- /dev/null") {
+      if (cur.status === "deleted")
+        cur.path = raw.slice(6);
+    } else {
+      const m = HUNK.exec(raw);
+      if (m !== null) {
+        oldLeft = m[1] === undefined ? 1 : Number(m[1]);
+        newLeft = m[2] === undefined ? 1 : Number(m[2]);
+      }
+    }
+  }
+  return files;
+}
+
+// packages/ts/pr-stats/src/report.ts
+function buildReport2(source, diff, ports, opts = {}) {
+  const files = parseDiff(diff);
+  const notes = [];
+  const lines = computeLineStats(files);
+  const fileList = files.map((f) => ({
+    path: f.path,
+    oldPath: f.oldPath,
+    category: categorize(f),
+    group: fileGroup(f.path),
+    similarity: f.similarity,
+    added: f.added.length,
+    removed: f.removed.length
+  }));
+  const categories = CATEGORIES.flatMap((category) => {
+    const members = fileList.filter((f) => f.category === category);
+    if (members.length === 0)
+      return [];
+    return [
+      {
+        category,
+        files: members.length,
+        added: members.reduce((n, f) => n + f.added, 0),
+        removed: members.reduce((n, f) => n + f.removed, 0),
+        top: [...members].sort((a, b) => b.added + b.removed - (a.added + a.removed) || a.path.localeCompare(b.path)).slice(0, 5).map((f) => f.path)
+      }
+    ];
+  });
+  const dependencies = files.flatMap((f) => {
+    const c = dependencyChange(f);
+    return c === null ? [] : [c];
+  });
+  const api = { status: "skipped", note: null, changes: [] };
+  const complexity = {
+    status: "skipped",
+    note: null,
+    analyzers: [],
+    totalBefore: 0,
+    totalAfter: 0,
+    functionsChanged: 0,
+    files: [],
+    movers: []
+  };
+  if (ports === null || ports.baseRev === null || ports.headRev === null) {
+    const why = "base/head revisions not available locally; API and complexity passes skipped";
+    api.note = why;
+    complexity.note = why;
+    notes.push(why);
+  } else {
+    const now = opts.now ?? Date.now;
+    const deadline = now() + (opts.budgetMs ?? 20000);
+    const maxFiles = opts.maxFiles ?? 150;
+    const maxBytes = opts.maxBytes ?? 400000;
+    const analyzers = (opts.analyzers ?? defaultAnalyzers()).filter((a) => a.available());
+    complexity.analyzers = analyzers.map((a) => a.name);
+    const candidates = files.filter((f) => !f.binary && fileGroup(f.path) !== "generated" && !isProse(f.path));
+    let read = 0;
+    const skipped = [];
+    const content = (f) => {
+      if (read >= maxFiles) {
+        skipped.push(`${f.path} (file cap ${maxFiles})`);
+        return null;
+      }
+      if (now() > deadline) {
+        skipped.push(`${f.path} (time budget)`);
+        return null;
+      }
+      read += 1;
+      const before = f.status === "added" ? "" : ports.showAtRev(ports.baseRev, f.oldPath ?? f.path) ?? "";
+      const after = f.status === "deleted" ? "" : ports.showAtRev(ports.headRev, f.path) ?? "";
+      if (before.length > maxBytes || after.length > maxBytes) {
+        skipped.push(`${f.path} (over ${maxBytes} bytes)`);
+        return null;
+      }
+      return { before, after };
+    };
+    const movers = [];
+    for (const f of candidates) {
+      const lang = isTest(f.path) ? null : apiLanguage(f.path);
+      const analyzer = analyzers.find((a) => a.handles(f.path));
+      if (lang === null && analyzer === undefined)
+        continue;
+      const c = content(f);
+      if (c === null)
+        continue;
+      if (lang !== null) {
+        const d = diffApi(extractApi(lang, c.before, f.path), extractApi(lang, c.after, f.path));
+        if (d.added.length + d.removed.length + d.changed.length > 0) {
+          api.changes.push({
+            file: f.path,
+            language: lang,
+            entry: lang === "ts" && isEntryPoint(f.path),
+            ...d
+          });
+        }
+      }
+      if (analyzer !== undefined) {
+        const before = analyzer.analyze(f.path, c.before);
+        const after = analyzer.analyze(f.path, c.after);
+        const sum = (m) => [...m.values()].reduce((n, v) => n + v, 0);
+        let touched = 0;
+        for (const name of new Set([...before.keys(), ...after.keys()])) {
+          const b = before.get(name) ?? null;
+          const a = after.get(name) ?? null;
+          if (b === a)
+            continue;
+          touched += 1;
+          movers.push({
+            path: f.path,
+            name,
+            before: b,
+            after: a,
+            delta: (a ?? 0) - (b ?? 0),
+            anonymous: name.includes("<anonymous")
+          });
+        }
+        complexity.totalBefore += sum(before);
+        complexity.totalAfter += sum(after);
+        complexity.functionsChanged += touched;
+        if (touched > 0 || sum(before) !== sum(after)) {
+          complexity.files.push({
+            path: f.path,
+            before: sum(before),
+            after: sum(after),
+            functionsBefore: before.size,
+            functionsAfter: after.size
+          });
+        }
+      }
+    }
+    api.status = "ok";
+    api.note = "Exported TS declarations and re-exports, and Rust pub items, by regex on the first line; " + (membersAvailable() ? "public members of exported classes and interfaces via the TypeScript AST." : "class and interface members NOT scanned (typescript not found).");
+    if (analyzers.length === 0) {
+      complexity.note = "no complexity analyzer available (install typescript and/or lizard)";
+    } else {
+      complexity.status = "ok";
+      const unhandled = candidates.some((f) => !analyzers.some((a) => a.handles(f.path)) && /\.(rs|py|go|java|kt|c|cpp|cs)$/.test(f.path));
+      if (unhandled) {
+        complexity.note = "files in languages without an available analyzer (lizard) were not scored";
+        notes.push(complexity.note);
+      }
+    }
+    movers.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta) || x.path.localeCompare(y.path) || x.name.localeCompare(y.name));
+    complexity.movers = movers.slice(0, opts.moverLimit ?? 60);
+    if (skipped.length > 0) {
+      notes.push(`skipped ${skipped.length} file(s) in the API/complexity passes: ${skipped.slice(0, 5).join(", ")}${skipped.length > 5 ? ", …" : ""}`);
+    }
+  }
+  return {
+    source,
+    files: files.length,
+    lines,
+    categories,
+    fileList,
+    dependencies,
+    api,
+    complexity,
+    notes
+  };
+}
+
+// packages/ts/pr-stats/src/splice.ts
+var STATS_START = "<!-- sdlc-pr-stats:start -->";
+var STATS_END = "<!-- sdlc-pr-stats:end -->";
+var HEADING = "## Change statistics";
+var LEASE_FOOTER = /^<!-- sdlc-lease: .*-->\s*$/;
+function spliceBody(body, block) {
+  const start = body.indexOf(STATS_START);
+  const end = body.indexOf(STATS_END, start + 1);
+  if (start >= 0 && end > start) {
+    return body.slice(0, start) + block + body.slice(end + STATS_END.length);
+  }
+  const section = `${HEADING}
+
+${block}`;
+  const lines = body.split(`
+`);
+  let last = lines.length - 1;
+  while (last >= 0 && lines[last].trim() === "")
+    last -= 1;
+  if (last >= 0 && LEASE_FOOTER.test(lines[last])) {
+    const head = lines.slice(0, last).join(`
+`).trimEnd();
+    const tail = lines.slice(last).join(`
+`);
+    return head === "" ? `${section}
+
+${tail}` : `${head}
+
+${section}
+
+${tail}`;
+  }
+  const trimmed = body.trimEnd();
+  return trimmed === "" ? `${section}
+` : `${trimmed}
+
+${section}
+`;
+}
+
+// packages/ts/pr-stats/src/render.ts
+var KIND_LABEL = {
+  code: "Code",
+  comment: "Comments",
+  blank: "Blank / whitespace",
+  prose: "Prose / docs"
+};
+var GROUP_LABEL = {
+  source: "Source",
+  tests: "Tests",
+  docs: "Docs",
+  generated: "Generated",
+  other: "Other"
+};
+var net = (n) => n > 0 ? `+${n}` : String(n);
+var cell3 = (s) => s.replace(/\|/g, "\\|");
+var code5 = (s) => `\`${s.replace(/`/g, "'")}\``;
+function renderReport2(r, opts = {}) {
+  const detail = opts.detail === true;
+  const out = [STATS_START, "", "| | Added | Removed | Net |", "|---|---:|---:|---:|"];
+  let added = 0;
+  let removed = 0;
+  for (const k of LINE_KINDS) {
+    const d = r.lines.kinds[k];
+    added += d.added;
+    removed += d.removed;
+    out.push(`| ${KIND_LABEL[k]} | ${d.added} | ${d.removed} | ${net(d.added - d.removed)} |`);
+  }
+  out.push(`| **Total** | **${added}** | **${removed}** | **${net(added - removed)}** |`);
+  out.push("", "| File group | Files | Added | Removed |", "|---|---:|---:|---:|");
+  for (const g of FILE_GROUPS) {
+    const s = r.lines.groups[g];
+    if (s.files === 0)
+      continue;
+    out.push(`| ${GROUP_LABEL[g]} | ${s.files} | ${s.added} | ${s.removed} |`);
+  }
+  if (r.files === 0)
+    out.push("| _no changed files_ | 0 | 0 | 0 |");
+  out.push("", "_Generated files (bundles, manifests, pack mirrors, lockfiles) are counted in the second " + "table only. Comment and code rows come from a line-prefix heuristic and are approximate._");
+  if (r.files > 0) {
+    out.push("", "### Code summary", "", "| Change category | Files | Added | Removed | Largest |");
+    out.push("|---|---:|---:|---:|---|");
+    for (const c of r.categories) {
+      const top = c.top.slice(0, detail ? 5 : 2).map(code5).join(", ");
+      out.push(`| ${c.category} | ${c.files} | ${c.added} | ${c.removed} | ${cell3(top)} |`);
+    }
+    for (const d of r.dependencies) {
+      const parts = [];
+      if (d.added.length > 0)
+        parts.push(`added ${d.added.map((e) => code5(`${e.name}@${e.version}`)).join(", ")}`);
+      if (d.removed.length > 0)
+        parts.push(`removed ${d.removed.map((e) => code5(e.name)).join(", ")}`);
+      if (d.bumped.length > 0) {
+        parts.push(`bumped ${d.bumped.map((e) => code5(`${e.name} ${e.from} -> ${e.to}`)).join(", ")}`);
+      }
+      out.push("", `**Dependencies** ${code5(d.file)}: ${parts.join("; ")}`);
+    }
+    out.push("", "**Exported API**");
+    if (r.api.status === "skipped")
+      out.push("", `_Skipped: ${r.api.note ?? "unavailable"}_`);
+    else if (r.api.changes.length === 0)
+      out.push("", "_No exported-surface changes found._");
+    else {
+      const cap = detail ? Infinity : 6;
+      const rows = [...r.api.changes].sort((a, b) => Number(b.entry) - Number(a.entry));
+      out.push("");
+      for (const c of rows.slice(0, cap)) {
+        const list = (xs) => {
+          const shown = detail ? xs : xs.slice(0, 10);
+          return shown.map(code5).join(" ") + (shown.length < xs.length ? ` _+${xs.length - shown.length} more_` : "");
+        };
+        const bits = [
+          c.added.length > 0 ? `+${list(c.added)}` : "",
+          c.removed.length > 0 ? `-${list(c.removed)}` : "",
+          c.changed.length > 0 ? `~${list(c.changed)}` : ""
+        ].filter((b) => b !== "");
+        out.push(`- ${code5(c.file)}${c.entry ? " (entry point)" : ""}: ${bits.join(" ")}`);
+      }
+      if (rows.length > cap)
+        out.push(`- _… ${rows.length - cap} more file(s); use --detail_`);
+    }
+    if (r.api.note !== null && r.api.status === "ok")
+      out.push("", `_${r.api.note}_`);
+    out.push("", "**Complexity** (cyclomatic, per function)");
+    if (r.complexity.status === "skipped") {
+      out.push("", `_Skipped: ${r.complexity.note ?? "unavailable"}_`);
+    } else {
+      out.push("", `Total ${r.complexity.totalBefore} -> ${r.complexity.totalAfter} ` + `(${net(r.complexity.totalAfter - r.complexity.totalBefore)}) across changed files; ` + `${r.complexity.functionsChanged} function(s) changed. Analyzers: ${r.complexity.analyzers.join(", ")}.`);
+      const pool = detail ? r.complexity.movers : r.complexity.movers.filter((m) => !(m.anonymous && (m.before === null || m.after === null)));
+      const shown = pool.slice(0, detail ? pool.length : 5);
+      if (shown.length > 0) {
+        out.push("", "| Function | File | Before | After | Change |", "|---|---|---:|---:|---:|");
+        for (const m of shown) {
+          out.push(`| ${cell3(code5(m.name))} | ${cell3(code5(m.path))} | ${m.before ?? "-"} | ${m.after ?? "-"} | ${net(m.delta)} |`);
+        }
+      }
+      if (r.complexity.note !== null)
+        out.push("", `_${r.complexity.note}_`);
+    }
+    if (detail) {
+      out.push("", "<details><summary>Per-file detail</summary>", "");
+      out.push("| File | Category | Group | Added | Removed |", "|---|---|---|---:|---:|");
+      for (const f of r.fileList) {
+        const name = f.oldPath === null ? code5(f.path) : `${code5(f.oldPath)} -> ${code5(f.path)} (${f.similarity ?? "?"}%)`;
+        out.push(`| ${cell3(name)} | ${f.category} | ${f.group} | ${f.added} | ${f.removed} |`);
+      }
+      if (r.complexity.files.length > 0) {
+        out.push("", "| File | Complexity before | after | Functions before | after |", "|---|---:|---:|---:|---:|");
+        for (const f of r.complexity.files) {
+          out.push(`| ${cell3(code5(f.path))} | ${f.before} | ${f.after} | ${f.functionsBefore} | ${f.functionsAfter} |`);
+        }
+      }
+      out.push("", "</details>");
+    }
+    for (const n of r.notes)
+      out.push("", `_Note: ${n}_`);
+  }
+  out.push("", STATS_END);
+  return out.join(`
+`);
+}
+
+// packages/ts/pr-stats/src/run.ts
+class StatsError extends Error {
+}
+function runStats(args, env) {
+  if (args.pr !== null && args.base !== null) {
+    throw new StatsError("--base and a PR argument are mutually exclusive");
+  }
+  if (args.write && args.pr === null)
+    throw new StatsError("--write needs a PR number");
+  const git = new Git(args.cwd, { runner: env.git });
+  const gh = new Gh(args.cwd, { runner: env.gh });
+  let source;
+  let diff;
+  let ports = null;
+  try {
+    if (args.pr !== null) {
+      source = `PR #${args.pr}`;
+      diff = gh.rawChecked(["pr", "diff", String(args.pr)]).stdout;
+      const view = gh.prView(args.pr, { fields: ["number", "baseRefName", "headRefOid"] });
+      const head = view?.headRefOid ?? null;
+      if (view !== null && head !== null && git.objectExists(head)) {
+        const remoteBase = `origin/${view.baseRefName}`;
+        const base = git.mergeBase(remoteBase, head) ?? git.mergeBase(view.baseRefName, head);
+        if (base !== null)
+          ports = revPorts(git, base, head);
+      }
+    } else {
+      const base = args.base ?? "origin/main";
+      source = `${base}...HEAD`;
+      diff = git.rawChecked(["diff", "-U0", "--no-color", "--no-ext-diff", `${base}...HEAD`]).stdout;
+      const mergeBase = git.mergeBase(base, "HEAD");
+      if (mergeBase !== null)
+        ports = revPorts(git, mergeBase, "HEAD");
+    }
+  } catch (e) {
+    if (!(e instanceof CommandFailed))
+      throw e;
+    throw new StatsError(`could not read the diff: ${e.detail.trim().split(`
+`)[0]}`);
+  }
+  const report = buildReport2(source, diff, ports, env.report);
+  const markdown = renderReport2(report, { detail: args.detail });
+  let written = false;
+  if (args.write && args.pr !== null && args.dryRun !== true) {
+    const view = gh.prView(args.pr, { fields: ["number", "body"] });
+    if (view === null)
+      throw new StatsError(`could not read PR #${args.pr}`);
+    const next = spliceBody(view.body, renderReport2(report));
+    if (next !== view.body)
+      gh.editPr(args.pr, { body: next });
+    written = true;
+  }
+  return { report, markdown, written };
+}
+function revPorts(git, baseRev, headRev) {
+  return { baseRev, headRev, showAtRev: (rev, path) => git.showAtRev(rev, path) };
+}
+// solutions/ontological/lib/services/gate/ops/comment-only.ts
+init_command();
+init_paths();
 var Violation = object({
   path: string2(),
   line: string2().describe("The removed line, trimmed.")
@@ -132665,7 +133701,7 @@ init_zod();
 init_registry3();
 init_plugin_root();
 import { lstatSync as lstatSync3, readdirSync as readdirSync32, readFileSync as readFileSync63 } from "node:fs";
-import { join as join117, relative as relative22 } from "node:path";
+import { join as join118, relative as relative22 } from "node:path";
 var FORBIDDEN = [
   {
     re: /cli\/sdlc\.ts/,
@@ -132692,7 +133728,7 @@ function walk(dir, predicate, root) {
   for (const name of entries) {
     if (SKIP_DIRS3.has(name))
       continue;
-    const abs = join117(dir, name);
+    const abs = join118(dir, name);
     let st;
     try {
       st = lstatSync3(abs);
@@ -132795,9 +133831,9 @@ init_cli_tool();
 init_registry3();
 init_fs();
 init_runtime();
-import { cpSync as cpSync3, mkdtempSync as mkdtempSync7, readdirSync as readdirSync33, readFileSync as readFileSync64, rmSync as rmSync14 } from "node:fs";
-import { tmpdir as tmpdir10 } from "node:os";
-import { dirname as dirname35, join as join118, resolve as resolve48 } from "node:path";
+import { cpSync as cpSync3, mkdtempSync as mkdtempSync8, readdirSync as readdirSync33, readFileSync as readFileSync64, rmSync as rmSync15 } from "node:fs";
+import { tmpdir as tmpdir11 } from "node:os";
+import { dirname as dirname35, join as join119, resolve as resolve48 } from "node:path";
 import { fileURLToPath as fileURLToPath7 } from "node:url";
 var RUMDL_VERSION = "0.2.77";
 var THIS_DIR = dirname35(fileURLToPath7(import.meta.url));
@@ -132882,7 +133918,7 @@ var markdown_fixtures_default = defineOp({
   },
   handler: (args) => {
     const fixturesDir = args.fixturesDir ? resolve48(args.fixturesDir) : FIXTURES_DIR;
-    const config = args.config ? resolve48(args.config) : join118(args.projectRoot, ".rumdl.toml");
+    const config = args.config ? resolve48(args.config) : join119(args.projectRoot, ".rumdl.toml");
     if (!isDir(fixturesDir)) {
       return {
         version: RUMDL_VERSION,
@@ -132901,12 +133937,12 @@ var markdown_fixtures_default = defineOp({
         fatal: `no *${INPUT_SUFFIX} fixtures under ${fixturesDir}`
       };
     }
-    const work = mkdtempSync7(join118(tmpdir10(), "gate-md-fixtures-"));
+    const work = mkdtempSync8(join119(tmpdir11(), "gate-md-fixtures-"));
     try {
-      cpSync3(config, join118(work, ".rumdl.toml"));
+      cpSync3(config, join119(work, ".rumdl.toml"));
       const fileArgs = [];
       for (const stem of stems) {
-        cpSync3(join118(fixturesDir, `${stem}${INPUT_SUFFIX}`), join118(work, `${stem}.md`));
+        cpSync3(join119(fixturesDir, `${stem}${INPUT_SUFFIX}`), join119(work, `${stem}.md`));
         fileArgs.push(`${stem}.md`);
       }
       const probe = spawnRunner("sh").run(["-c", `command -v ${xRunner()}`], {
@@ -132924,13 +133960,13 @@ var markdown_fixtures_default = defineOp({
       });
       const results = [];
       for (const stem of stems) {
-        const expectedPath = join118(fixturesDir, `${stem}${EXPECTED_SUFFIX}`);
+        const expectedPath = join119(fixturesDir, `${stem}${EXPECTED_SUFFIX}`);
         if (!isFile(expectedPath)) {
           results.push({ stem, status: "missing-expected", diffs: [] });
           continue;
         }
         const expected = readFileSync64(expectedPath, "utf-8");
-        const formatted = readFileSync64(join118(work, `${stem}.md`), "utf-8");
+        const formatted = readFileSync64(join119(work, `${stem}.md`), "utf-8");
         if (expected === formatted) {
           results.push({ stem, status: "ok", diffs: [] });
           continue;
@@ -132954,7 +133990,7 @@ var markdown_fixtures_default = defineOp({
       }
       return { version: RUMDL_VERSION, results };
     } finally {
-      rmSync14(work, { recursive: true, force: true });
+      rmSync15(work, { recursive: true, force: true });
     }
   }
 });
@@ -132966,7 +134002,7 @@ init_plugin_root();
 init_strings();
 init_easy_git();
 import { existsSync as existsSync54, readdirSync as readdirSync34, readFileSync as readFileSync65, statSync as statSync23 } from "node:fs";
-import { basename as basename22, dirname as dirname36, join as join119, relative as relative23, resolve as resolve49 } from "node:path";
+import { basename as basename23, dirname as dirname36, join as join120, relative as relative23, resolve as resolve49 } from "node:path";
 
 // solutions/ontological/lib/services/gate/ops/_staged_paths.ts
 function stagedPaths(git) {
@@ -134622,7 +135658,7 @@ function runSkillProse(slug, source, path) {
 
 // solutions/ontological/lib/services/gate/ops/skill-prose.ts
 function isSkillNotePath(p) {
-  return basename22(p) === `${basename22(dirname36(p))}.md`;
+  return basename23(p) === `${basename23(dirname36(p))}.md`;
 }
 function stagedSkillPaths(projectRoot, ctx) {
   return stagedPaths(new Git(projectRoot, { runner: ctx.git })).filter((l) => isSkillNotePath(l)).map((l) => resolve49(projectRoot, l));
@@ -134636,14 +135672,14 @@ function allSkillPaths(skillsDir) {
   }
   const found = [];
   for (const name of entries) {
-    const sub = join119(skillsDir, name);
+    const sub = join120(skillsDir, name);
     try {
       if (!statSync23(sub).isDirectory())
         continue;
     } catch {
       continue;
     }
-    const skillMd = join119(sub, `${name}.md`);
+    const skillMd = join120(sub, `${name}.md`);
     if (existsSync54(skillMd)) {
       found.push({ slug: name, path: skillMd });
     }
@@ -134718,7 +135754,7 @@ var skill_prose_default = defineOp({
         continue;
       }
       inspected++;
-      const slug = basename22(dirname36(skillPath));
+      const slug = basename23(dirname36(skillPath));
       if (SKILL_PROSE_REGISTRY[slug] !== undefined) {
         covered++;
       }
@@ -134743,20 +135779,20 @@ init_zod();
 init_easy_git();
 init_registry3();
 import { existsSync as existsSync55 } from "node:fs";
-import { join as join120 } from "node:path";
+import { join as join121 } from "node:path";
 init_git();
 var ALLOWED_PREFIXES = ["docs/planning/tasks/", ...GENERATED_DOCS_ROOTS];
 var SKIP_ENV_VAR = "WORKTREE_SCOPE_GUARD";
 var SKIP_ENV_VALUE = "skip";
 function findCollisions(paths, worktreeBasenames, wtBaseRoot) {
   const collisions = [];
-  const wtRoot = join120(wtBaseRoot, WORKTREES_DIR_REL);
+  const wtRoot = join121(wtBaseRoot, WORKTREES_DIR_REL);
   for (const p of paths) {
     if (ALLOWED_PREFIXES.some((prefix) => p.startsWith(prefix))) {
       continue;
     }
     for (const bname of worktreeBasenames) {
-      if (existsSync55(join120(wtRoot, bname, p))) {
+      if (existsSync55(join121(wtRoot, bname, p))) {
         collisions.push([p, bname]);
       }
     }
@@ -135157,7 +136193,7 @@ init_zod();
 init_detect();
 import { existsSync as existsSync56, readFileSync as readFileSync66 } from "node:fs";
 import { homedir as homedir9 } from "node:os";
-import { join as join121 } from "node:path";
+import { join as join122 } from "node:path";
 var SignedInSchema = union([boolean2(), literal("unknown")]);
 var ToolStatusSchema = ToolReportSchema.extend({
   signedIn: SignedInSchema,
@@ -135201,7 +136237,7 @@ function signInOf(report, deps = {}) {
     if (!report.found)
       return unknown;
     const piDir = env["PI_CODING_AGENT_DIR"];
-    const file = piDir ? join121(piDir, "auth.json") : join121(home, PI_AUTH_FILE);
+    const file = piDir ? join122(piDir, "auth.json") : join122(home, PI_AUTH_FILE);
     const providers = (deps.jsonKeys ?? realJsonKeys)(file);
     return providers !== null && providers.length > 0 ? { signedIn: true, signInEvidence: file, providers } : { ...unknown, providers };
   }
@@ -135209,7 +136245,7 @@ function signInOf(report, deps = {}) {
     return unknown;
   const src = SIGN_IN_SOURCES[report.tool];
   const codexHome = report.tool === "codex" ? env["CODEX_HOME"] : undefined;
-  const files = codexHome ? [join121(codexHome, "auth.json")] : src.files.map((f) => join121(home, f));
+  const files = codexHome ? [join122(codexHome, "auth.json")] : src.files.map((f) => join122(home, f));
   const file = files.find(exists);
   if (file !== undefined)
     return { ...unknown, signedIn: true, signInEvidence: file };
@@ -135371,7 +136407,7 @@ function countResources(model) {
 
 // packages/ts/agent-plugin/derive.ts
 import { existsSync as existsSync58, readFileSync as readFileSync68, readdirSync as readdirSync35, statSync as statSync24 } from "node:fs";
-import { join as join123, relative as relative24 } from "node:path";
+import { join as join124, relative as relative24 } from "node:path";
 
 // packages/ts/agent-plugin/frontmatter.ts
 init_frontmatter_lossless();
@@ -135412,7 +136448,7 @@ function parseFrontmatter3(text) {
 
 // packages/ts/agent-plugin/import-settings.ts
 import { existsSync as existsSync57, readFileSync as readFileSync67 } from "node:fs";
-import { join as join122 } from "node:path";
+import { join as join123 } from "node:path";
 function loadJson2(path) {
   if (!existsSync57(path))
     return null;
@@ -135502,8 +136538,8 @@ function mergeSettings(a, b) {
   return { ...a ?? {}, ...b ?? {} };
 }
 function readClaudeControlPlane(root) {
-  const base = loadJson2(join122(root, ".claude", "settings.json"));
-  const local = loadJson2(join122(root, ".claude", "settings.local.json"));
+  const base = loadJson2(join123(root, ".claude", "settings.json"));
+  const local = loadJson2(join123(root, ".claude", "settings.local.json"));
   const settings = mergeSettings(local, base);
   const permsObj = asObject2(settings["permissions"]) ?? {};
   const permissions = {
@@ -135513,7 +136549,7 @@ function readClaudeControlPlane(root) {
   };
   const hooks = parseHooks(settings["hooks"]).sort((a, b) => a.event.localeCompare(b.event) || (a.matcher ?? "").localeCompare(b.matcher ?? "") || a.action.localeCompare(b.action));
   const servers = parseMcpServers(settings["mcpServers"]);
-  const mcpJson = loadJson2(join122(root, ".mcp.json"));
+  const mcpJson = loadJson2(join123(root, ".mcp.json"));
   if (mcpJson) {
     const extra = parseMcpServers(mcpJson["mcpServers"]);
     const seen = new Set(servers.map((s) => s.name));
@@ -135552,7 +136588,7 @@ function walkFiles2(dir) {
       return;
     }
     for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
-      const abs = join123(d, e.name);
+      const abs = join124(d, e.name);
       if (e.isDirectory())
         rec(abs);
       else if (e.isFile())
@@ -135573,8 +136609,8 @@ function isResourcePath(rel) {
   return true;
 }
 function deriveCapability(kindDir, name, kind) {
-  const skillDir = join123(kindDir, name);
-  const skillMd = join123(skillDir, "SKILL.md");
+  const skillDir = join124(kindDir, name);
+  const skillMd = join124(skillDir, "SKILL.md");
   if (!existsSync58(skillMd))
     return null;
   const text = readFileSync68(skillMd, "utf-8");
@@ -135589,7 +136625,7 @@ function deriveCapability(kindDir, name, kind) {
   for (const rel of walkFiles2(skillDir)) {
     if (!isResourcePath(rel))
       continue;
-    const abs = join123(skillDir, rel);
+    const abs = join124(skillDir, rel);
     resources.push({
       path: rel,
       contents: readFileSync68(abs, "utf-8"),
@@ -135617,13 +136653,13 @@ function deriveDocuments(conventionsDir) {
       continue;
     docs.push({
       name: rel.replace(/\.md$/, ""),
-      body: readFileSync68(join123(conventionsDir, rel), "utf-8")
+      body: readFileSync68(join124(conventionsDir, rel), "utf-8")
     });
   }
   return docs;
 }
 function loadManifest2(pluginRoot) {
-  const candidate = [join123(pluginRoot, ".claude-plugin", "plugin.json"), join123(pluginRoot, "plugin.json")].find(existsSync58) ?? null;
+  const candidate = [join124(pluginRoot, ".claude-plugin", "plugin.json"), join124(pluginRoot, "plugin.json")].find(existsSync58) ?? null;
   if (!candidate)
     return {};
   try {
@@ -135641,7 +136677,7 @@ function deriveHarnessModel(pluginRoot) {
     ["skills", "skill"],
     ["commands", "command"]
   ]) {
-    const kindDir = join123(pluginRoot, dir);
+    const kindDir = join124(pluginRoot, dir);
     if (!existsSync58(kindDir))
       continue;
     for (const entry of readdirSync35(kindDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -135653,7 +136689,7 @@ function deriveHarnessModel(pluginRoot) {
     }
   }
   capabilities.sort((a, b) => a.name.localeCompare(b.name));
-  const documents = deriveDocuments(join123(pluginRoot, "conventions"));
+  const documents = deriveDocuments(join124(pluginRoot, "conventions"));
   const controlPlane = readClaudeControlPlane(pluginRoot);
   return HarnessModelSchema.parse({
     modelVersion: "2",
@@ -136409,8 +137445,8 @@ var list_default3 = defineOp({
 init_zod();
 init_registry3();
 init_lease();
-import { mkdirSync as mkdirSync14, writeFileSync as writeFileSync25 } from "node:fs";
-import { join as join124 } from "node:path";
+import { mkdirSync as mkdirSync14, writeFileSync as writeFileSync26 } from "node:fs";
+import { join as join125 } from "node:path";
 var PLACEHOLDER_HANDOFF = `migrated; see PR description
 `;
 function controlPlaneExists(ctx, authority, projectRoot) {
@@ -136466,11 +137502,11 @@ function sortKeys(obj) {
   return out;
 }
 function writeAuditLog(projectRoot, entries) {
-  const sdlcDir = join124(projectRoot, ".sdlc");
+  const sdlcDir = join125(projectRoot, ".sdlc");
   mkdirSync14(sdlcDir, { recursive: true });
-  const logPath = join124(sdlcDir, "migration.log");
+  const logPath = join125(sdlcDir, "migration.log");
   const bodyLines = entries.map((e) => JSON.stringify(sortKeys(e)));
-  writeFileSync25(logPath, bodyLines.join(`
+  writeFileSync26(logPath, bodyLines.join(`
 `) + `
 `, "utf-8");
 }
@@ -145995,7 +147031,7 @@ init_easy_git();
 init_config2();
 init_registry3();
 import { existsSync as existsSync59 } from "node:fs";
-import { join as join125 } from "node:path";
+import { join as join126 } from "node:path";
 function configNeedMet(need, ctx, input) {
   return sdlcConfigNeeds.met(need, { project: ctx.sdlcConfig, input });
 }
@@ -146003,7 +147039,7 @@ function configNeedMessage(need, ctx, path) {
   return sdlcConfigNeeds.message(need, { projectRoot: ctx.projectRoot, command: path });
 }
 function preflight(needs, ctx, opts = {}) {
-  const yaml = join125(ctx.projectRoot, "sdlc.yaml");
+  const yaml = join126(ctx.projectRoot, "sdlc.yaml");
   const present = existsSync59(yaml);
   const configProblem = opts.toleratesInvalidConfig === true ? null : validateProjectConfigFiles(ctx.projectRoot);
   if (configProblem !== null) {
@@ -146272,8 +147308,8 @@ defineNoun({ noun: "mcp", summary: "Run and register the MCP server." });
 init_dist7();
 init_zod();
 init_registry3();
-import { existsSync as existsSync60, mkdirSync as mkdirSync15, readFileSync as readFileSync70, writeFileSync as writeFileSync26 } from "node:fs";
-import { dirname as dirname38, join as join126 } from "node:path";
+import { existsSync as existsSync60, mkdirSync as mkdirSync15, readFileSync as readFileSync70, writeFileSync as writeFileSync27 } from "node:fs";
+import { dirname as dirname38, join as join127 } from "node:path";
 var HARNESSES2 = ["claude", "codex", "cursor"];
 var SERVER_KEY = "sdlc";
 function buildEntry(harness, command, mcpArgs) {
@@ -146325,7 +147361,7 @@ function mergeJson(path, entry, dryRun) {
     doc["mcpServers"] = servers;
     if (!dryRun) {
       mkdirSync15(dirname38(path), { recursive: true });
-      writeFileSync26(path, `${JSON.stringify(doc, null, 2)}
+      writeFileSync27(path, `${JSON.stringify(doc, null, 2)}
 `, "utf-8");
     }
   }
@@ -146361,7 +147397,7 @@ function mergeToml(path, entry, dryRun) {
     if (!dryRun) {
       mkdirSync15(dirname38(path), { recursive: true });
       const text = stringify(doc);
-      writeFileSync26(path, text.endsWith(`
+      writeFileSync27(path, text.endsWith(`
 `) ? text : `${text}
 `, "utf-8");
     }
@@ -146412,22 +147448,22 @@ var register_default = defineOp({
   handler: (args, ctx) => {
     const dryRun = ctx.dryRun;
     const { root: pluginRoot } = resolvePluginRoot();
-    const command = join126(pluginRoot, "cli", "sdlc");
+    const command = join127(pluginRoot, "cli", "sdlc");
     const mcpArgs = ["mcp", "start"];
     const entry = buildEntry(args.harness, command, mcpArgs);
     let targetPath;
     let format;
     let changed;
     if (args.harness === "claude") {
-      targetPath = join126(ctx.projectRoot, ".mcp.json");
+      targetPath = join127(ctx.projectRoot, ".mcp.json");
       format = "json";
       changed = mergeJson(targetPath, entry, dryRun).changed;
     } else if (args.harness === "cursor") {
-      targetPath = join126(ctx.projectRoot, ".cursor", "mcp.json");
+      targetPath = join127(ctx.projectRoot, ".cursor", "mcp.json");
       format = "json";
       changed = mergeJson(targetPath, entry, dryRun).changed;
     } else {
-      targetPath = join126(ctx.projectRoot, ".codex", "config.toml");
+      targetPath = join127(ctx.projectRoot, ".codex", "config.toml");
       format = "toml";
       changed = mergeToml(targetPath, entry, dryRun).changed;
     }
@@ -146525,7 +147561,7 @@ init__registry();
 init_identifier();
 init_frontmatter2();
 import { readdirSync as readdirSync36, readFileSync as readFileSync71 } from "node:fs";
-import { join as join127, relative as relative26, sep as sep5 } from "node:path";
+import { join as join128, relative as relative26, sep as sep5 } from "node:path";
 var BUNDLE_ROOT = "docs";
 var NO_FRONTMATTER = "no YAML frontmatter block found";
 var FINDING_KINDS2 = [
@@ -146558,7 +147594,7 @@ function decisionDossierReadmes2(dir) {
     const parsed = parseCanonicalFilename(e.name);
     if (parsed === null || parsed.prefix !== "D")
       continue;
-    const readme = join127(dir, e.name, "README.md");
+    const readme = join128(dir, e.name, "README.md");
     if (isFile(readme))
       out.push(readme);
   }
@@ -146651,13 +147687,13 @@ var validate_default2 = defineOp({
   output: output93,
   cli: { render: renderValidate },
   handler: (_args, ctx) => {
-    const root = join127(ctx.projectRoot, BUNDLE_ROOT);
-    const planningRoot = join127(ctx.projectRoot, ...configuration_default.system.defaultPath);
+    const root = join128(ctx.projectRoot, BUNDLE_ROOT);
+    const planningRoot = join128(ctx.projectRoot, ...configuration_default.system.defaultPath);
     const registered = new Set(entityTypeNames());
     const pluralToType = new Map(entityTypeNames().map((t) => [pluralize(t), t]));
-    const decisionsDir = join127(planningRoot, pluralize("decision"));
+    const decisionsDir = join128(planningRoot, pluralize("decision"));
     const dossiers = new Set(decisionDossierReadmes2(decisionsDir));
-    const rootIndex = join127(root, "index.md");
+    const rootIndex = join128(root, "index.md");
     const reserved = OKF_RESERVED_FILENAMES;
     const files = rglob(root, (rel) => rel.endsWith(".md"));
     const findings = [];
@@ -146775,7 +147811,7 @@ init_registry3();
 init_lease();
 // solutions/ontological/lib/services/orchestrator/ticks/merges.ts
 init_easy_git();
-import { join as join129 } from "node:path";
+import { join as join130 } from "node:path";
 
 // solutions/ontological/lib/services/orchestrator/ticks/_close_out.ts
 var CLOSE_OUT_OPERATION = "orchestrate-merge-close-out";
@@ -146798,10 +147834,10 @@ async function closeOutBasename(basename, ctx, deps = defaultCloseOutDeps) {
 // solutions/ontological/lib/services/orchestrator/ticks/_pending_close_outs.ts
 init_zod();
 init_fs();
-import { join as join128 } from "node:path";
+import { join as join129 } from "node:path";
 var PendingSchema = array(object({ pr: number2().int(), headRefName: string2().min(1) }));
 function pendingCloseOutsPath(projectRoot) {
-  return join128(projectRoot, ".sdlc", "orchestrator-pending-close-outs.json");
+  return join129(projectRoot, ".sdlc", "orchestrator-pending-close-outs.json");
 }
 function readPendingCloseOuts(projectRoot) {
   const parsed = PendingSchema.safeParse(readJsonOrNull(pendingCloseOutsPath(projectRoot)));
@@ -146925,7 +147961,7 @@ async function runMergesTick(ctx, allClassifications, deps = defaultMergesTickDe
     survey = null;
   }
   const surveyByPr = new Map((survey?.prs ?? []).map((r) => [r.number, r]));
-  const cursorDir = join129(ctx.projectRoot, ".sdlc", "pr-cursors");
+  const cursorDir = join130(ctx.projectRoot, ".sdlc", "pr-cursors");
   const routerEnabled = isRouterEnabled(ctx);
   const routerConfig = resolveRouterConfig(ctx);
   const maxRounds = resolveMaxRounds(ctx);
@@ -147805,8 +148841,8 @@ init_paths();
 init_git();
 init_easy_git();
 init_easy_gh();
-import { existsSync as existsSync61, mkdirSync as mkdirSync16, readFileSync as readFileSync72, writeFileSync as writeFileSync27 } from "node:fs";
-import { dirname as dirname39, join as join130, resolve as resolve54 } from "node:path";
+import { existsSync as existsSync61, mkdirSync as mkdirSync16, readFileSync as readFileSync72, writeFileSync as writeFileSync28 } from "node:fs";
+import { dirname as dirname39, join as join131, resolve as resolve54 } from "node:path";
 var STATE_REL_PATH = ".sdlc/orchestrator-watch.json";
 var DEFAULT_RE_EMIT_AFTER = 1200;
 function emptyState() {
@@ -147851,7 +148887,7 @@ function readState(path) {
 }
 function writeState(path, state) {
   mkdirSync16(dirname39(path), { recursive: true });
-  writeFileSync27(path, JSON.stringify(state, null, 2) + `
+  writeFileSync28(path, JSON.stringify(state, null, 2) + `
 `, "utf-8");
 }
 function isCanonicalPending(v) {
@@ -148141,7 +149177,7 @@ var watch_default = defineOp({
     const projectRoot = realResolve(ctx.projectRoot);
     const localCtx = { ...ctx, projectRoot };
     const statePath = args.statePath ?? resolve54(projectRoot, STATE_REL_PATH);
-    const cursorDir = args.cursorDir ?? join130(projectRoot, ".sdlc", "pr-cursors");
+    const cursorDir = args.cursorDir ?? join131(projectRoot, ".sdlc", "pr-cursors");
     const nowMs = args.now !== undefined ? Date.parse(args.now) : Date.now();
     const nowIso = args.now ?? rfc3339(nowUtc());
     const state = readState(statePath);
@@ -148345,8 +149381,8 @@ var info_default = defineOp({
 // solutions/ontological/lib/services/plugin/ops/install-permissions.ts
 init_zod();
 init_registry3();
-import { existsSync as existsSync62, mkdirSync as mkdirSync17, readFileSync as readFileSync73, writeFileSync as writeFileSync28 } from "node:fs";
-import { dirname as dirname40, join as join131 } from "node:path";
+import { existsSync as existsSync62, mkdirSync as mkdirSync17, readFileSync as readFileSync73, writeFileSync as writeFileSync29 } from "node:fs";
+import { dirname as dirname40, join as join132 } from "node:path";
 var RULES = [
   {
     rule: "Bash(bun run plugin/*)",
@@ -148425,7 +149461,7 @@ var install_permissions_default = defineOp({
         listOnly: true
       };
     }
-    const settingsPath = join131(projectRoot, ".claude", "settings.json");
+    const settingsPath = join132(projectRoot, ".claude", "settings.json");
     let settings = {};
     if (existsSync62(settingsPath)) {
       const text = readFileSync73(settingsPath, "utf-8");
@@ -148459,7 +149495,7 @@ var install_permissions_default = defineOp({
       if (!existsSync62(claudeDir)) {
         mkdirSync17(claudeDir, { recursive: true });
       }
-      writeFileSync28(settingsPath, `${JSON.stringify(settings, null, 2)}
+      writeFileSync29(settingsPath, `${JSON.stringify(settings, null, 2)}
 `, "utf-8");
     }
     return { rules, added, total: RULES.length, settingsPath, dryRun, listOnly: false };
@@ -148471,7 +149507,7 @@ init_easy_git();
 init_zod();
 init_registry3();
 import { existsSync as existsSync63 } from "node:fs";
-import { join as join132 } from "node:path";
+import { join as join133 } from "node:path";
 function gitOriginUrl(repoRoot) {
   const got = new Git(repoRoot).try.remoteGetUrl("origin");
   return got.ok ? got.value : null;
@@ -148482,7 +149518,7 @@ function githubHttpsUrl(repo) {
 function doResolve(pluginRef, pluginsDir) {
   const { pluginsMap, marketplaces } = readPluginRegistry(pluginsDir);
   if (Object.keys(pluginsMap).length === 0) {
-    throw new OpError("GENERIC", `no plugins recorded at ${join132(pluginsDir, "installed_plugins.json")}`);
+    throw new OpError("GENERIC", `no plugins recorded at ${join133(pluginsDir, "installed_plugins.json")}`);
   }
   let candidateKeys;
   if (pluginRef.includes("@")) {
@@ -148673,7 +149709,7 @@ function renderRelatedPrs(rows) {
 init_zod();
 init_git();
 import { existsSync as existsSync64 } from "node:fs";
-import { basename as basename23 } from "node:path";
+import { basename as basename24 } from "node:path";
 function localBranchFor(pr) {
   return pr.isCrossRepository ? `pr/${pr.number}` : pr.headRefName;
 }
@@ -148703,7 +149739,7 @@ function planWorktree(git, repoRoot, pr) {
   };
 }
 function freeWorktreePath(repoRoot, branch) {
-  const stem = basename23(branch).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "review";
+  const stem = basename24(branch).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "review";
   let candidate = worktreeDir(repoRoot, stem);
   for (let n = 2;existsSync64(candidate); n += 1) {
     candidate = worktreeDir(repoRoot, `${stem}-${n}`);
@@ -149217,7 +150253,7 @@ var review_default = defineOp({
 // solutions/ontological/lib/services/pr/ops/route.ts
 init_zod();
 init_registry3();
-import { join as join133 } from "node:path";
+import { join as join134 } from "node:path";
 var ROUTES = ["live", "resume", "fresh"];
 var input80 = object({
   pr: PrArgSchema.describe(`${PR_ARG_HELP} The PR to route feedback for.`),
@@ -149256,7 +150292,7 @@ var route_default = defineOp({
   },
   handler: async (args, ctx) => {
     const pr = localPrNumber(args.pr, ctx);
-    const cursorDir = join133(ctx.projectRoot, ".sdlc", "pr-cursors");
+    const cursorDir = join134(ctx.projectRoot, ".sdlc", "pr-cursors");
     const bundle = buildPrFeedbackBundle(pr, ctx, cursorDir);
     if (bundle === null) {
       return {
@@ -149294,6 +150330,62 @@ var route_default = defineOp({
   }
 });
 
+// solutions/ontological/lib/services/pr/ops/stats.ts
+init_zod();
+init_registry3();
+var input81 = object({
+  pr: PrArgSchema.optional().describe(`${PR_ARG_HELP} Omit to measure the current branch.`),
+  base: string2().nullable().default(null).describe("Ref to diff against (`<base>...HEAD`); defaults to origin/main. Not with a PR."),
+  write: boolean2().default(false).describe("Write the statistics into the PR's body (needs a PR). Idempotent."),
+  detail: boolean2().default(false).describe("Long form: per-file list and every complexity mover.")
+});
+var output104 = reportSchema.extend({
+  markdown: string2().describe("The marked statistics block, ready to paste into a PR body."),
+  written: boolean2().describe("Whether the PR body was updated.")
+});
+var stats_default = defineOp({
+  path: ["pr", "stats"],
+  summary: "Line, category, API and complexity statistics for a PR or branch.",
+  mutating: true,
+  needs: ["git"],
+  input: input81,
+  output: output104,
+  cli: {
+    positionals: ["pr"],
+    flags: {
+      base: { valueName: "ref", help: "Ref to diff against; defaults to origin/main." },
+      write: { help: "Write the statistics into the PR's body." },
+      detail: { help: "Long form: per-file list and every complexity mover." }
+    },
+    render: (out, io) => {
+      io.stdout(`${out.markdown}
+`);
+      if (out.written)
+        io.stdout(`wrote ${out.source} body
+`);
+    }
+  },
+  handler: (args, ctx) => {
+    try {
+      const out = runStats({
+        cwd: ctx.projectRoot,
+        pr: args.pr === undefined ? null : localPrNumber(args.pr, ctx),
+        base: args.base,
+        write: args.write,
+        detail: args.detail,
+        dryRun: ctx.dryRun
+      }, { git: ctx.git, gh: ctx.gh });
+      return { ...out.report, markdown: out.markdown, written: out.written };
+    } catch (e) {
+      if (e instanceof StatsError) {
+        const usage = e.message.includes("mutually exclusive") || e.message.includes("needs a PR");
+        throw new OpError(usage ? "INVALID_INPUT" : "GENERIC", e.message);
+      }
+      throw e;
+    }
+  }
+});
+
 // solutions/ontological/lib/services/project/follow-loop-service.ts
 init_registry3();
 import { resolve as resolve55 } from "node:path";
@@ -149303,7 +150395,7 @@ init_zod();
 init_etag_write();
 init_easy_git();
 import { existsSync as existsSync65, readFileSync as readFileSync74 } from "node:fs";
-import { join as join134 } from "node:path";
+import { join as join135 } from "node:path";
 var FOLLOW_STATUS_FILE = "sdlc-follow-status.json";
 var followResultSchema = object({
   outcome: _enum(["updated", "current", "skipped", "failed"]),
@@ -149412,7 +150504,7 @@ function followOnce(checkout, options = {}) {
   }
   const result = { ...attempt2(git, options), time };
   try {
-    atomicWrite(join134(gitDir, FOLLOW_STATUS_FILE), JSON.stringify(result, null, 2) + `
+    atomicWrite(join135(gitDir, FOLLOW_STATUS_FILE), JSON.stringify(result, null, 2) + `
 `);
   } catch {}
   return result;
@@ -149421,7 +150513,7 @@ function readFollowStatus(checkout, options = {}) {
   const gitDir = ownGitDir(clientFor(checkout, options));
   if (gitDir === null)
     return null;
-  const file = join134(gitDir, FOLLOW_STATUS_FILE);
+  const file = join135(gitDir, FOLLOW_STATUS_FILE);
   if (!existsSync65(file))
     return null;
   try {
@@ -149848,7 +150940,7 @@ function classifyRemoteBranch(opts) {
 // packages/ts/repo-cleaner/worktrees.ts
 init_command_seam();
 import { existsSync as existsSync66, statSync as statSync26 } from "node:fs";
-import { isAbsolute as isAbsolute21, join as join135, relative as relative27, resolve as resolve56 } from "node:path";
+import { isAbsolute as isAbsolute21, join as join136, relative as relative27, resolve as resolve56 } from "node:path";
 function worktreeRemoveCommand(root, path, opts = {}) {
   return shellJoin2([
     "git",
@@ -149900,7 +150992,7 @@ function readBlockers(opts) {
         `${hidden.length} file(s) are marked skip-worktree or assume-unchanged, so status may hide edits; clear the flags with \`git update-index --no-skip-worktree --no-assume-unchanged <path>\` and check again.`
       ]);
     }
-    const nested = at.lsFiles({ others: true, directory: true }).filter((entry) => entry.endsWith("/") && existsSync66(join135(path, entry, ".git")));
+    const nested = at.lsFiles({ others: true, directory: true }).filter((entry) => entry.endsWith("/") && existsSync66(join136(path, entry, ".git")));
     if (nested.length > 0) {
       facts["nested_repositories"] = nested;
       out.push([
@@ -150105,11 +151197,11 @@ import { resolve as resolve57 } from "node:path";
 // packages/ts/repo-cleaner/plan.ts
 init_zod();
 import { readFileSync as readFileSync75 } from "node:fs";
-import { join as join136 } from "node:path";
+import { join as join137 } from "node:path";
 
 // packages/ts/repo-cleaner/write-json.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
-import { closeSync as closeSync5, fsyncSync as fsyncSync4, mkdirSync as mkdirSync18, openSync as openSync5, renameSync as renameSync4, rmSync as rmSync15, writeSync as writeSync4 } from "node:fs";
+import { closeSync as closeSync5, fsyncSync as fsyncSync4, mkdirSync as mkdirSync18, openSync as openSync5, renameSync as renameSync4, rmSync as rmSync16, writeSync as writeSync4 } from "node:fs";
 import { dirname as dirname41 } from "node:path";
 function writeJsonAtomic2(path, data) {
   const dir = dirname41(path);
@@ -150126,7 +151218,7 @@ function writeJsonAtomic2(path, data) {
     }
     renameSync4(tmp, path);
   } catch (err) {
-    rmSync15(tmp, { force: true });
+    rmSync16(tmp, { force: true });
     throw err;
   }
   let dfd;
@@ -150202,7 +151294,7 @@ function fileStamp(d) {
   return d.toISOString().replace(/[:.]/g, "-");
 }
 function stampedPath(dir, d) {
-  return join136(dir, `${fileStamp(d)}.json`);
+  return join137(dir, `${fileStamp(d)}.json`);
 }
 function writePlan(path, plan) {
   writeJsonAtomic2(path, plan);
@@ -150339,12 +151431,12 @@ function fetchPrs(repo, gh, headPrefix) {
 init_easy_git();
 import { statSync as statSync27 } from "node:fs";
 import { homedir as homedir11 } from "node:os";
-import { isAbsolute as isAbsolute22, join as join137, resolve as resolvePath6 } from "node:path";
+import { isAbsolute as isAbsolute22, join as join138, resolve as resolvePath6 } from "node:path";
 function expandTilde2(path, home = homedir11()) {
   if (path === "~")
     return home;
   if (path.startsWith("~/"))
-    return join137(home, path.slice(2));
+    return join138(home, path.slice(2));
   return path;
 }
 function isDir4(path) {
@@ -150747,7 +151839,7 @@ function renderReceipt(receipt, receiptPath) {
 init_registry3();
 
 // solutions/ontological/lib/services/project/cleanup/index.ts
-import { join as join138, relative as relative28, basename as pathBasename7 } from "node:path";
+import { join as join139, relative as relative28, basename as pathBasename7 } from "node:path";
 init_frontmatter();
 init_read();
 var TASK_BASENAME_RE = /^(?:\d{4}-\d{2}-\d{2}-|\d{4}-)(.+)$/;
@@ -151084,7 +152176,7 @@ function renderScanSummary(repo, summary) {
 `);
 }
 function cleanupFilePath(root, kind, d) {
-  return stampedPath(join138(root, ".sdlc", "cleanup", kind), d);
+  return stampedPath(join139(root, ".sdlc", "cleanup", kind), d);
 }
 var ALL_SCOPES2 = [...ALL_SCOPES, "task-linkage"];
 
@@ -151132,8 +152224,8 @@ function gatherAndClassify(input) {
 }
 
 // solutions/ontological/lib/services/project/ops/apply-cleanup.ts
-var output104 = object({ receiptPath: string2().nullable(), receipt: ReceiptSchema });
-var input81 = object({
+var output105 = object({ receiptPath: string2().nullable(), receipt: ReceiptSchema });
+var input82 = object({
   plan: string2().describe("Plan file written by `project cleanup --write-plan`."),
   row: array(string2()).default([]),
   authorize: array(string2()).default([]),
@@ -151142,8 +152234,8 @@ var input81 = object({
 var apply_cleanup_default = defineOp({
   path: ["project", "apply-cleanup"],
   summary: "Apply approved rows of a cleanup plan: re-check, delete compare-and-swap, verify, write a receipt.",
-  input: input81,
-  output: output104,
+  input: input82,
+  output: output105,
   cli: {
     flags: {
       plan: { valueName: "path", help: "Plan file from `project cleanup --write-plan`." },
@@ -151227,7 +152319,7 @@ var RepoReport = object({
   scanSummary: string2(),
   markdownReport: string2()
 });
-var output105 = object({
+var output106 = object({
   repo: RepoInfo,
   items: array(CleanupItemSchema),
   summary: record(string2(), SummaryBucket),
@@ -151244,7 +152336,7 @@ var output105 = object({
   }),
   planPath: string2().nullable()
 });
-var input82 = object({
+var input83 = object({
   repoRoot: string2().optional(),
   repo: array(string2()).default([]).describe("Repository to sweep — a path to a checkout, a directory containing checkouts, or `owner/name` located through the `repos:` containers. Repeatable, and it REPLACES the default target: with no `--repo` and no `--all`, the repository at --project-root is swept alone."),
   all: boolean2().default(false).describe("Sweep every repository the `repos:` lists resolve to (machine config first, then sdlc.yaml). Off by default: `repos:` says where checkouts live, and this flag is what puts them in scope."),
@@ -151351,8 +152443,8 @@ function sweepOne(root, args, scopeSet, ctx) {
 var cleanup_default = defineOp({
   path: ["project", "cleanup"],
   summary: "Gather and classify branches, worktrees, remote branches, and task linkage. Fetches first; otherwise read-only apart from an optional plan file.",
-  input: input82,
-  output: output105,
+  input: input83,
+  output: output106,
   cli: {
     flags: {
       repoRoot: { valueName: "path", help: "Repository to sweep. Default: --project-root." },
@@ -151433,18 +152525,18 @@ var CandidateSchema = object({
   command: string2(),
   source: string2()
 });
-var input83 = object({
+var input84 = object({
   projectRoot: string2().optional()
 });
-var output106 = object({
+var output107 = object({
   project_root: string2(),
   candidates: array(CandidateSchema)
 });
 var detect_setup_default = defineOp({
   path: ["project", "detect-setup"],
   summary: "Probe a project root for setup bootstrap commands (deps install, git hooks, tool trust).",
-  input: input83,
-  output: output106,
+  input: input84,
+  output: output107,
   cli: {
     flags: {
       projectRoot: { valueName: "path", help: "Project root to probe (default: project root)." }
@@ -151465,7 +152557,7 @@ init_registry3();
 init_config2();
 init_load();
 import { existsSync as existsSync68, readFileSync as readFileSync76 } from "node:fs";
-import { isAbsolute as isAbsolute23, join as join139, resolve as resolve60 } from "node:path";
+import { isAbsolute as isAbsolute23, join as join140, resolve as resolve60 } from "node:path";
 init_machine2();
 init_trust3();
 init_verbs3();
@@ -151520,10 +152612,10 @@ function readMarketplacePathFrom(settingsPath) {
   return typeof path === "string" ? { path } : null;
 }
 function registeredMarketplacePath(projectRoot) {
-  const local = readMarketplacePathFrom(join139(projectRoot, ".claude", LOCAL_SETTINGS_FILENAME));
+  const local = readMarketplacePathFrom(join140(projectRoot, ".claude", LOCAL_SETTINGS_FILENAME));
   if (local !== null && "path" in local)
     return local;
-  const committed = readMarketplacePathFrom(join139(projectRoot, ".claude", SETTINGS_FILENAME));
+  const committed = readMarketplacePathFrom(join140(projectRoot, ".claude", SETTINGS_FILENAME));
   if (committed !== null)
     return committed;
   return local;
@@ -151554,15 +152646,15 @@ function checkSameInstall(projectRoot) {
   }
   const marketplacePath = found.path;
   const registeredPath = resolve60(projectRoot, marketplacePath);
-  const stampPath = join139(registeredPath, STAMP_FILENAME);
+  const stampPath = join140(registeredPath, STAMP_FILENAME);
   const isLink = isAbsolute23(marketplacePath);
   const isCopy = !isLink && existsSync68(stampPath);
   const mode = isLink ? "link" : isCopy ? "copy" : "node-modules";
   const reg = { ...base, registered: true, mode, marketplacePath, registeredPath };
   const manifestPath = resolveRegisteredManifestPath(registeredPath);
   if (manifestPath === null) {
-    const directManifest = join139(registeredPath, ".claude-plugin", "plugin.json");
-    const marketplaceManifest = join139(registeredPath, ".claude-plugin", "marketplace.json");
+    const directManifest = join140(registeredPath, ".claude-plugin", "plugin.json");
+    const marketplaceManifest = join140(registeredPath, ".claude-plugin", "marketplace.json");
     const hint = existsSync68(marketplaceManifest) ? ` or via its marketplace.json indirection — has the plugin been built yet?` : "";
     return {
       ...reg,
@@ -151686,7 +152778,7 @@ var CodeHostAuthStatus = object({
   codeHost: _enum(["github", "forgejo"]).describe("The backend PR ops use for this project."),
   checks: array(AuthCheckSchema)
 });
-var output107 = object({
+var output108 = object({
   probes: array(ProbeResult),
   harnesses: array(ToolStatusSchema).describe("AI coding tools found on this machine, with sign-in state: `harness detect`'s tools."),
   allRequiredOk: boolean2().describe("Every required probe and every code host auth check passed."),
@@ -152040,7 +153132,7 @@ var doctor_default = defineOp({
   toleratesInvalidConfig: true,
   summary: "Probe runtime dependencies (git, gh, bun/node), the AI tools installed (as `harness detect` reports them), code host auth and the harness install.",
   input: object({}),
-  output: output107,
+  output: output108,
   cli: { render: renderDoctor },
   handler: async (_args, ctx) => {
     const runtime = probeRuntime();
@@ -152085,11 +153177,11 @@ var doctor_default = defineOp({
 init_zod();
 init_registry3();
 import { resolve as resolve61 } from "node:path";
-var input84 = object({
+var input85 = object({
   checkout: string2().min(1),
   status: boolean2().default(false)
 });
-var output108 = object({
+var output109 = object({
   outcome: _enum(["updated", "current", "skipped", "failed"]).optional(),
   reason: string2().optional(),
   wouldFetch: boolean2().optional(),
@@ -152115,8 +153207,8 @@ function renderFollow(out, io) {
 var follow_default = defineOp({
   path: ["project", "follow"],
   summary: "Fast-forward a detached, clean checkout to origin/main when safe; --status shows the last outcome.",
-  input: input84,
-  output: output108,
+  input: input85,
+  output: output109,
   cli: {
     positionals: ["checkout"],
     flags: {
@@ -152157,7 +153249,7 @@ import {
   renameSync as renameSync5,
   rmdirSync,
   unlinkSync as unlinkSync6,
-  writeFileSync as writeFileSync29
+  writeFileSync as writeFileSync30
 } from "node:fs";
 import { resolve as resolve62 } from "node:path";
 function emitError(io, reason) {
@@ -152339,7 +153431,7 @@ function moveFile(src, dst) {
     const code = e.code;
     if (code === "EXDEV") {
       const data = readFileSync77(src);
-      writeFileSync29(dst, data);
+      writeFileSync30(dst, data);
       unlinkSync6(src);
       return;
     }
@@ -152424,14 +153516,14 @@ function main10(argv, ctx) {
 `);
   return EXIT.ok;
 }
-var input85 = object({ argv: array(string2()) });
-var output109 = object({ exitCode: number2().int() });
+var input86 = object({ argv: array(string2()) });
+var output110 = object({ exitCode: number2().int() });
 var migrate_runtime_state_default = defineOp({
   path: ["project", "migrate-runtime-state"],
   summary: "Move a project's legacy .claude runtime state to its .sdlc home.",
   hidden: true,
-  input: input85,
-  output: output109,
+  input: input86,
+  output: output110,
   cli: { rawArgv: true },
   handler: ({ argv }, ctx) => ({ exitCode: main10(argv, legacyCliContext(ctx)) })
 });
@@ -152439,13 +153531,13 @@ var migrate_runtime_state_default = defineOp({
 // solutions/ontological/lib/services/project/ops/preflight-worktree.ts
 init_zod();
 init_registry3();
-var input86 = object({
+var input87 = object({
   basename: string2().min(1),
   branch: string2().min(1),
   repoRoot: string2().optional(),
   noGh: boolean2().default(false)
 });
-var output110 = object({
+var output111 = object({
   worktreePath: string2(),
   branch: string2(),
   dirty: boolean2(),
@@ -152482,8 +153574,8 @@ function renderPreflight(out, io) {
 var preflight_worktree_default = defineOp({
   path: ["project", "preflight-worktree"],
   summary: "Probe dirty-tree + worktree/branch collisions + open PR before scaffolding a worktree. Report-only.",
-  input: input86,
-  output: output110,
+  input: input87,
+  output: output111,
   cli: {
     positionals: ["basename"],
     flags: {
@@ -152529,12 +153621,12 @@ init_registry3();
 init_easy_git();
 init_fs();
 import { readFileSync as readFileSync79, statSync as statSync28 } from "node:fs";
-import { basename as basename24, isAbsolute as isAbsolute24, join as join141, relative as relative29, sep as sep6 } from "node:path";
+import { basename as basename25, isAbsolute as isAbsolute24, join as join142, relative as relative29, sep as sep6 } from "node:path";
 
 // solutions/ontological/lib/util/gitignore.ts
 init_fs();
 import { readFileSync as readFileSync78 } from "node:fs";
-import { join as join140 } from "node:path";
+import { join as join141 } from "node:path";
 function escapeRegexLiteral(ch) {
   return /[.+^${}()|[\]\\]/.test(ch) ? "\\" + ch : ch;
 }
@@ -152652,7 +153744,7 @@ function compileGitignoreRule(raw) {
   return { re, negate };
 }
 function loadGitignore(projectRoot) {
-  const gitignore = join140(projectRoot, ".gitignore");
+  const gitignore = join141(projectRoot, ".gitignore");
   if (!isFile(gitignore))
     return null;
   let text;
@@ -152750,7 +153842,7 @@ function statOf(p) {
   }
 }
 function hasGitDir(projectRoot) {
-  const gitPath = join141(projectRoot, ".git");
+  const gitPath = join142(projectRoot, ".git");
   const s = statOf(gitPath);
   return s !== null && (s.isDirectory() || s.isFile());
 }
@@ -152779,13 +153871,13 @@ function heuristicHints(text) {
   return hits;
 }
 function stemLower(p) {
-  const b = basename24(p);
+  const b = basename25(p);
   const dot = b.lastIndexOf(".");
   const stem = dot > 0 ? b.slice(0, dot) : b;
   return stem.toLowerCase();
 }
 function extLower(p) {
-  const b = basename24(p);
+  const b = basename25(p);
   const dot = b.lastIndexOf(".");
   if (dot <= 0)
     return "";
@@ -152831,7 +153923,7 @@ function scanCandidates(git, projectRoot, scopes) {
   }
   const candidates = [];
   for (const { rel, relPosix, stat } of survivors) {
-    const path = join141(projectRoot, rel);
+    const path = join142(projectRoot, rel);
     let text;
     try {
       text = readFileSync79(path, "utf-8");
@@ -152863,17 +153955,17 @@ var CandidateSchema2 = object({
   mtime: string2(),
   heuristic_hints: array(string2())
 });
-var output111 = object({
+var output112 = object({
   candidates: array(CandidateSchema2)
 });
-var input87 = object({
+var input88 = object({
   scopes: array(string2()).default([])
 });
 var scan_candidates_default = defineOp({
   path: ["project", "scan", "candidates"],
   summary: "Walk a project root and emit planning-shaped candidate files for /sdlc:import-planning.",
-  input: input87,
-  output: output111,
+  input: input88,
+  output: output112,
   cli: {
     flags: { scopes: { repeatable: true, valueName: "SUBPATH" } }
   },
@@ -152886,7 +153978,7 @@ var scan_candidates_default = defineOp({
     if (args.scopes.length > 0) {
       scopes = [];
       for (const raw of args.scopes) {
-        const scopePath = pyResolve(join141(projectRoot, raw));
+        const scopePath = pyResolve(join142(projectRoot, raw));
         if (!pathIsUnder(projectRoot, scopePath)) {
           throw new OpError("INVALID_INPUT", `scope outside project root: ${raw}`);
         }
@@ -152946,7 +154038,7 @@ var Shard = object({
   lines: number2(),
   files: array(string2())
 });
-var output112 = object({
+var output113 = object({
   scanned: number2(),
   files: array(FileEntry),
   shards: array(Shard),
@@ -152956,12 +154048,12 @@ var output112 = object({
     lines: number2()
   })
 });
-function isGenerated(src) {
+function isGenerated3(src) {
   return GENERATED_BANNER.test(src.slice(0, GENERATED_SCAN_LINES).join(`
 `));
 }
 function nominate(src, minLines) {
-  if (isGenerated(src))
+  if (isGenerated3(src))
     return [];
   const blocks = [];
   let run = [];
@@ -153043,7 +154135,7 @@ function render12(out, io) {
 `);
   }
 }
-var input88 = object({
+var input89 = object({
   path: array(string2()).default([]).describe("Restrict the scan to these paths."),
   minLines: number2().int().min(2).default(4),
   budget: number2().int().min(50).default(1500).describe("Nominated lines per shard."),
@@ -153052,8 +154144,8 @@ var input88 = object({
 var scan_comments_default = defineOp({
   path: ["project", "scan", "comments"],
   summary: "Nominate comment blocks for a documentation sweep, sharded one owner per file.",
-  input: input88,
-  output: output112,
+  input: input89,
+  output: output113,
   cli: {
     flags: {
       path: { repeatable: true, valueName: "PATH" },
@@ -153171,7 +154263,7 @@ var Hit = object({
   text: string2(),
   stripped: string2()
 });
-var output113 = object({
+var output114 = object({
   hits: array(Hit)
 });
 function renderScanTodos(out, io) {
@@ -153195,7 +154287,7 @@ ${out.hits.length} hit(s)
 `);
   return 0;
 }
-var input89 = object({
+var input90 = object({
   path: string2().nullable().default(null),
   markers: array(string2()).default([]),
   includePlanning: boolean2().default(false)
@@ -153203,8 +154295,8 @@ var input89 = object({
 var scan_todos_default = defineOp({
   path: ["project", "scan", "todos"],
   summary: "Find TODO / FIXME / HACK / XXX comments in tracked source files.",
-  input: input89,
-  output: output113,
+  input: input90,
+  output: output114,
   cli: {
     flags: {
       markers: { repeatable: true, valueName: "MARKER" },
@@ -153277,9 +154369,9 @@ import {
   mkdirSync as mkdirSync20,
   readdirSync as readdirSync38,
   readFileSync as readFileSync81,
-  writeFileSync as writeFileSync30
+  writeFileSync as writeFileSync31
 } from "node:fs";
-import { isAbsolute as isAbsolute26, join as join142, relative as relative31, resolve as resolve63 } from "node:path";
+import { isAbsolute as isAbsolute26, join as join143, relative as relative31, resolve as resolve63 } from "node:path";
 init_verbs3();
 init_naming();
 init__json_schema();
@@ -153368,7 +154460,7 @@ var ObsidianBaseStatus = object({
   path: string2(),
   status: _enum(["wrote", "overwrote", "exists", "would-write", "would-overwrite"])
 });
-var output114 = object({
+var output115 = object({
   projectRoot: string2(),
   planningRoot: string2(),
   entitiesDir: string2(),
@@ -153491,7 +154583,7 @@ lease namespace:
   }
   return 0;
 }
-var input90 = object({
+var input91 = object({
   entitiesDir: string2().optional(),
   dryRun: boolean2().default(false),
   detect: boolean2().default(false),
@@ -153501,12 +154593,12 @@ var input90 = object({
 var setup_default = defineOp({
   path: ["project", "setup"],
   summary: "Bootstrap docs/planning/ layout, sdlc.yaml, .gitignore, and .sdlc/ dir.",
-  input: input90,
-  output: output114,
+  input: input91,
+  output: output115,
   cli: { render: renderSetup },
   handler: async (args, ctx) => {
     const { projectRoot, dryRun } = ctx;
-    const defaultEntitiesDir = join142(pluginLibDir(), "model", "entities");
+    const defaultEntitiesDir = join143(pluginLibDir(), "model", "entities");
     const rawEntitiesDir = args.entitiesDir ?? defaultEntitiesDir;
     const entitiesDir = realResolve(rawEntitiesDir);
     const resolvedRoot = realResolve(projectRoot);
@@ -153574,7 +154666,7 @@ var setup_default = defineOp({
       if (suggestions.setup.length > 0)
         extraCommentsByKey["workflows.setup"] = suggestions.setup;
       if (!dryRun)
-        writeFileSync30(sdlcYamlPath, configScaffoldYaml({ extraCommentsByKey }), "utf-8");
+        writeFileSync31(sdlcYamlPath, configScaffoldYaml({ extraCommentsByKey }), "utf-8");
       sdlcYaml = { status: dryRun ? "would-create" : "created", path: sdlcYamlShown };
     }
     const gitignorePath = resolve63(resolvedRoot, ".gitignore");
@@ -153584,7 +154676,7 @@ var setup_default = defineOp({
         const seed = rstripNewlines(_GITIGNORE_CLAUDE_BLOCK) + `
 
 ` + GITIGNORE_SDLC_BLOCK;
-        writeFileSync30(gitignorePath, seed, "utf-8");
+        writeFileSync31(gitignorePath, seed, "utf-8");
       }
       gitignore.push({ label: "Claude Code", status: "appended", details: "" });
       gitignore.push({ label: "SDLC plugin", status: "appended", details: "" });
@@ -153633,7 +154725,7 @@ var setup_default = defineOp({
         const newContent = lines.join(`
 `) + (hadTrailingNewline || original === "" ? `
 ` : "");
-        writeFileSync30(gitignorePath, newContent, "utf-8");
+        writeFileSync31(gitignorePath, newContent, "utf-8");
       }
     }
     const sdlcDirPath = resolve63(resolvedRoot, ".sdlc");
@@ -153683,12 +154775,12 @@ var setup_default = defineOp({
 // solutions/ontological/lib/services/project/ops/teardown-worktree.ts
 init_zod();
 init_registry3();
-var input91 = object({
+var input92 = object({
   basename: string2().min(1),
   branch: string2().optional(),
   repoRoot: string2().optional()
 });
-var output115 = object({
+var output116 = object({
   worktreePath: string2(),
   dryRun: boolean2(),
   worktreeExisted: boolean2(),
@@ -153718,8 +154810,8 @@ function renderTeardown(out, io) {
 var teardown_worktree_default = defineOp({
   path: ["project", "teardown-worktree"],
   summary: "Remove a `.sdlc/worktrees/<basename>` worktree and optionally delete its branch (cancel path).",
-  input: input91,
-  output: output115,
+  input: input92,
+  output: output116,
   cli: {
     positionals: ["basename"],
     flags: {
@@ -153791,22 +154883,22 @@ init_registry3();
 init_paths();
 init_baseline();
 import { dirname as dirname42 } from "node:path";
-var input92 = object({
+var input93 = object({
   sha: string2(),
   config: string2(),
   baselineDir: string2(),
   name: string2().default("check"),
   trust: boolean2().default(false)
 });
-var output116 = object({
+var output117 = object({
   path: string2(),
   sha: string2()
 });
 var capture_default = defineOp({
   path: ["quality", "baseline", "capture"],
   summary: "Capture a quality-check baseline (run verbs and write <baseline-dir>/<sha>.json).",
-  input: input92,
-  output: output116,
+  input: input93,
+  output: output117,
   cli: {
     positionals: ["sha"],
     flags: {
@@ -153843,11 +154935,11 @@ var FindingSchema = object({
   verb: string2(),
   line: string2()
 });
-var input93 = object({
+var input94 = object({
   baselinePath: string2(),
   currentJson: string2()
 });
-var output117 = object({
+var output118 = object({
   newDrift: array(FindingSchema),
   preExisting: array(FindingSchema),
   gatePass: boolean2(),
@@ -153856,8 +154948,8 @@ var output117 = object({
 var diff_default = defineOp({
   path: ["quality", "baseline", "diff"],
   summary: "Diff current verb results against a captured baseline; surface new-drift vs pre-existing findings.",
-  input: input93,
-  output: output117,
+  input: input94,
+  output: output118,
   cli: {
     stdinKey: "currentJson",
     flags: {
@@ -153931,10 +155023,10 @@ var DiagnosticSchema = object({
   message: string2(),
   source: string2().optional()
 });
-var input94 = object({
+var input95 = object({
   projectRoot: string2().optional()
 });
-var output118 = object({
+var output119 = object({
   project_root: string2(),
   tasks: array(TaskSchema3),
   diagnostics: array(DiagnosticSchema)
@@ -153942,8 +155034,8 @@ var output118 = object({
 var detect_default2 = defineOp({
   path: ["quality", "detect"],
   summary: "Probe a project root for the tasks it can run (just, npm, make, cargo, python).",
-  input: input94,
-  output: output118,
+  input: input95,
+  output: output119,
   handler: async (input, ctx) => {
     const projectRoot = realResolve(input.projectRoot ?? ctx.projectRoot);
     const catalog = await collect(projectRoot, { allowExec: false });
@@ -153965,7 +155057,7 @@ init_workflows();
 init_fs();
 init_paths();
 import { readFileSync as readFileSync83 } from "node:fs";
-import { dirname as dirname43, join as join144 } from "node:path";
+import { dirname as dirname43, join as join145 } from "node:path";
 function runOneSilent(verb, cwd) {
   const started = performance.now();
   const proc = spawnRunner("sh").run(["-c", verb], { cwd });
@@ -153984,7 +155076,7 @@ var VerbResultSchema2 = object({
   stdout: string2(),
   stderr: string2()
 });
-var input95 = object({
+var input96 = object({
   verbs: array(string2()).default([]),
   config: string2().optional(),
   name: string2().default("check"),
@@ -153995,7 +155087,7 @@ var input95 = object({
   baselineDir: string2().optional(),
   trust: boolean2().default(false)
 });
-var output119 = object({
+var output120 = object({
   passed: number2(),
   total: number2(),
   ok: boolean2(),
@@ -154035,8 +155127,8 @@ function loadBaselinePayload(args, projectRoot) {
   if (args.diffAgainstBaseline === undefined) {
     return null;
   }
-  const baselineDir = args.baselineDir !== undefined ? realResolve(args.baselineDir) : realResolve(join144(projectRoot, ".sdlc", "quality-baselines"));
-  const baselinePath = join144(baselineDir, `${args.diffAgainstBaseline}.json`);
+  const baselineDir = args.baselineDir !== undefined ? realResolve(args.baselineDir) : realResolve(join145(projectRoot, ".sdlc", "quality-baselines"));
+  const baselinePath = join145(baselineDir, `${args.diffAgainstBaseline}.json`);
   if (!isFile(baselinePath)) {
     throw new OpError("INVALID_INPUT", `baseline not found: ${baselinePath} ` + `(expected one written by quality baseline capture for ` + `SHA ${args.diffAgainstBaseline})`);
   }
@@ -154120,8 +155212,8 @@ var run_default4 = defineOp({
   path: ["quality", "run"],
   summary: "Run quality checks from sdlc.yaml (or a verb list); stream per-check output in --mode log.",
   streaming: true,
-  input: input95,
-  output: output119,
+  input: input96,
+  output: output120,
   cli: {
     flags: {
       verbs: { repeatable: true, valueName: "verb", help: "Shell verbs to run (positional list)." },
@@ -154240,13 +155332,13 @@ function renderLayout(layout, repo, tokens, base) {
 }
 
 // solutions/ontological/lib/services/repo/ops/checkout.ts
-var input96 = object({
+var input97 = object({
   url: string2().describe("Clone URL, GitHub page URL (repo, PR, file), or `owner/repo`."),
   dest: string2().optional().describe("Exact directory for the checkout; skips the layout and the container scan."),
   branch: string2().optional().describe("Branch or tag to check out. Default: one the URL names, else the remote default."),
   printPath: boolean2().default(false).describe("Print only the checkout path.")
 });
-var output120 = object({
+var output121 = object({
   repo: string2().describe("owner/name"),
   host: string2(),
   cloneUrl: string2(),
@@ -154348,8 +155440,8 @@ ${hint}`}`);
 var checkout_default = defineOp({
   path: ["repo", "checkout"],
   summary: "Clone a repository URL into the directory the checkout layout names, or find its existing checkout.",
-  input: input96,
-  output: output120,
+  input: input97,
+  output: output121,
   cli: {
     positionals: ["url"],
     flags: {
@@ -154373,7 +155465,7 @@ var checkout_default = defineOp({
 init_zod();
 init_trust3();
 init_registry3();
-var input97 = object({
+var input98 = object({
   path: string2().optional().describe("Any path in the repository to trust (default: the cwd's repository)."),
   list: boolean2().default(false).describe("Print every trusted root on this machine."),
   show: boolean2().default(false).describe("Report whether the resolved root is trusted, without granting it.")
@@ -154403,7 +155495,7 @@ var trustOutput = object({
   policyBy: _enum(["path", "owner"]).nullable().describe("A machine trust.paths/trust.owners rule that already trusted this root BEFORE this call, independent of the marker."),
   policyRule: ruleField
 });
-var output121 = discriminatedUnion("mode", [listOutput, showOutput, trustOutput]);
+var output122 = discriminatedUnion("mode", [listOutput, showOutput, trustOutput]);
 function targetRoot(args, ctx) {
   return repoTrustRoot(args.path ?? ctx.projectRoot, { runner: ctx.git });
 }
@@ -154433,8 +155525,8 @@ var trust_default = defineOp({
   path: ["repo", "trust"],
   summary: "Grant, or report, repo-level consent to run project-sourced verbs.",
   needs: ["git"],
-  input: input97,
-  output: output121,
+  input: input98,
+  output: output122,
   cli: {
     positionals: ["path"],
     flags: {
@@ -154497,10 +155589,10 @@ var trust_default = defineOp({
 init_zod();
 init_trust3();
 init_registry3();
-var input98 = object({
+var input99 = object({
   path: string2().optional().describe("Any path in the repository to untrust (default: the cwd's repository).")
 });
-var output122 = object({
+var output123 = object({
   root: string2().describe("The resolved root."),
   wasTrusted: boolean2().describe("True when the root had a grant to remove."),
   dryRun: boolean2(),
@@ -154523,8 +155615,8 @@ var untrust_default = defineOp({
   path: ["repo", "untrust"],
   summary: "Revoke repo-level consent to run project-sourced verbs.",
   needs: ["git"],
-  input: input98,
-  output: output122,
+  input: input99,
+  output: output123,
   cli: {
     positionals: ["path"],
     flags: {
@@ -154563,7 +155655,7 @@ init_zod();
 init_registry3();
 
 // solutions/ontological/lib/model/entities/principle/reports/review/schema.ts
-import { join as join145 } from "node:path";
+import { join as join146 } from "node:path";
 
 // solutions/ontological/lib/services/report/schema.ts
 var reportMeta = object({
@@ -154629,11 +155721,11 @@ var principleReviewReport = baseReport.extend({
 var principleReviewReportKind = {
   slug: "principle-review",
   schema: principleReviewReport,
-  templatePath: join145(pluginLibDir(), "model", "entities", "principle", "reports", "review", "template.eta")
+  templatePath: join146(pluginLibDir(), "model", "entities", "principle", "reports", "review", "template.eta")
 };
 
 // solutions/ontological/lib/model/entities/standard/reports/review/schema.ts
-import { join as join146 } from "node:path";
+import { join as join147 } from "node:path";
 init_plugin_root();
 var { finding: finding3, proseIssue: proseIssue2 } = reviewFindingSchemas("standard");
 var standardReviewReport = baseReport.extend({
@@ -154654,11 +155746,11 @@ var standardReviewReport = baseReport.extend({
 var standardReviewReportKind = {
   slug: "standard-review",
   schema: standardReviewReport,
-  templatePath: join146(pluginLibDir(), "model", "entities", "standard", "reports", "review", "template.eta")
+  templatePath: join147(pluginLibDir(), "model", "entities", "standard", "reports", "review", "template.eta")
 };
 
 // solutions/ontological/lib/services/verify/reports/changes/schema.ts
-import { join as join147 } from "node:path";
+import { join as join148 } from "node:path";
 init_plugin_root();
 var findingSeverity2 = _enum(["violation", "tension", "drift"]);
 var finding4 = object({
@@ -154694,11 +155786,11 @@ var verifyChangesReport = baseReport.extend({
 var verifyChangesReportKind = {
   slug: "verify-changes",
   schema: verifyChangesReport,
-  templatePath: join147(pluginLibDir(), "services", "verify", "reports", "changes", "template.eta")
+  templatePath: join148(pluginLibDir(), "services", "verify", "reports", "changes", "template.eta")
 };
 
 // solutions/ontological/lib/model/entities/task/reports/review/schema.ts
-import { join as join148 } from "node:path";
+import { join as join149 } from "node:path";
 init_plugin_root();
 var taskDecision = _enum([
   "shipped",
@@ -154748,7 +155840,7 @@ var taskReviewReport = baseReport.extend({
 var taskReviewReportKind = {
   slug: "task-review",
   schema: taskReviewReport,
-  templatePath: join148(pluginLibDir(), "model", "entities", "task", "reports", "review", "template.eta")
+  templatePath: join149(pluginLibDir(), "model", "entities", "task", "reports", "review", "template.eta")
 };
 
 // solutions/ontological/lib/services/report/kinds.ts
@@ -154767,10 +155859,10 @@ function listReportKinds() {
 }
 
 // solutions/ontological/lib/services/report/ops/get-schema.ts
-var input99 = object({
+var input100 = object({
   kind: string2().optional().describe("Report kind slug. Omit to list the registered kinds.")
 });
-var output123 = object({
+var output124 = object({
   kinds: array(string2()),
   jsonSchema: record(string2(), unknown()).optional()
 });
@@ -154778,8 +155870,8 @@ var get_schema_default3 = defineOp({
   noun: "report",
   verb: "get-schema",
   summary: "Emit a report kind's payload contract as JSON Schema (or list kinds).",
-  input: input99,
-  output: output123,
+  input: input100,
+  output: output124,
   cli: { positionals: ["kind"] },
   handler: (args) => {
     if (args.kind === undefined)
@@ -154796,41 +155888,41 @@ var get_schema_default3 = defineOp({
 init_zod();
 init_registry3();
 import { readFileSync as readFileSync85 } from "node:fs";
-import { isAbsolute as isAbsolute27, join as join151 } from "node:path";
+import { isAbsolute as isAbsolute27, join as join152 } from "node:path";
 
 // solutions/ontological/lib/services/report/render.ts
-import { existsSync as existsSync72, mkdirSync as mkdirSync22, writeFileSync as writeFileSync32 } from "node:fs";
-import { join as join150 } from "node:path";
+import { existsSync as existsSync72, mkdirSync as mkdirSync22, writeFileSync as writeFileSync33 } from "node:fs";
+import { join as join151 } from "node:path";
 
 // solutions/ontological/lib/services/report/palette.ts
 init_plugin_root();
 import { readFileSync as readFileSync84 } from "node:fs";
-import { join as join149 } from "node:path";
+import { join as join150 } from "node:path";
 var cached3;
 function reportPaletteCss() {
   if (cached3 === undefined) {
-    cached3 = readFileSync84(join149(pluginLibDir(), "services", "report", "palette.css"), "utf8").trim();
+    cached3 = readFileSync84(join150(pluginLibDir(), "services", "report", "palette.css"), "utf8").trim();
   }
   return cached3;
 }
 
 // solutions/ontological/lib/services/report/render.ts
 function reportsDir(projectRoot) {
-  return join150(projectRoot, ".sdlc", "reports");
+  return join151(projectRoot, ".sdlc", "reports");
 }
 function resolveBasename(dir, slug, date, suffix) {
   const base = suffix === undefined ? `${slug}-${date}` : `${slug}-${date}-${suffix}`;
-  if (!existsSync72(join150(dir, `${base}.html`)) && !existsSync72(join150(dir, `${base}.json`))) {
+  if (!existsSync72(join151(dir, `${base}.html`)) && !existsSync72(join151(dir, `${base}.json`))) {
     return base;
   }
   for (let n = 2;; n++) {
     const candidate = `${base}-${n}`;
-    if (!existsSync72(join150(dir, `${candidate}.html`)) && !existsSync72(join150(dir, `${candidate}.json`))) {
+    if (!existsSync72(join151(dir, `${candidate}.html`)) && !existsSync72(join151(dir, `${candidate}.json`))) {
       return candidate;
     }
   }
 }
-function renderReport2(opts) {
+function renderReport4(opts) {
   const parsed = validateKindPayload(opts.kind, opts.data, "report data");
   const { meta } = baseReport.parse(parsed);
   const html = renderKindTemplate(opts.kind, parsed, {
@@ -154842,23 +155934,23 @@ function renderReport2(opts) {
   if (write)
     mkdirSync22(dir, { recursive: true });
   const basename = resolveBasename(dir, opts.kind.slug, meta.date, opts.suffix);
-  const htmlPath = join150(dir, `${basename}.html`);
-  const jsonPath = join150(dir, `${basename}.json`);
+  const htmlPath = join151(dir, `${basename}.html`);
+  const jsonPath = join151(dir, `${basename}.json`);
   if (write) {
-    writeFileSync32(htmlPath, html, "utf8");
-    writeFileSync32(jsonPath, `${JSON.stringify(parsed, null, 2)}
+    writeFileSync33(htmlPath, html, "utf8");
+    writeFileSync33(jsonPath, `${JSON.stringify(parsed, null, 2)}
 `, "utf8");
   }
   return { htmlPath, jsonPath, wrote: write };
 }
 
 // solutions/ontological/lib/services/report/ops/render.ts
-var input100 = object({
+var input101 = object({
   kind: string2().describe("Report kind slug, e.g. `task-review`. `sdlc report get-schema <kind>` shows the payload contract."),
   data: string2().describe("Path to the JSON payload file (relative paths resolve against the project root)."),
   suffix: string2().optional().describe("Optional output-name suffix: `<kind>-<date>-<suffix>.html`.")
 });
-var output124 = object({
+var output125 = object({
   htmlPath: string2(),
   jsonPath: string2(),
   wrote: boolean2()
@@ -154867,15 +155959,15 @@ var render_default2 = defineOp({
   noun: "report",
   verb: "render",
   summary: "Validate a report payload against its kind's contract and render the HTML report.",
-  input: input100,
-  output: output124,
+  input: input101,
+  output: output125,
   cli: { positionals: ["kind", "data"] },
   handler: (args, ctx) => {
     const kind = getReportKind(args.kind);
     if (kind === undefined) {
       throw new OpError("INVALID_INPUT", `unknown report kind ${JSON.stringify(args.kind)}; registered kinds: ${listReportKinds().join(", ")}`);
     }
-    const dataPath = isAbsolute27(args.data) ? args.data : join151(ctx.projectRoot, args.data);
+    const dataPath = isAbsolute27(args.data) ? args.data : join152(ctx.projectRoot, args.data);
     let raw;
     try {
       raw = readFileSync85(dataPath, "utf8");
@@ -154888,7 +155980,7 @@ var render_default2 = defineOp({
     } catch (err) {
       throw new OpError("INVALID_INPUT", `payload file ${dataPath} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
     }
-    const result = renderReport2({
+    const result = renderReport4({
       kind,
       data,
       projectRoot: ctx.projectRoot,
@@ -155785,7 +156877,7 @@ init_zod();
 init_registry3();
 import { readFileSync as readFileSync86 } from "node:fs";
 import { resolve as resolve66 } from "node:path";
-var input101 = object({
+var input102 = object({
   choices: string2().optional().describe("The wizard choices: a JSON object, or the path of a JSON file. Omitted: every default."),
   upTo: _enum(STEP_IDS).optional().describe("Run the steps up to and including this one (walk order). Omitted: all.")
 });
@@ -155803,7 +156895,7 @@ var notWritten = object({
   chosen: string2(),
   reason: string2()
 });
-var output125 = object({
+var output126 = object({
   mode: _enum(["plan", "dry-run", "apply"]),
   steps: array(_enum(STEP_IDS)),
   changes: array(change),
@@ -155886,8 +156978,8 @@ function dirtyTargets(ctx, targets) {
 var apply_default = defineOp({
   path: ["setup", "apply"],
   summary: "Apply the adoption wizard steps to this project (additive; honours --dry-run).",
-  input: input101,
-  output: output125,
+  input: input102,
+  output: output126,
   mutating: true,
   cli: { flags: cliFlags, render: render13 },
   handler: async (args, ctx) => {
@@ -155941,8 +157033,8 @@ async function detectCheckCandidates(projectRoot) {
 var plan_default = defineOp({
   path: ["setup", "plan"],
   summary: "Plan the adoption wizard steps: the file changes and notes, without writing.",
-  input: input101,
-  output: output125,
+  input: input102,
+  output: output126,
   mutating: false,
   cli: { flags: cliFlags, render: render13 },
   handler: async (args, ctx) => {
@@ -155968,7 +157060,7 @@ init_etag_write();
 init_zod();
 import { readFileSync as readFileSync87 } from "node:fs";
 import { homedir as homedir12 } from "node:os";
-import { join as join152 } from "node:path";
+import { join as join153 } from "node:path";
 
 // solutions/ontological/lib/cli-surface.ts
 init_zod_introspect();
@@ -156313,11 +157405,11 @@ function renderCompletion(shell, tree) {
 }
 
 // solutions/ontological/lib/services/shell/ops/completion.ts
-var input102 = object({
+var input103 = object({
   shell: _enum(COMPLETION_SHELLS).describe("The shell whose script to print."),
   install: boolean2().default(false).describe("Write the script to the shell's completion directory instead of printing it.")
 });
-var output126 = object({
+var output127 = object({
   shell: _enum(COMPLETION_SHELLS),
   text: string2().optional().describe("The script. Present unless --install was given."),
   path: string2().optional().describe("Where --install wrote the script."),
@@ -156329,15 +157421,15 @@ function completionPath(shell, env, home) {
   const file = { bash: "sdlc", zsh: "_sdlc", fish: "sdlc.fish" }[shell];
   const override = env["SDLC_COMPLETION_DIR"];
   if (override)
-    return join152(override, file);
-  const xdgData = env["XDG_DATA_HOME"] || join152(home, ".local", "share");
-  const xdgConfig = env["XDG_CONFIG_HOME"] || join152(home, ".config");
+    return join153(override, file);
+  const xdgData = env["XDG_DATA_HOME"] || join153(home, ".local", "share");
+  const xdgConfig = env["XDG_CONFIG_HOME"] || join153(home, ".config");
   const dir = {
-    bash: join152(xdgData, "bash-completion", "completions"),
-    zsh: join152(home, ".zfunc"),
-    fish: join152(xdgConfig, "fish", "completions")
+    bash: join153(xdgData, "bash-completion", "completions"),
+    zsh: join153(home, ".zfunc"),
+    fish: join153(xdgConfig, "fish", "completions")
   }[shell];
-  return join152(dir, file);
+  return join153(dir, file);
 }
 function writeIfChanged2(path, text, dryRun) {
   let existing;
@@ -156367,8 +157459,8 @@ function renderResult(out, io) {
 var completion_default = defineOp({
   path: ["shell", "completion"],
   summary: "Print the shell completion script for sdlc, or install it with --install.",
-  input: input102,
-  output: output126,
+  input: input103,
+  output: output127,
   cli: {
     positionals: ["shell"],
     flags: {
@@ -156465,10 +157557,10 @@ function functionsFor(shell) {
 }
 
 // solutions/ontological/lib/services/shell/ops/init.ts
-var input103 = object({
+var input104 = object({
   shell: _enum(["fish", "bash", "zsh"]).describe("The shell whose syntax to print.")
 });
-var output127 = object({
+var output128 = object({
   shell: _enum(["fish", "bash", "zsh"]),
   text: string2().describe("The function definitions, ready to evaluate.")
 });
@@ -156479,8 +157571,8 @@ function renderInit(out, io) {
 var init_default3 = defineOp({
   path: ["shell", "init"],
   summary: "Print shell functions (sdlc-cd, sdlc-at, sdlc-pr-review, sdlc-repo-checkout) for an rc file to evaluate.",
-  input: input103,
-  output: output127,
+  input: input104,
+  output: output128,
   cli: {
     positionals: ["shell"],
     flags: { shell: { valueName: "shell", help: "fish | bash | zsh" } },
@@ -157081,10 +158173,10 @@ function makeOpDataSource(ctx) {
 }
 
 // solutions/ontological/lib/services/tui/ops/launch.ts
-var input104 = object({
+var input105 = object({
   projectRoot: string2().default("")
 });
-var output128 = object({
+var output129 = object({
   exitCode: number2().int()
 });
 var launch_default2 = defineOp({
@@ -157092,8 +158184,8 @@ var launch_default2 = defineOp({
   summary: "Interactive Ink terminal UI over the pr/task ops (reached as `sdlc tui`).",
   mutating: true,
   needs: ["project", "git", "gh"],
-  input: input104,
-  output: output128,
+  input: input105,
+  output: output129,
   cli: {
     render: (out) => out.exitCode
   },
@@ -157118,7 +158210,7 @@ defineNoun({
 
 // solutions/ontological/lib/services/verify/ops/changes.ts
 init_easy_git();
-import { dirname as dirname47, join as join155 } from "node:path";
+import { dirname as dirname47, join as join156 } from "node:path";
 // packages/ts/agent-dev/src/tokens.ts
 var BYTES_PER_TOKEN = 4;
 function estimateTokens(bytes) {
@@ -158134,7 +159226,7 @@ init_registry3();
 // solutions/ontological/lib/services/verify/nested-config.ts
 init_yaml();
 import { existsSync as existsSync73, readFileSync as readFileSync88 } from "node:fs";
-import { dirname as dirname46, join as join153, relative as relative33, resolve as resolve68, sep as sep8 } from "node:path";
+import { dirname as dirname46, join as join154, relative as relative33, resolve as resolve68, sep as sep8 } from "node:path";
 function nestedConfigResolver(projectRoot, base) {
   const cache = new Map;
   return (job) => {
@@ -158154,10 +159246,10 @@ function overridesFor(projectRoot, relDir) {
   const segments = relDir.split(sep8).filter((s) => s !== "" && s !== ".");
   let current = projectRoot;
   for (const segment of segments) {
-    current = join153(current, segment);
+    current = join154(current, segment);
     if (relative33(projectRoot, current).startsWith(".."))
       break;
-    const override = readOverride(join153(current, "sdlc.yaml"));
+    const override = readOverride(join154(current, "sdlc.yaml"));
     if (override !== null)
       out.push(override);
   }
@@ -158206,17 +159298,17 @@ function applyOverrides(base, overrides) {
 
 // solutions/ontological/lib/services/verify/providers/standards.ts
 init_read();
-import { join as join154 } from "node:path";
+import { join as join155 } from "node:path";
 var STANDARD_KIND = "standard";
 var STANDARD_DEPTH = 100;
 var RETIRED = new Set(["closed/superseded", "closed/deprecated"]);
 function sdlcStandards(options = {}) {
-  const dir = options.dir ?? join154("docs", "planning", "standards");
+  const dir = options.dir ?? join155("docs", "planning", "standards");
   const includeRetired = options.includeRetired ?? false;
   return {
     id: "sdlc-standards",
     async discover(ctx) {
-      const rows = scanEntityDir(join154(ctx.projectRoot, dir), { withText: true });
+      const rows = scanEntityDir(join155(ctx.projectRoot, dir), { withText: true });
       const sources = [];
       for (const row of rows) {
         const fm = row.fm;
@@ -158236,7 +159328,7 @@ function sdlcStandards(options = {}) {
         sources.push({
           id,
           kind: STANDARD_KIND,
-          path: join154(dir, `${row.basename}.md`),
+          path: join155(dir, `${row.basename}.md`),
           depth: STANDARD_DEPTH,
           patterns,
           text,
@@ -158258,7 +159350,7 @@ function appliesToPaths(fm) {
 }
 
 // solutions/ontological/lib/services/verify/ops/changes.ts
-var input105 = object({
+var input106 = object({
   projectRoot: string2(),
   base: string2().optional().describe("Ref to compare against. Defaults to the remote's default branch."),
   blocking: boolean2().optional().describe("Override `verify.blocking` from sdlc.yaml for this run."),
@@ -158277,7 +159369,7 @@ var finding5 = object({
   why: string2(),
   severity: _enum(["violation", "tension", "drift"])
 });
-var output129 = object({
+var output130 = object({
   base: string2(),
   resolvedBase: string2().describe("The ref actually diffed — differs from `base` when a branch name resolves."),
   changedFiles: array(string2()),
@@ -158442,8 +159534,8 @@ var changes_default = defineOp({
   path: ["verify", "changes"],
   summary: "Judge a changeset against every instruction file and standard that governs it.",
   judgmentPort: true,
-  input: input105,
-  output: output129,
+  input: input106,
+  output: output130,
   cli: {
     flags: {
       base: {
@@ -158568,10 +159660,10 @@ function writeReport(projectRoot, out, git) {
   for (const f of out.findings)
     counts[f.severity] += 1;
   const judged = collapseShards(out.jobs);
-  const rendered = renderReport2({
+  const rendered = renderReport4({
     kind: verifyChangesReportKind,
     projectRoot,
-    dir: join155(projectRoot, "tmp"),
+    dir: join156(projectRoot, "tmp"),
     data: {
       meta: {
         title: "Changeset verification",
@@ -158629,15 +159721,15 @@ defineNoun({ noun: "workflow", summary: "List and show workflows." });
 init_zod();
 init_registry3();
 init_workflows();
-var input106 = object({});
-var output130 = object({
+var input107 = object({});
+var output131 = object({
   names: array(string2()).describe("Every known workflow name, sorted.")
 });
 var list_default4 = defineOp({
   path: ["workflow", "list"],
   summary: "List every known workflow name (built-in and project-defined).",
-  input: input106,
-  output: output130,
+  input: input107,
+  output: output131,
   cli: {
     render: (out, io) => {
       for (const name of out.names)
@@ -158656,7 +159748,7 @@ init_registry3();
 init_trust3();
 init_workflows();
 import { spawnSync as spawnSync3 } from "node:child_process";
-var input107 = object({
+var input108 = object({
   name: string2().trim().min(1).describe("Workflow name (e.g. `check`); `sdlc workflow list` names them."),
   args: array(string2()).default([]).describe("Extra arguments appended to a skill/prompt step’s message (e.g. a task id)."),
   var: array(string2()).default([]).describe("`name=value` substituted into `{name}` placeholders in script/skill/prompt steps."),
@@ -158674,7 +159766,7 @@ var StepSchema2 = object({
   reason: string2().optional(),
   exitCode: number2().optional()
 });
-var output131 = object({
+var output132 = object({
   workflow: string2(),
   dryRun: boolean2(),
   ok: boolean2(),
@@ -158699,8 +159791,8 @@ var run_default5 = defineOp({
   path: ["workflow", "run"],
   summary: "Run a workflow’s resolved steps in order (verbs trust-gated); --dry-run prints the plan.",
   streaming: true,
-  input: input107,
-  output: output131,
+  input: input108,
+  output: output132,
   cli: {
     positionals: ["name", "args"],
     flags: {
@@ -158811,10 +159903,10 @@ var stepOutput2 = object({
   step: WorkflowStepSchema,
   source: object({ layer: ConfigLayerSchema4, mode: StepModeSchema2 })
 });
-var input108 = object({
+var input109 = object({
   name: string2().trim().min(1).describe("Workflow name (e.g. `check`).")
 });
-var output132 = object({
+var output133 = object({
   name: string2(),
   layer: ConfigLayerSchema4,
   steps: array(stepOutput2)
@@ -158827,8 +159919,8 @@ function describeStep2(step) {
 var show_default2 = defineOp({
   path: ["workflow", "show"],
   summary: "Print a workflow's resolved step list, each step tagged with its provenance.",
-  input: input108,
-  output: output132,
+  input: input109,
+  output: output133,
   cli: {
     positionals: ["name"],
     render: (out, io) => {
@@ -158885,11 +159977,11 @@ init_esm();
 init_registry3();
 init__registry();
 init_slug();
-import { join as join156 } from "node:path";
+import { join as join157 } from "node:path";
 var PR_MARKER_PREFIX = "PR: ";
 var EXIT_MODEL_ERROR = exitCodeFor("MODEL_ERROR");
 var CAPTURE_BRANCH = "backlog-capture";
-var BACKLOG_DIR_REL = join156("docs", "planning", "backlog");
+var BACKLOG_DIR_REL = join157("docs", "planning", "backlog");
 function backlogSchemaVersion(_entitiesDir) {
   const entry = entryForType("backlog");
   if (entry === undefined) {
@@ -158938,9 +160030,9 @@ function tryParseCommonFlag(a, argv, i, args) {
 }
 
 // solutions/ontological/cli/backlog_cli/create.ts
-import { mkdirSync as mkdirSync23, mkdtempSync as mkdtempSync8, readFileSync as readFileSync89, rmSync as rmSync16, writeFileSync as writeFileSync33 } from "node:fs";
-import { tmpdir as tmpdir11 } from "node:os";
-import { dirname as dirname48, join as join157, resolve as resolve69 } from "node:path";
+import { mkdirSync as mkdirSync23, mkdtempSync as mkdtempSync9, readFileSync as readFileSync89, rmSync as rmSync17, writeFileSync as writeFileSync34 } from "node:fs";
+import { tmpdir as tmpdir12 } from "node:os";
+import { dirname as dirname48, join as join158, resolve as resolve69 } from "node:path";
 init_authoring();
 init_runtime();
 init_plugin_root();
@@ -159010,18 +160102,18 @@ function renderDocument(opts) {
 }
 function validateDocument(document2, entitiesDir) {
   const invocation = sdlcSelfInvocation(import.meta.url);
-  const td = mkdtempSync8(join157(tmpdir11(), "backlog-validate-"));
+  const td = mkdtempSync9(join158(tmpdir12(), "backlog-validate-"));
   try {
-    const tmp = join157(td, "candidate.md");
-    writeFileSync33(tmp, document2, "utf-8");
-    const schema = join157(entitiesDir, "backlog", "schema.json");
+    const tmp = join158(td, "candidate.md");
+    writeFileSync34(tmp, document2, "utf-8");
+    const schema = join158(entitiesDir, "backlog", "schema.json");
     const proc = spawnRunner(invocation[0]).run([...invocation.slice(1), "entities", "validate", "--quiet", "--schema", schema, tmp], { cwd: process.cwd() });
     if (proc.exitCode !== 0) {
       return (proc.stdout + proc.stderr).trim();
     }
     return null;
   } finally {
-    rmSync16(td, { recursive: true, force: true });
+    rmSync17(td, { recursive: true, force: true });
   }
 }
 function findOpenPr(gh, branch) {
@@ -159077,11 +160169,11 @@ function headingDriftMessage(before, after) {
   return lines.join(`
 `);
 }
-var COMMIT_WORKTREE_DIR_REL = join157(".sdlc", "commit-worktrees");
+var COMMIT_WORKTREE_DIR_REL = join158(".sdlc", "commit-worktrees");
 function writeCommitPush(opts) {
-  const targetPath = join157(opts.worktree, opts.targetRel);
+  const targetPath = join158(opts.worktree, opts.targetRel);
   mkdirSync23(dirname48(targetPath), { recursive: true });
-  writeFileSync33(targetPath, opts.document, "utf-8");
+  writeFileSync34(targetPath, opts.document, "utf-8");
   const headingsBefore = documentHeadings(opts.document);
   runChecked(opts.x, ["rumdl@0.2.77", "fmt", opts.targetRel], { cwd: opts.worktree });
   const headingsAfter = documentHeadings(readFileSync89(targetPath, "utf-8"));
@@ -159093,14 +160185,14 @@ function writeCommitPush(opts) {
   if (regenerated.length > 0) {
     opts.git.add(regenerated);
   }
-  const td = mkdtempSync8(join157(tmpdir11(), "backlog-commit-"));
-  const msgPath = join157(td, "msg.txt");
-  writeFileSync33(msgPath, `docs(backlog): capture ${opts.slug}
+  const td = mkdtempSync9(join158(tmpdir12(), "backlog-commit-"));
+  const msgPath = join158(td, "msg.txt");
+  writeFileSync34(msgPath, `docs(backlog): capture ${opts.slug}
 `, "utf-8");
   try {
     opts.git.commit({ messageFile: msgPath });
   } finally {
-    rmSync16(td, { recursive: true, force: true });
+    rmSync17(td, { recursive: true, force: true });
   }
   try {
     opts.git.push("origin", `HEAD:refs/heads/${opts.branch}`);
@@ -159133,7 +160225,7 @@ async function manageBranch(opts) {
   } else {
     gitRoot.fetch("origin", undefined, { prune: true });
   }
-  const wt = join157(opts.projectRoot, COMMIT_WORKTREE_DIR_REL, `backlog-${process.pid}-${Date.now()}`);
+  const wt = join158(opts.projectRoot, COMMIT_WORKTREE_DIR_REL, `backlog-${process.pid}-${Date.now()}`);
   mkdirSync23(dirname48(wt), { recursive: true });
   gitRoot.worktreeAdd(wt, { detach: true, startPoint: base });
   try {
@@ -159178,12 +160270,12 @@ function resolveCaptureTarget(grouping, pattern, item) {
   };
 }
 function writeLocal(projectRoot, targetRel, document2) {
-  const targetPath = join157(projectRoot, targetRel);
+  const targetPath = join158(projectRoot, targetRel);
   mkdirSync23(dirname48(targetPath), { recursive: true });
-  writeFileSync33(targetPath, document2, "utf-8");
+  writeFileSync34(targetPath, document2, "utf-8");
 }
 function resolveEntitiesDir() {
-  return join157(pluginLibDir(), "model", "entities");
+  return join158(pluginLibDir(), "model", "entities");
 }
 async function reportDryRun(opts) {
   process.stdout.write(`DRY-RUN: no git/gh/filesystem side effects performed.
@@ -159259,9 +160351,9 @@ async function create4(args, runnerFactory = defaultRunnerFactory, regenerate = 
 `);
     return EXIT_GENERIC;
   }
-  const backlogDir = join157(projectRoot, BACKLOG_DIR_REL);
+  const backlogDir = join158(projectRoot, BACKLOG_DIR_REL);
   const identity = mintIdentity("backlog", backlogDir, { slug });
-  const targetRel = join157(BACKLOG_DIR_REL, `${identity.filenameBase}.md`);
+  const targetRel = join158(BACKLOG_DIR_REL, `${identity.filenameBase}.md`);
   const entitiesDir = resolveEntitiesDir();
   let schemaVersion;
   try {

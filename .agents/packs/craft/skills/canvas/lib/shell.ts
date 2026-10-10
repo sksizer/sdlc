@@ -372,6 +372,56 @@ body.right-pinned .right .pin[data-close-right] { display: none; }
 .chip.low { background: rgba(52,199,89,.14); color: #1f8a3d; }
 .chip.medium { background: var(--warn-soft); color: var(--warn); }
 .chip.high { background: var(--danger-soft); color: var(--danger); }
+.chip.tone-ok, .chip.st-valid, .chip.st-done { background: var(--ok-soft); color: var(--ok); }
+.chip.tone-warn, .chip.st-warn { background: var(--warn-soft); color: var(--warn); }
+.chip.st-doing { background: var(--accent-soft); color: var(--accent); }
+.chip.tone-bad, .chip.st-error, .chip.st-blocked { background: var(--danger-soft); color: var(--danger); }
+.chip.tone-skip, .chip.st-skip, .chip.st-todo { background: var(--code-bg); color: var(--muted); }
+/* matrix */
+.matrix { border-collapse: separate; border-spacing: 3px; font-size: 12.5px; margin: 4px 0 0 -3px; }
+.matrix th { font-weight: 600; color: var(--muted); font-size: 11.5px; text-align: left; padding: 4px 8px; white-space: nowrap; border-radius: 6px; }
+.matrix th.ch, .matrix th.rh { cursor: pointer; }
+.matrix th.ch { text-align: center; }
+.matrix th[data-node]:hover, .matrix th[data-node].on { background: var(--accent-soft); color: var(--accent); }
+.matrix td.cell { width: 34px; height: 30px; border-radius: 7px; text-align: center; font-weight: 700; font-size: 12px; cursor: pointer; }
+.matrix td.valid { background: var(--ok-soft); color: var(--ok); }
+.matrix td.warn { background: var(--warn-soft); color: var(--warn); }
+.matrix td.error { background: var(--danger-soft); color: var(--danger); }
+.matrix td.skip { background: var(--code-bg); color: var(--muted); }
+.matrix tr[data-node]:hover th.rh { background: var(--code-bg); }
+.matrix tr[data-node].on th.rh { background: var(--accent-soft); color: var(--accent); }
+.matrix tr[data-node].on td.cell { box-shadow: 0 0 0 1.5px var(--accent); }
+.legend { display: flex; gap: 6px; margin-top: 8px; }
+.cells { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 6px; font-size: 13px; }
+.cells .hint-line { color: var(--muted); font-size: 12.5px; margin: 2px 0 0 4px; }
+/* trace */
+.trace-input { font-size: 13px; margin-bottom: 8px; padding: 8px 12px; background: var(--code-bg); border-radius: var(--radius-sm); }
+.trace-input .eyebrow { margin-right: 6px; }
+.row.trace-step.ok { border-left: 3px solid var(--ok); }
+.row.trace-step.bad { border-left: 3px solid var(--danger); }
+.row.trace-step.warn { border-left: 3px solid var(--warn); }
+.row.trace-step.skip { opacity: .75; }
+/* precedence */
+.ladder .row { grid-template-columns: auto 1fr auto; }
+.ladder .first { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.examples { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; }
+.examples .eyebrow { margin-right: 4px; }
+.example { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; cursor: pointer; background: var(--pane); }
+.example .arrow { color: var(--muted); }
+.example .badge { margin: 0; }
+.example:hover { border-color: var(--line-strong); }
+.example.on { border-color: var(--accent); background: var(--accent-soft); }
+/* plan */
+.plan .phase > h2 { cursor: pointer; padding: 4px 8px; margin-left: -8px; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plan .phase > h2:hover { background: var(--code-bg); }
+.plan .phase > h2.on { background: var(--accent-soft); color: var(--accent); }
+.plan .ws { margin: 10px 0 10px 6px; padding-left: 12px; border-left: 2px solid var(--line); }
+.plan .ws-title { font-weight: 600; font-size: 13px; cursor: pointer; padding: 3px 8px; margin-left: -8px; border-radius: var(--radius-sm); display: inline-block; }
+.plan .ws-title:hover { background: var(--code-bg); }
+.plan .ws-title.on { background: var(--accent-soft); color: var(--accent); }
+.plan .task.done .title { color: var(--muted); text-decoration: line-through; }
+.plan .task.blocked { border-left: 3px solid var(--danger); }
+.gate { font-size: 11px; color: var(--warn); }
 
 /* Schema cards */
 .group { margin: 0 0 18px; }

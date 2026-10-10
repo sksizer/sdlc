@@ -162,4 +162,126 @@ export interface OperationsBlock extends BlockBase {
   phases?: Phase[]
 }
 
-export type Block = ProseBlock | AnnotatedTextBlock | SchemaBlock | OperationsBlock
+// ---------------------------------------------------------------- matrix
+
+export type CellState = 'valid' | 'warn' | 'error' | 'skip'
+
+export interface MatrixAxis extends Node {
+  label: string
+  detail?: string
+}
+
+export interface MatrixCell {
+  row: string
+  col: string
+  state: CellState
+  /** Why the cell has that state. */
+  note?: string
+  /** What to do instead, for a warn or error. */
+  hint?: string
+}
+
+/**
+ * Rows by columns, every cell valid, warn, error or skip: a lookup grid such as
+ * which tools work with which model families. One node per row; columns are
+ * selectable for questions.
+ */
+export interface MatrixBlock extends BlockBase {
+  type: 'matrix'
+  rowLabel?: string
+  colLabel?: string
+  rows: MatrixAxis[]
+  cols: MatrixAxis[]
+  cells: MatrixCell[]
+  /** State of any cell not listed. Default: skip. */
+  default?: CellState
+}
+
+// ---------------------------------------------------------------- trace
+
+export interface TraceStep extends Node {
+  label: string
+  /** chosen, skip, cooling, author, error, or the domain's own word. */
+  outcome: string
+  /** One line: why this outcome. */
+  reason: string
+  detail?: string
+}
+
+/**
+ * One request walked through ordered candidates, each with an outcome and a
+ * reason. One node per step; `chosen` marks where the walk ended.
+ */
+export interface TraceBlock extends BlockBase {
+  type: 'trace'
+  /** The request being resolved, in a line. */
+  input?: string
+  steps: TraceStep[]
+  /** How to colour an outcome word. Unlisted words: chosen and ok are good; error and fail bad; cooling and warn warn; the rest skip. */
+  outcomes?: Record<string, 'ok' | 'warn' | 'bad' | 'skip'>
+}
+
+// ---------------------------------------------------------------- precedence
+
+export interface Rung extends Node {
+  label: string
+  detail?: string
+}
+
+export interface PrecedenceExample extends Node {
+  label: string
+  /** The rung this example stops at. */
+  matches: string
+  note?: string
+}
+
+/** An ordered list where the first match wins, with examples showing which rung each one hits. One node per rung and per example. */
+export interface PrecedenceBlock extends BlockBase {
+  type: 'precedence'
+  rungs: Rung[]
+  examples?: PrecedenceExample[]
+}
+
+// ---------------------------------------------------------------- plan
+
+export type PlanStatus = 'todo' | 'doing' | 'done' | 'blocked'
+
+export interface PlanTask extends Node {
+  label: string
+  status?: PlanStatus
+  milestone?: string
+  /** What must be true before it starts. */
+  gate?: string
+  detail?: string
+}
+
+export interface Workstream extends Node {
+  label: string
+  detail?: string
+  tasks: PlanTask[]
+}
+
+export interface PlanPhase extends Node {
+  label: string
+  detail?: string
+  gate?: string
+  milestone?: string
+  status?: PlanStatus
+  workstreams: Workstream[]
+}
+
+/** Phases, workstreams and tasks, each with its gate, milestone and status. One node per phase, workstream and task. */
+export interface PlanBlock extends BlockBase {
+  type: 'plan'
+  phases: PlanPhase[]
+}
+
+export type Block =
+  | ProseBlock
+  | AnnotatedTextBlock
+  | SchemaBlock
+  | OperationsBlock
+  | MatrixBlock
+  | TraceBlock
+  | PrecedenceBlock
+  | PlanBlock

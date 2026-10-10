@@ -1246,6 +1246,20 @@ The lease ref is at `phase: working` at this point.
 
 3. Capture the PR number from the `gh pr create` output (the URL ends in `/pull/<N>`).
 
+   Then add the change statistics to the PR body, best-effort:
+
+   ```bash
+   sdlc pr stats <N> --write || true
+   ```
+
+   It measures the PR's diff (lines added and removed by code, comments, blank/whitespace and
+   prose, and by file group, with generated bundles counted apart) and writes a
+   `## Change statistics` section into the body, between `<!-- sdlc-pr-stats:start -->` and
+   `<!-- sdlc-pr-stats:end -->` markers. It inserts the section *before* the lease footer, so the
+   footer stays the last line of the body, byte for byte, and re-running replaces the section in
+   place. A failure here (offline, `gh` hiccup) must NOT block Step 10.5: note it in the final
+   report and go on. The statistics are descriptive, never a gate.
+
 4. Do NOT write the PR to the task file. Under the
    D-S30G-task-state-plane-split plane rule the live PR binding is
    the lease's `pr_number`, set by the transition in Step 10.5; `prs:`

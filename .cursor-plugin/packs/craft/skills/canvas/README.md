@@ -27,7 +27,7 @@ Runs under bun, node 23.6+ and deno, no dependencies, no build step.
 | `lib/shell.ts` | The page: layout, tokens for both themes, the client (selection, hover, comments, choices, persistence, live reload, export) |
 | `lib/compose.ts` | Blocks → page; document-level checks |
 | `blocks/types.ts` | The block types |
-| `blocks/<type>.ts` | One renderer and checker per type; `blocks/index.ts` is the registry |
+| `blocks/<type>.ts` | One renderer and checker per type (prose, annotated-text, schema, operations, matrix, trace, precedence, plan); `blocks/index.ts` is the registry |
 | `check.ts`, `render.ts`, `serve.ts` | The three commands |
 | `examples/sql/` | A query, a schema, a migration, and one page composing all three |
 

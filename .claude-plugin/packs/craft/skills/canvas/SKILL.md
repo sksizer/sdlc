@@ -3,7 +3,8 @@ name: canvas
 description: |
   Check, render and serve a typed canvas document as one reviewable page, and read the
   reviewer's comments and choices back from its answers sidecar. A document is a list of
-  small block types (prose, annotated-text, schema, operations) composed into one page; a
+  small block types (prose, annotated-text, schema, operations, matrix, trace, precedence,
+  plan) composed into one page; a
   new block type is a renderer and a checker. The peer scripts run under bun, node 23.6+ and
   deno with no dependencies and no build step.
 allowed-tools: Bash Read Write
@@ -44,6 +45,13 @@ Inputs: a document whose blocks all have a known type. Output: a page at `/d/<id
     table, and one per column for comments.
   - `operations`: ordered operations with risk, locks, rollback and before/after, grouped into
     phases. One node per operation.
+  - `matrix`: rows by columns, each cell valid, warn, error or skip with a note and a hint. One
+    node per row; columns are selectable for questions.
+  - `trace`: one request walked through ordered candidates, each with an outcome and a reason.
+    One node per step.
+  - `precedence`: an ordered ladder where the first match wins, with examples showing the rung
+    each stops at. One node per rung and per example.
+  - `plan`: phases, workstreams and tasks with gate, milestone and status. One node each.
 - Every node has a stable `id`, unique across the document. Answers key on document id and
   node id, so a regenerated page keeps its answers. Never renumber ids on a rewrite.
 - Any node or block may carry `source`, an LSP Location: `{"uri": "<path from the repo root>",
@@ -123,6 +131,7 @@ flowchart TD
 
 ## Test environment
 
+`examples/routing/model-routing.json` uses the four non-text blocks on one page.
 `examples/sql/` beside this skill holds five documents against one orders database: a query
 explanation, a schema, a migration, one page that composes all three, and a long design review that
 runs every block type in series (`orders-design-review`). `orders-query-explained` is the query page
