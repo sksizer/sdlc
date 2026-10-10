@@ -3,15 +3,26 @@
  * canvas serve — the servlet. Serves every `<id>.json` in a folder as a
  * rendered page and persists answers beside it as `<id>.answers.json`.
  *
- *   bun serve.ts [dir] [--port 4321] [--host 0.0.0.0]
+ *   bun serve.ts [dir] [--port 4321] [--host 0.0.0.0] [--root <path>]
  *     dir defaults to docs/canvas; host defaults to 127.0.0.1 (loopback only).
- *     Pass --host 0.0.0.0 to review from another machine on the LAN; there is no auth.
+ *     root is the project whose files the pages link to; it defaults to the git checkout holding dir.
+ *     Pass --host 0.0.0.0 to review from another machine on the LAN; there is no auth, and the
+ *     tracked files are served, so a committed secret (a tracked .env or key) would be readable.
+ *     Requests are checked against the Host header (DNS rebinding): only 127.0.0.1, localhost,
+ *     [::1] and the --host value pass, except with --host 0.0.0.0 or ::, where any Host does.
  *
  *   GET  /            index of documents
  *   GET  /d/<id>      the rendered page
  *   GET  /a/<id>      answers JSON (empty answers if none yet)
  *   PUT  /a/<id>      replace answers JSON
  *   GET  /events      server-sent events: {kind: "doc" | "answers", id} when a file changes
+ *   GET  /f/<path>    a project file read-only: .md rendered (?view=source for its lines), anything else as
+ *                     numbered source; #L12-L20 highlights; images and PDFs as themselves;
+ *                     ?part=body is the body alone, for the page's file viewer. Only files
+ *                     git lists (tracked or untracked, not ignored), so nothing is served outside a git
+ *                     checkout; text at most 1 MB, media 25 MB; always nosniff, media sandboxed.
+ *   GET  /w/<name>    a [[wikilink]]: redirects to /f/<path> when a <name>.md exists in the project
+ *   GET  /resolve?n=…&from=<dir>  which [[wikilinks]] resolve, as {name: path | null}; the page unlinks the rest
  *
  * node:http so it runs under bun, node and deno unchanged. Pages are rendered
  * on every request and the folder is watched, so when an agent rewrites a
@@ -23,7 +34,9 @@ import { createServer, type ServerResponse } from 'node:http'
 import { join, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 
-import { emptyAnswers } from './lib/doc.ts'
+import { encodePath, emptyAnswers } from './lib/doc.ts'
+import { fileBody, filePage } from './lib/file-view.ts'
+import { ProjectFiles, projectRoot } from './lib/files.ts'
 import { indexPage, type IndexEntry } from './lib/index-page.ts'
 import type { CanvasDoc } from './lib/compose.ts'
 import { renderDoc } from './lib/compose.ts'
@@ -34,11 +47,14 @@ const { values, positionals } = parseArgs({
   options: {
     port: { type: 'string', default: '4321' },
     host: { type: 'string', default: '127.0.0.1' },
+    root: { type: 'string' },
   },
 })
 const dir = resolve(positionals[0] ?? 'docs/canvas')
 const port = Number(values.port)
 const host = values.host
+const root = resolve(values.root ?? projectRoot(dir))
+const files = new ProjectFiles(root)
 const ID = /^[a-z0-9][a-z0-9-]*$/
 const IMAGE_TYPES: Record<string, string> = {
   png: 'image/png',
@@ -47,6 +63,26 @@ const IMAGE_TYPES: Record<string, string> = {
   gif: 'image/gif',
   webp: 'image/webp',
   svg: 'image/svg+xml',
+}
+
+/** The hostnames a request may name; with a wildcard bind (LAN mode) any Host is accepted. */
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', host, `[${host}]`])
+const ANY_HOST = host === '0.0.0.0' || host === '::'
+function hostAllowed(header: string | undefined): boolean {
+  if (ANY_HOST) return true
+  if (!header) return false
+  const name = header.startsWith('[')
+    ? header.slice(0, header.indexOf(']') + 1)
+    : header.split(':')[0]!
+  return LOCAL_HOSTS.has(name.toLowerCase())
+}
+/** `decodeURIComponent` that gives undefined on a malformed escape, which the caller answers with 400. */
+function decodePath(raw: string): string | undefined {
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return undefined
+  }
 }
 
 function docIds(): string[] {
@@ -110,6 +146,10 @@ function notify(file: string) {
 if (existsSync(dir)) watch(dir, (_event, file) => file && notify(String(file)))
 
 const server = createServer((req, res) => {
+  if (!hostAllowed(req.headers.host)) {
+    res.writeHead(403, { 'content-type': 'text/plain' })
+    return res.end('forbidden host')
+  }
   const url = new URL(req.url ?? '/', `http://${req.headers.host}`)
   const [, area, id] = url.pathname.split('/')
   const send = (code: number, body: string, type = 'text/html; charset=utf-8') => {
@@ -147,6 +187,53 @@ const server = createServer((req, res) => {
       res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' })
       return res.end(readFileSync(file))
     }
+    if (url.pathname === '/resolve') {
+      const names = url.searchParams.getAll('n').slice(0, 500)
+      const from = url.searchParams.get('from') ?? ''
+      return send(
+        200,
+        JSON.stringify(Object.fromEntries(names.map((n) => [n, files.resolve(n, from) ?? null]))),
+        'application/json',
+      )
+    }
+    if (area === 'w' && req.method === 'GET') {
+      const name = decodePath(url.pathname.slice(3))
+      if (name === undefined) return send(400, 'malformed path', 'text/plain')
+      const rel = files.resolve(name)
+      if (!rel) return send(404, 'no such file in this project', 'text/plain')
+      res.writeHead(302, { location: `/f/${encodePath(rel)}` })
+      return res.end()
+    }
+    if (area === 'f' && req.method === 'GET') {
+      // nosniff on every /f/ response; media is also sandboxed so an SVG cannot run script in this origin.
+      res.setHeader('x-content-type-options', 'nosniff')
+      const rel = decodePath(url.pathname.slice(3))
+      if (rel === undefined) return send(400, 'malformed path', 'text/plain')
+      const file = files.file(rel)
+      if (!file)
+        return send(
+          404,
+          'not served: missing, ignored by git, binary (images and PDFs excepted) or too large',
+          'text/plain',
+        )
+      if (file.media) {
+        res.writeHead(200, {
+          'content-type': file.media,
+          'cache-control': 'no-store',
+          'content-security-policy': 'sandbox',
+        })
+        return res.end(readFileSync(file.path))
+      }
+      const text = readFileSync(file.path, 'utf8')
+      const view = url.searchParams.get('view') ?? undefined
+      // ?part=body is the canvas page's viewer asking for the body alone.
+      return send(
+        200,
+        url.searchParams.get('part') === 'body'
+          ? fileBody(rel, text, view)
+          : filePage(rel, text, view),
+      )
+    }
     if (!id || !ID.test(id)) return send(404, 'not found', 'text/plain')
     if (area === 'd' && req.method === 'GET') {
       const links = docIds()
@@ -178,6 +265,12 @@ const server = createServer((req, res) => {
     send(500, String(e instanceof Error ? e.message : e), 'text/plain')
   }
 })
+if (!files.listed)
+  console.warn(
+    `canvas: ${root} is not a git checkout, so no project files are served (pass --root)`,
+  )
 server.listen(port, host, () =>
-  console.log(`canvas: http://${host === '0.0.0.0' ? '<this machine>' : host}:${port}/  (${dir})`),
+  console.log(
+    `canvas: http://${host === '0.0.0.0' ? '<this machine>' : host}:${port}/  (${dir}; files from ${root})`,
+  ),
 )

@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.13.0] - 2026-10-10
 
 Antigravity replaces Gemini CLI, and the `canvas` review page becomes a conversation with the
-agent. `craft` ships as 0.5.0.
+agent. The libraries the pack vendors now carry correct versions and their own changelogs. `craft`
+ships as 0.5.0.
 
 ### Added
 
@@ -42,6 +43,10 @@ agent. `craft` ships as 0.5.0.
 
 ### Changed
 
+- Every library under `packages/ts` and `packages/rust` has a version reconstructed from its history
+  and a `CHANGELOG.md`, and workspace dependency ranges follow. The pack ships `easy-git` 0.5.0,
+  `easy-gh` 0.4.0, `command-seam` 0.2.0 and `cli-tool` 0.4.0 in place of placeholder 0.1.0 releases.
+  ([#2961](https://github.com/sksizer/dev/pull/2961))
 - **BREAKING:** Gemini CLI support is replaced by Google Antigravity (`agy`), a hard cutover with no
   alias. `verify.engine` in `sdlc.yaml` now accepts `claude`, `codex`, `antigravity` or `opencode`;
   `gemini` is rejected, so a project that sets it must change it. `sdlc harness detect` reports

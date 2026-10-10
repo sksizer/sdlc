@@ -1,3 +1,5 @@
+import { posix } from 'node:path'
+
 /**
  * The envelope every canvas document shares, plus the answer sidecar that
  * reviewers write and agents read back.
@@ -97,7 +99,7 @@ export interface BlockOut {
   titles?: Record<string, string>
 }
 
-/** One reviewer comment on a node, or on a span of text inside it. */
+/** One reviewer comment on a node (or a file, `f:<path>`), on words in it, or on a region of an image. */
 export interface Comment {
   id: string
   node: string
@@ -105,8 +107,14 @@ export interface Comment {
   at: string
   by?: string
   resolved?: boolean
-  /** When set, the comment is on these exact words within the node (a W3C TextQuoteSelector). */
-  selector?: { type: 'TextQuoteSelector'; exact: string; prefix?: string; suffix?: string }
+  /**
+   * Where in the node: exact words (a W3C TextQuoteSelector), or a box on an image or PDF page
+   * (a FragmentSelector, `xywh=percent:x,y,w,h`, `page=N&` first on a PDF). On a file opened in
+   * the viewer the node is `f:<repo path>`.
+   */
+  selector?:
+    | { type: 'TextQuoteSelector'; exact: string; prefix?: string; suffix?: string }
+    | { type: 'FragmentSelector'; conformsTo?: string; value: string }
   /** When the reviewer sent it to the agent; unsent comments are still being written. */
   sent?: string
   /** The conversation under it, in order: the agent's answers and the reviewer's follow-ups. */
@@ -180,14 +188,93 @@ export function escapeHtml(text: string): string {
 }
 
 /**
- * Plain text with two inline marks: `code` in backticks and **strong**.
+ * A `[[name]]` or `[[name|label]]` as an anchor through the servlet's /w/. `name` is already
+ * HTML-escaped. The page asks the servlet which ones resolve and unlinks the rest.
+ */
+export function wikilinkHtml(name: string): string {
+  const [target, label] = name.split('|').map((s) => s.trim())
+  return `<a class="wikilink" data-wikilink="${target}" href="/w/${encodeURIComponent(target!)}">${label ?? target}</a>`
+}
+
+/** A repo path as URL path segments: each segment percent-encoded, the `/`s kept. */
+export function encodePath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/')
+}
+
+/** Undo `escapeHtml` for the characters it rewrites. */
+function unescapeHtml(text: string): string {
+  return text
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&amp;', '&')
+}
+
+/**
+ * What a link target in markdown or prose becomes. `http:`, `https:`, `mailto:` and `#fragment`
+ * pass as they are; any other `scheme:` (`javascript:`, `data:`, `file:`) gets no target at all, so
+ * the caller renders plain text. Anything else is a repo path, served by /f/: rebased on the folder
+ * of `fromRel` when given, and undefined when it climbs out of the repo. `href` is already
+ * HTML-escaped and in URL form (`%20` for a space); the result is safe inside a double-quoted attribute.
+ */
+export function linkTarget(
+  href: string,
+  fromRel?: string,
+): { kind: 'web' | 'mailto' | 'fragment' | 'repo'; href: string } | undefined {
+  if (/^https?:/i.test(href)) return { kind: 'web', href }
+  if (/^mailto:/i.test(href)) return { kind: 'mailto', href }
+  if (href.startsWith('#')) return { kind: 'fragment', href }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return undefined
+  const [path = '', ...rest] = unescapeHtml(href).split('#')
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(path)
+  } catch {
+    return undefined
+  }
+  const rel =
+    fromRel === undefined
+      ? decoded.replace(/^\.?\//, '')
+      : posix.normalize(posix.join(posix.dirname(fromRel), decoded))
+  if (!rel || rel.startsWith('/') || rel.split('/').includes('..')) return undefined
+  const hash = rest.length ? `#${escapeHtml(rest.join('#'))}` : ''
+  return { kind: 'repo', href: `/f/${escapeHtml(encodePath(rel))}${hash}` }
+}
+
+/**
+ * A `[label](target)`: a web link opens in a new tab; a repo path opens through the servlet's
+ * /f/, which the page shows in its file viewer; `mailto:` and `#anchor` stay as written; any other
+ * scheme is just the label. Both arguments are already HTML-escaped.
+ */
+function linkHtml(label: string, href: string): string {
+  const t = linkTarget(href)
+  if (!t) return label
+  if (t.kind === 'web') return `<a href="${t.href}" target="_blank" rel="noopener">${label}</a>`
+  if (t.kind === 'repo') return `<a class="file-link" href="${t.href}">${label}</a>`
+  return `<a href="${t.href}">${label}</a>`
+}
+
+/**
+ * Plain text with inline `code` in backticks, **strong**, `[[wikilinks]]` and `[label](target)`
+ * links (outside code).
  * Paragraphs split on blank lines; a line starting with "- " is a bullet.
  */
 export function prose(text: string | undefined): string {
   if (!text) return ''
   const inline = (s: string) =>
     escapeHtml(s)
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .split(/(`[^`]+`)/)
+      .map((part) =>
+        part.startsWith('`') && part.endsWith('`') && part.length > 1
+          ? `<code>${part.slice(1, -1)}</code>`
+          : part
+              .replace(/\[\[([^\]]+)\]\]/g, (_m, n: string) => wikilinkHtml(n))
+              .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, href: string) =>
+                linkHtml(label, href),
+              ),
+      )
+      .join('')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   return text
     .trim()
@@ -216,7 +303,7 @@ export function sourcePaths(
   return { rel: p, abs: repo?.root ? `${repo.root.replace(/\/$/, '')}/${p}` : undefined }
 }
 
-/** The links for one node's sources: a local editor link (scheme chosen on the page) and a GitHub permalink. */
+/** The links for one node's sources: a local editor link (scheme chosen on the page), a served view, and a GitHub permalink. */
 export function sourceLinks(source: Source | Source[] | undefined, repo?: Repo): string {
   if (!source) return ''
   const list = Array.isArray(source) ? source : [source]
@@ -237,7 +324,11 @@ export function sourceLinks(source: Source | Source[] | undefined, repo?: Repo):
       repo && rel && /^https:\/\/github\.com\//.test(repo.remote)
         ? ` <a class="src-gh" href="${escapeHtml(`${repo.remote.replace(/\/$/, '')}/blob/${repo.commit}/${rel}`)}${l1 ? `#L${l1}${l2 && l2 !== l1 ? `-L${l2}` : ''}` : ''}" target="_blank" rel="noopener">GitHub</a>`
         : ''
-    return `<span class="src">${local}${gh}</span>`
+    // Every repo source opens in the browser through the servlet, at its lines; the page drops this link off the servlet.
+    const view = rel
+      ? ` <a class="src-view" href="/f/${escapeHtml(encodePath(rel))}${l1 ? `#L${l1}${l2 && l2 !== l1 ? `-L${l2}` : ''}` : ''}">View</a>`
+      : ''
+    return `<span class="src">${local}${view}${gh}</span>`
   })
   return `<div class="sources"><span class="src-label">Source</span>${items.join('')}</div>`
 }

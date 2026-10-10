@@ -101,7 +101,10 @@ function sentItems(a: Answers): Item[] {
         kind: 'comment',
         id: c.id,
         node: c.node,
-        quote: c.selector?.exact,
+        quote:
+          c.selector?.type === 'FragmentSelector'
+            ? `region ${c.selector.value}`
+            : c.selector?.exact,
         ...latest(c, c.replies),
       })
   for (const [qid, ch] of Object.entries(a.choices))
@@ -220,7 +223,7 @@ if (values.reopen) {
     if (!values.notify) process.exit(0)
     // Push mode: hand the lines to the command and keep watching. The command is a shell line so a
     // caller can write `--notify "sdlc session send --cwd ."` or `--notify "tmux send-keys …"`.
-    // This is the one place the skill shells out, and it is the caller's own command.
+    // This is the caller's own command.
     const child = spawn(values.notify, {
       shell: true,
       stdio: ['pipe', 'inherit', 'inherit'],

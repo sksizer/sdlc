@@ -156,7 +156,12 @@ flowchart TD
 1. Run `check.ts <doc.json>` from this skill's folder and fix every line it prints. An anchor
    that is not an exact substring is the common one.
 2. Run `serve.ts [dir]` from this skill's folder in the background and give the reviewer
-   `http://127.0.0.1:4321/d/<id>`. Leave it running.
+   `http://127.0.0.1:4321/d/<id>`. Leave it running. A `[[wikilink]]` in prose and every
+   source's View link open the project's file in the browser: markdown rendered, code at its
+   lines, images and PDFs as themselves, in a viewer with its own comments (`f:<path>` nodes in
+   the answers; a region comment quotes `region xywh=…`). Pass `--root <path>` when `dir` is
+   outside the checkout; files are served only from a git checkout, and only the ones git lists
+   (a tracked secret would be readable).
 3. Run `answers.ts <id> --wait` as a background command of your harness, the kind that tells you
    when it exits; it exits the moment the reviewer presses Send, and costs nothing while it waits.
    Never poll the sidecar in a loop, and do not hand the wait to a subagent: the reply needs this

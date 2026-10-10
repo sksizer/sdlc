@@ -10,7 +10,7 @@ re-authored.
 agent writes   docs/canvas/<id>.json          blocks: prose | annotated-text | schema | … | code-flow | workflow
        ↓
 bun check.ts   docs/canvas/<id>.json          ids unique, anchors resolve, references exist
-bun serve.ts                                   /d/<id>, /a/<id>, /events (watch → reload)
+bun serve.ts                                   /d/<id>, /a/<id>, /events (watch → reload), /f/<path>
        ↓
 reviewer       clicks, comments, chooses
        ↓
@@ -18,6 +18,11 @@ docs/canvas/<id>.answers.json                  status + verdict, comments[node],
        ↓
 agent rewrites → page reloads where it was; answers survive because node ids do
 ```
+
+`/f/` serves the files git lists for the checkout (nothing outside a git checkout). A tracked file
+is served whatever it holds, so a committed secret (a tracked `.env` or key) would be readable. The
+servlet binds to loopback and rejects other `Host` headers; `--host 0.0.0.0` opens it to the LAN
+with no auth.
 
 Runs under bun, node 23.6+ and deno, no dependencies, no build step.
 
@@ -27,6 +32,9 @@ Runs under bun, node 23.6+ and deno, no dependencies, no build step.
 | `lib/shell.ts` | The page: layout, tokens for both themes, the client (selection, hover, comments, choices, persistence, live reload, export) |
 | `lib/compose.ts` | Blocks → page; document-level checks |
 | `lib/markdown.ts` | Blocks → markdown (headings, lists, tables, mermaid fences); the envelope and questions |
+| `lib/files.ts` | The project's files: root detection, the git-listed set the servlet may serve (nothing outside a git checkout), symlink and size guards, `[[wikilink]]` resolution. The project-side module: file system and git access |
+| `lib/file-view.ts` | The read-only file page at `/f/` (markdown rendered, anything else numbered), its styles and the wikilink script; pure string building |
+| `lib/highlight.ts` | Syntax colouring for the code view: a small tokenizer per language family, one HTML string per line |
 | `lib/diagram.ts` | Sequence diagram and flowchart as inline SVG, plus helpers for their mermaid source |
 | `blocks/types.ts` | The block types |
 | `blocks/<type>.ts` | One renderer, checker and markdown writer per type (prose, question, figure, annotated-text, schema, operations, matrix, trace, precedence, plan, code-flow, workflow); `blocks/index.ts` is the registry |

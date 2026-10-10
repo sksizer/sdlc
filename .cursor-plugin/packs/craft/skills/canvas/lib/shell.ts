@@ -6,10 +6,11 @@
  *
  * Persistence: the script PUTs answers to `/a/<doc>` when a servlet is
  * present and falls back to localStorage when it is not (a static file, an
- * artifact). "Export" downloads the same JSON either way.
+ * artifact). "Export" shows the same JSON in a sheet to copy or save; its ↓ half downloads it straight away.
  */
 import type { DocMeta, Question, Section } from './doc.ts'
 import { embedJson, escapeHtml, sourceLinks } from './doc.ts'
+import { FILE_CSS, WIKILINK_SCRIPT } from './file-view.ts'
 import { renderQuestion } from './question.ts'
 
 export interface Page {
@@ -115,8 +116,9 @@ export function renderPage(page: Page): string {
     </select>`
         : ''
     }
+    <button id="top-comment" type="button" class="quiet" title="A comment on the whole document">${COMMENT_ICON}<span>Comment</span></button>
     <div class="review-state"><span id="review-progress" class="progress" hidden></span><button id="finish" type="button" class="primary">Finish review</button><span id="verdict-chip" class="verdict-chip" hidden><span class="vc-label"></span><button type="button" id="reopen" class="link">Reopen</button></span></div>
-    <button id="export" type="button" class="quiet">Export</button>
+    <span class="split-btn"><button id="export" type="button" class="quiet" title="Show the answers JSON">Export</button><button id="export-download" type="button" class="quiet" title="Download ${escapeHtml(meta.id)}.answers.json" aria-label="Download answers JSON">↓</button></span>
     <span id="persist" class="pill" title="Where answers are saved">…</span>
   </div>
   ${renderQuestionBar(questions)}
@@ -129,10 +131,25 @@ export function renderPage(page: Page): string {
   <div class="form-row"><button type="button" id="finish-cancel" class="quiet">Cancel</button><span class="spacer"></span><button type="button" id="finish-changes" class="quiet">Request changes</button><button type="button" id="finish-approve" class="primary">Approve</button></div>
 </div></div>
 <div class="lightbox" id="lightbox" hidden><button type="button" class="lb-close" title="Close (Esc)">×</button><div class="lb-body"></div></div>
-<section id="export-box" class="export" hidden>
-  <div class="pane-head"><span class="eyebrow">answers.json</span><span class="hint" id="export-note"></span></div>
-  <textarea id="export-text" rows="10" readonly></textarea>
-</section>
+<div id="viewer" class="viewer" hidden><div class="viewer-frame" role="dialog" aria-modal="true" aria-labelledby="viewer-path">
+  <div class="viewer-head"><span class="eyebrow">File</span><span id="viewer-path" class="path"></span><span class="spacer"></span><button type="button" id="viewer-toggle" class="quiet" hidden>Source</button><a id="viewer-tab" href="#" target="_blank" rel="noopener">Open in tab</a><button type="button" id="viewer-close" class="viewer-x" title="Close (Esc)">×</button></div>
+  <div class="viewer-main">
+    <div id="viewer-doc" class="viewer-doc"></div>
+    <aside class="viewer-side">
+      <div class="pane-head"><span class="eyebrow">Comments on this file <span id="viewer-count" class="viewer-count"></span></span></div>
+      <p class="hint" id="viewer-note"></p>
+      <div class="comments" id="viewer-comments"><ul class="comment-list"></ul></div>
+      <p class="muted" id="viewer-empty">No comments on this file yet.</p>
+      <form id="viewer-form" class="viewer-form"><textarea rows="3" placeholder="A comment on the whole file…" aria-label="Comment on the whole file"></textarea><div class="form-row"><span class="spacer"></span><button type="submit" class="quiet" value="draft">Save draft</button><button type="submit" class="primary" value="send">Send to agent</button></div></form>
+    </aside>
+  </div>
+</div></div>
+<div id="export-sheet" class="sheet" hidden><div class="sheet-body export-body" role="dialog" aria-modal="true" aria-labelledby="export-title">
+  <h3 id="export-title">Export answers</h3>
+  <p class="sheet-lead" id="export-note"></p>
+  <textarea id="export-text" rows="16" readonly></textarea>
+  <div class="form-row"><button type="button" id="export-close" class="quiet">Close</button><span class="spacer"></span><button type="button" id="export-copy" class="quiet">Copy</button><button type="button" id="export-save" class="primary">Download</button></div>
+</div></div>
 <main class="split">
   <div class="dock dock-l" id="dock-l">
     <div class="rail rail-l">
@@ -345,7 +362,8 @@ body.nav-pinned:not(.narrow) .rail-l, body.right-pinned .rail-r, body.right-open
 /* Unpinned: the pane slides in beside its rail and floats over the page. */
 body:not(.nav-pinned) .nav, body.narrow .nav { position: fixed; top: var(--top-h, 70px); bottom: 0; height: auto; left: 44px; width: min(300px, calc(100vw - 88px)); background: var(--pane); box-shadow: var(--shadow); z-index: 4; opacity: 0; visibility: hidden; transform: translateX(-12px); transition: transform .16s ease, opacity .16s ease, visibility 0s linear .16s; }
 body:not(.nav-pinned) .dock-l.hover .nav, body.narrow .dock-l.hover .nav { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
-body:not(.right-pinned):not(.right-open) .right { position: fixed; visibility: hidden; right: 0; top: var(--top-h, 70px); bottom: 0; width: 420px; height: auto; }
+body:not(.right-pinned):not(.right-open) .right { position: fixed; right: 44px; top: var(--top-h, 70px); bottom: 0; width: min(420px, calc(100vw - 88px)); height: auto; box-shadow: var(--shadow); z-index: 4; opacity: 0; visibility: hidden; transform: translateX(12px); transition: transform .16s ease, opacity .16s ease, visibility 0s linear .16s; }
+body:not(.right-pinned):not(.right-open) .dock-r.hover .right { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
 .pane { padding: 18px 20px; min-width: 0; }
 .nav { border-right: 1px solid var(--line); overflow: auto; height: 100%; padding: 14px 10px; font-size: 13px; }
 .nav-block { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 14px 8px 4px; }
@@ -661,7 +679,7 @@ body.right-pinned .right .pin[data-close-right] { display: none; }
 .reply-form textarea { min-height: 30px; padding: 5px 11px; border-radius: 15px; resize: none; line-height: 18px; font-size: 13px; overflow: hidden; }
 .reply-form button { height: 30px; padding: 0 12px; border-radius: 15px; }
 .question .q-thread { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--pane); font-size: 13px; }
-.qpop { position: fixed; z-index: 6; width: 360px; max-width: calc(100vw - 24px); max-height: 60vh; overflow: auto; background: var(--pane); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow); padding: 10px 12px; font-size: 12.5px; }
+.qpop { position: fixed; z-index: 46; width: 360px; max-width: calc(100vw - 24px); max-height: 60vh; overflow: auto; background: var(--pane); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow); padding: 10px 12px; font-size: 12.5px; }
 .qpop .msg .text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .qpop .qpop-thread + .qpop-thread { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .qpop .qpop-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
@@ -680,18 +698,67 @@ textarea { width: 100%; font: inherit; font-size: 13px; padding: 7px 9px; border
 .src-label { font: 600 10.5px var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .src-local, .src-path { color: var(--fg); text-decoration: none; border-bottom: 1px dotted var(--muted); }
 .src-local:hover { color: var(--accent); border-bottom-color: var(--accent); text-decoration: none; }
-.src-gh { font: 11px var(--sans); color: var(--accent); margin-left: 4px; }
+.src-gh, .src-view { font: 11px var(--sans); color: var(--accent); margin-left: 4px; }
+a.wikilink { color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
+a.wikilink.missing { color: inherit; border-bottom: 1px dotted var(--muted); cursor: default; }
 .block > .sources { margin: -4px 0 10px; }
 
-/* Export box */
-.export { padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--pane); }
-.export textarea { font: 12px var(--mono); }
+/* File viewer: the file on the left, its comments on the right */
+.viewer { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.45); display: flex; padding: 24px; }
+.viewer[hidden] { display: none; }
+body.viewing { overflow: hidden; }
+.viewer-frame { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--pane); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.viewer-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 18px; border-bottom: 1px solid var(--line); }
+.viewer-head .path { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.viewer-head .spacer { flex: 1; }
+.viewer-head a { font-size: 12.5px; white-space: nowrap; }
+.viewer-x { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.viewer-x:hover { background: var(--code-bg); color: var(--fg); }
+.viewer-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 420px); }
+.viewer-doc { overflow: auto; padding: 20px 28px 40px; }
+.viewer-doc .viewer-text { max-width: 900px; margin: 0 auto; }
+.viewer-doc .fileview.source { margin: 0 -28px; }
+.viewer-doc.media, .viewer-doc.pdf { background: var(--code-bg); }
+.viewer-side { border-left: 1px solid var(--line); overflow: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.viewer-side .hint { margin: 0; }
+.viewer-count { font-weight: 600; color: var(--accent); }
+.viewer-form textarea { width: 100%; }
+.viewer-form .form-row { display: flex; gap: 6px; margin-top: 6px; }
+.viewer-form .spacer { flex: 1; }
+.fileview { --hl: var(--hi); }
+.stage { position: relative; width: fit-content; max-width: 100%; margin: 0 auto 18px; user-select: none; cursor: crosshair; background: var(--pane); box-shadow: 0 0 0 1px var(--line-strong); }
+.pdf .stage { width: 100%; }
+.stage img, .stage canvas { display: block; max-width: 100%; }
+.pdf .stage canvas { width: 100%; height: auto; }
+.regions { position: absolute; inset: 0; }
+.region { position: absolute; border: 2px solid var(--accent); background: var(--accent-soft); border-radius: 3px; cursor: pointer; }
+.region.draft { border-style: dashed; pointer-events: none; }
+.region.hot, .region.flash { background: var(--hi); border-color: var(--warn); }
+.page-n { position: absolute; top: 6px; right: 8px; font: 11px var(--mono); color: var(--muted); background: var(--pane); padding: 0 5px; border-radius: 4px; }
+.pdf-frame { display: block; width: 100%; height: 100%; min-height: 70vh; border: 0; }
+.quote.region-chip { cursor: pointer; font-family: var(--sans); }
+@media (max-width: 860px) {
+  .viewer { padding: 0; }
+  .viewer-main { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  .viewer-side { border-left: 0; border-top: 1px solid var(--line); max-height: 45vh; }
+}
+${FILE_CSS}
+
+#top-comment { display: inline-flex; align-items: center; gap: 6px; }
+#top-comment svg { width: 13px; height: 13px; }
+
+/* Export: a split button; the sheet shows the JSON */
+.split-btn { display: inline-flex; }
+.split-btn button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.split-btn button:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; padding: 5px 8px; }
+.export-body { width: 640px; }
+.export-body textarea { font: 12px var(--mono); }
 
 /* Inline annotations on selected text */
 ::highlight(canvas-anno) { background: color-mix(in srgb, var(--warn) 26%, transparent); text-decoration: underline wavy var(--warn); }
 ::highlight(canvas-anno-hot) { background: color-mix(in srgb, var(--warn) 52%, transparent); }
-.notice { position: fixed; z-index: 6; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 9px 14px; border-radius: 999px; background: var(--fg); color: var(--pane); font-size: 13px; box-shadow: var(--shadow); }
-.anno { position: fixed; z-index: 5; background: var(--pane); border: 1px solid var(--line-strong); border-radius: 999px; box-shadow: var(--shadow); padding: 3px; font-size: 13px; }
+.notice { position: fixed; z-index: 46; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 9px 14px; border-radius: 999px; background: var(--fg); color: var(--pane); font-size: 13px; box-shadow: var(--shadow); }
+.anno { position: fixed; z-index: 46; background: var(--pane); border: 1px solid var(--line-strong); border-radius: 999px; box-shadow: var(--shadow); padding: 3px; font-size: 13px; }
 .anno:has(#anno-form:not([hidden])) { border-radius: var(--radius); padding: 10px; max-width: 380px; }
 #anno-start { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 5px 10px; border: 0; border-radius: 999px; background: var(--fg); color: var(--pane); font-weight: 600; cursor: pointer; }
 .anno-quote { font: 11.5px var(--mono); color: var(--muted); background: var(--hi); border-radius: 4px; padding: 2px 8px; margin: 0 0 8px; max-height: 60px; overflow: hidden; white-space: pre-wrap; }
@@ -769,9 +836,13 @@ const CLIENT = `
   }
   ['nav', 'right'].forEach((k) => setPin(k, body.classList.contains(k + '-pinned')));
   const hoverTimers = new Map();
-  for (const dock of $$('.dock-l')) {
+  // Both docks peek on hover. A peek stays while focus is inside it (a comment being typed) and
+  // closes once both the pointer and the focus have left.
+  for (const dock of $$('.dock-l, .dock-r')) {
+    const close = () => { clearTimeout(hoverTimers.get(dock)); hoverTimers.set(dock, setTimeout(() => { if (!dock.classList.contains('open-tap') && !dock.matches(':hover, :focus-within')) dock.classList.remove('hover'); }, 220)); };
     dock.addEventListener('mouseenter', () => { clearTimeout(hoverTimers.get(dock)); dock.classList.add('hover'); });
-    dock.addEventListener('mouseleave', () => { clearTimeout(hoverTimers.get(dock)); hoverTimers.set(dock, setTimeout(() => { if (!dock.classList.contains('open-tap')) dock.classList.remove('hover'); }, 220)); });
+    dock.addEventListener('mouseleave', close);
+    dock.addEventListener('focusout', close);
   }
   document.addEventListener('click', (e) => {
     const pin = e.target.closest('[data-pin]');
@@ -779,7 +850,7 @@ const CLIENT = `
       if (pin.dataset.pin === 'nav' && narrowMq.matches) { const d = $('#dock-l'); clearTimeout(hoverTimers.get(d)); d.classList.toggle('hover', !d.classList.contains('open-tap')); d.classList.toggle('open-tap'); return; }
       setPin(pin.dataset.pin, !body.classList.contains(pin.dataset.pin + '-pinned')); return;
     }
-    if (e.target.closest('[data-close-right]')) openRight(false);
+    if (e.target.closest('[data-close-right]')) { openRight(false); $('#dock-r').classList.remove('hover'); }
     if (e.target.closest('[data-open-right]')) openRight(true);
     const railQ = e.target.closest('.rail-q, .rail-c');
     if (railQ) { openRight(true); const target = railQ.classList.contains('rail-q') ? $('#questions') : $('.comments.has'); if (target) right.scrollTo({ top: target.getBoundingClientRect().top - right.getBoundingClientRect().top + right.scrollTop - 8 }); }
@@ -879,7 +950,7 @@ const CLIENT = `
     });
   }
   document.addEventListener('click', (e) => {
-    if (e.target.closest('button[type=submit], textarea, input, select, a:not([data-select]):not(.nav-item)')) return;
+    if (e.target.closest('#viewer, button[type=submit], textarea, input, select, a:not([data-select]):not(.nav-item)')) return;
     const sel = e.target.closest('[data-select]');
     if (sel) { e.preventDefault(); select(sel.dataset.select); return; }
     const node = e.target.closest('[data-node]');
@@ -894,7 +965,7 @@ const CLIENT = `
   document.addEventListener('mouseout', (e) => { const n = hoverable(e); if (n) peek(n.dataset.node, false); });
   window.addEventListener('hashchange', () => { const id = location.hash.slice(1); if (id && id !== selected && (DATA.sectionOf[id] || id === DATA.doc)) select(id); });
   document.addEventListener('keydown', (e) => {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || body.classList.contains('viewing')) return;
     const typing = e.target.matches('textarea, input:not([type=radio]):not([type=checkbox]), select');
     if (!typing && (e.key === 'n' || e.key === 'p' || e.key === 'N' || e.key === 'P')) { e.preventDefault(); stepQuestion(e.key.toLowerCase() === 'n' ? 1 : -1, e.shiftKey); return; }
     if (e.target.matches('textarea, input, select')) return;
@@ -936,6 +1007,7 @@ const CLIENT = `
     const total = answers.comments.length;
     $$('.rail-c').forEach((b) => { b.hidden = total === 0; $('b', b).textContent = String(total); });
     updateSendAll(); renderReviewState();
+    renderViewer();
     paintQuotes();
   }
 
@@ -955,7 +1027,7 @@ const CLIENT = `
     return out;
   }
   function textNodesOf(scope) {
-    const out = []; const w = document.createTreeWalker(scope.root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement.closest('textarea, .comments, .sources, .badge, script') || (scope.pred && !scope.pred(n))) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    const out = []; const w = document.createTreeWalker(scope.root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement.closest('textarea, .comments, .sources, .badge, script, .ln') || (scope.pred && !scope.pred(n))) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
     for (let n = w.nextNode(); n; n = w.nextNode()) out.push(n);
     return out;
   }
@@ -1009,7 +1081,7 @@ const CLIENT = `
     if (!SUPPORTS_HL) return;
     const all = [], hotRanges = [];
     painted = [];
-    for (const c of answers.comments) { if (!c.selector) continue; const rs = resolveQuote(c); if (rs.length) painted.push({ id: c.id, ranges: rs }); (c.id === hot ? hotRanges : all).push(...rs); }
+    for (const c of answers.comments) { if (!c.selector || c.selector.type !== 'TextQuoteSelector') continue; const rs = resolveQuote(c); if (rs.length) painted.push({ id: c.id, ranges: rs }); (c.id === hot ? hotRanges : all).push(...rs); }
     CSS.highlights.set('canvas-anno', new Highlight(...all));
     CSS.highlights.set('canvas-anno-hot', new Highlight(...hotRanges));
   }
@@ -1030,8 +1102,8 @@ const CLIENT = `
     let end = offsetIn(flat, range.endContainer, range.endOffset);
     if (start < 0 || end < 0 || end <= start) { const t = range.toString().trim(); start = flat.text.indexOf(t); end = start + t.length; }
     if (start < 0 || end <= start) return null;
-    while (start < end && /\s/.test(flat.text[start])) start++;
-    while (end > start && /\s/.test(flat.text[end - 1])) end--;
+    while (start < end && /\\s/.test(flat.text[start])) start++;
+    while (end > start && /\\s/.test(flat.text[end - 1])) end--;
     const exact = flat.text.slice(start, end);
     if (!exact) return null;
     const sel = { type: 'TextQuoteSelector', exact };
@@ -1045,7 +1117,7 @@ const CLIENT = `
     return sel;
   }
   const anno = $('#anno'); let pendingSel = null;
-  function hideAnno() { anno.hidden = true; $('#anno-form').hidden = true; $('#anno-start').hidden = false; pendingSel = null; }
+  function hideAnno() { anno.hidden = true; $('#anno-form').hidden = true; $('#anno-start').hidden = false; pendingSel = null; $$('.region.draft').forEach((b) => b.remove()); }
   document.addEventListener('selectionchange', () => {
     if (!$('#anno-form').hidden) return;
     const s = document.getSelection();
@@ -1060,18 +1132,23 @@ const CLIENT = `
     anno.style.top = Math.max(8, r.top - anno.offsetHeight - 8) + 'px';
   });
   $('#anno-start').addEventListener('mousedown', (e) => e.preventDefault());
-  $('#anno-start').addEventListener('click', () => {
-    if (!pendingSel) return;
-    $('#anno-quote').textContent = '“' + pendingSel.selector.exact + '”';
-    $('#anno-start').hidden = true; $('#anno-form').hidden = false; $('#anno-text').value = ''; $('#anno-text').focus();
-  });
+  /** Open the comment form for pendingSel: a quote of selected words, or a region of an image. */
+  function showAnnoForm(label) {
+    $('#anno-quote').textContent = label;
+    anno.hidden = false; $('#anno-start').hidden = true; $('#anno-form').hidden = false; $('#anno-text').value = '';
+    const r = pendingSel.rect; const w = anno.offsetWidth, h = anno.offsetHeight;
+    anno.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    anno.style.top = (r.bottom + h + 16 < window.innerHeight ? r.bottom + 8 : Math.max(8, r.top - h - 8)) + 'px';
+    $('#anno-text').focus();
+  }
+  $('#anno-start').addEventListener('click', () => { if (pendingSel) showAnnoForm('“' + pendingSel.selector.exact + '”'); });
   $('#anno-cancel').addEventListener('click', hideAnno);
   $('#anno-form').addEventListener('submit', (e) => {
     e.preventDefault(); const text = $('#anno-text').value.trim(); if (!text || !pendingSel) return;
     const now = new Date().toISOString(); const draft = e.submitter && e.submitter.value === 'draft';
     answers.comments.push({ id: 'c' + Date.now().toString(36), node: pendingSel.node, selector: pendingSel.selector, text, at: now, ...(draft ? {} : { sent: now }) });
     const node = pendingSel.node; hideAnno(); document.getSelection()?.removeAllRanges();
-    renderComments(); DATA.questions.forEach((q) => markAnswered(q.id)); save(); select(node, { from: 'left' }); if (!draft) notice('Sent to the agent');
+    renderComments(); DATA.questions.forEach((q) => markAnswered(q.id)); save(); if (!node.startsWith('f:')) select(node, { from: 'left' }); if (!draft) notice('Sent to the agent');
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !anno.hidden) hideAnno(); });
   document.addEventListener('click', (e) => {
@@ -1308,20 +1385,208 @@ const CLIENT = `
     try { await navigator.clipboard.writeText(a.dataset.path + ':' + a.dataset.line); a.classList.add('copied'); setTimeout(() => a.classList.remove('copied'), 800); } catch {}
   }, true);
 
-  // ---- export: show, copy, and try a download (some hosts block downloads)
-  $('#export').addEventListener('click', async () => {
-    const json = JSON.stringify(answers, null, 2);
-    const box = $('#export-box'); box.hidden = !box.hidden;
-    $('#export-text').value = json;
-    let note = 'select and copy, or save as ' + DATA.doc + '.answers.json';
-    try { await navigator.clipboard.writeText(json); note = 'copied to clipboard · ' + note; } catch {}
-    $('#export-note').textContent = note;
+  // ---- markdown links: a .md source's View and a [[wikilink]] open the file through the servlet; off it, neither can
+  if (!/^https?:$/.test(location.protocol)) { $$('.src-view').forEach((a) => a.remove()); $$('a.file-link').forEach((a) => a.replaceWith(a.textContent)); }
+  ${WIKILINK_SCRIPT}
+  // ---- file viewer: View and every /f/ link open the file in a modal over the page, its comments
+  // beside it. A file's comments are ordinary comments on node "f:<path>": words selected in
+  // markdown or code carry a TextQuoteSelector, a box dragged on an image or a PDF page carries a
+  // FragmentSelector (xywh=percent, plus page= on a PDF), and a general comment carries none.
+  // Modifier-clicks and "Open in tab" still open the plain /f/ page.
+  resolveWikilinks(document, '');
+  const viewer = $('#viewer'); const vdoc = $('#viewer-doc');
+  const MEDIA = /[.](png|jpe?g|gif|webp|avif|svg)$/i;
+  const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  let vpath = null, vview = '';
+  const fileNode = (p) => 'f:' + p;
+  const isRegion = (c) => !!c.selector && c.selector.type === 'FragmentSelector';
+  function regionOf(c) {
+    const m = /(?:page=([0-9]+)&)?xywh=percent:([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)/.exec(c.selector.value || '');
+    return m && { page: m[1] ? Number(m[1]) : 0, x: +m[2], y: +m[3], w: +m[4], h: +m[5] };
+  }
+  function regionLabel(c) { const g = regionOf(c); return 'Region' + (g && g.page ? ' on page ' + g.page : ''); }
+  function fileOfHref(href) {
+    try { const u = new URL(href, location.href); if (u.origin !== location.origin || !u.pathname.startsWith('/f/')) return null; return { path: decodeURIComponent(u.pathname.slice(3)), hash: u.hash, view: u.searchParams.get('view') || '' }; } catch { return null; }
+  }
+  document.addEventListener('click', (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest('a[href]'); if (!a || a.id === 'viewer-tab') return;
+    const f = fileOfHref(a.getAttribute('href')); if (!f) return;
+    e.preventDefault(); e.stopPropagation(); openViewer(f.path, f.hash, f.view);
+  }, true);
+  async function openViewer(path, hash, view) {
+    vpath = path; vview = view || '';
+    const lines = /^#L([0-9]+)(?:-L([0-9]+))?$/.exec(hash || '');
+    const md = /[.]md$/i.test(path);
+    if (lines && md) vview = 'source'; // a line range means lines, not the rendered page
+    $('#viewer-path').textContent = path;
+    $('#viewer-tab').href = '/f/' + encPath(path) + (vview ? '?view=' + vview : '') + (hash || '');
+    const toggle = $('#viewer-toggle'); toggle.hidden = !md; toggle.textContent = vview === 'source' ? 'Rendered' : 'Source';
+    viewer.hidden = false; body.classList.add('viewing'); hideAnno(); hideQpop();
+    vdoc.className = 'viewer-doc'; vdoc.innerHTML = '<p class="muted">Loading…</p>'; $('#viewer-note').textContent = '';
+    renderComments();
+    if (MEDIA.test(path)) {
+      vdoc.classList.add('media');
+      vdoc.innerHTML = '<div class="stage" data-page="0"><img src="/f/' + encPath(path) + '" alt="' + esc(path) + '" draggable="false"><div class="regions"></div></div>';
+      $('#viewer-note').textContent = 'Drag on the image to comment on a region.';
+      $('img', vdoc).addEventListener('load', () => renderComments());
+    } else if (/[.]pdf$/i.test(path)) {
+      await showPdf(path);
+    } else {
+      let html = null, err = '';
+      try { const r = await fetch('/f/' + encPath(path) + '?part=body' + (vview === 'source' ? '&view=source' : '')); if (r.ok) html = await r.text(); else err = await r.text(); } catch (x) { err = String(x); }
+      if (vpath !== path) return;
+      vdoc.innerHTML = html !== null ? '<div class="viewer-text" data-node="' + esc(fileNode(path)) + '">' + html + '</div>' : '<p class="muted">' + esc(err || 'Could not load the file.') + '</p>';
+      resolveWikilinks(vdoc, path.replace(/[^/]*$/, ''));
+      $('#viewer-note').textContent = html !== null ? 'Select words to comment on them.' : '';
+      if (lines) {
+        const a = +lines[1], b = +(lines[2] || lines[1]);
+        for (let n = a; n <= b; n++) vdoc.querySelector('#L' + n)?.classList.add('hl');
+        vdoc.querySelector('#L' + a)?.scrollIntoView({ block: 'center' });
+      }
+      renderComments();
+    }
+  }
+  function closeViewer() { viewer.hidden = true; body.classList.remove('viewing'); vdoc.innerHTML = ''; vpath = null; hideAnno(); hideQpop(); renderComments(); }
+  // pdf.js comes from a CDN on first use; when it cannot load, the browser's own viewer shows the
+  // PDF in a frame and only general comments are possible.
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    return new Promise((res, rej) => {
+      // The script is pinned by hash. The worker is fetched by pdf.js itself from workerSrc, which cannot carry one.
+      const s = document.createElement('script'); s.src = PDFJS + 'pdf.min.js';
+      s.integrity = 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e'; s.crossOrigin = 'anonymous';
+      const t = setTimeout(() => rej(new Error('timed out')), 8000);
+      s.onload = () => { clearTimeout(t); const lib = window.pdfjsLib; if (!lib) return rej(new Error('no pdfjsLib')); lib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; res(lib); };
+      s.onerror = () => { clearTimeout(t); rej(new Error('blocked')); };
+      document.head.appendChild(s);
+    });
+  }
+  async function showPdf(path) {
+    const url = '/f/' + encPath(path);
+    vdoc.classList.add('pdf');
+    try {
+      const lib = await loadPdfJs();
+      const pdf = await lib.getDocument(url).promise;
+      if (vpath !== path) return;
+      vdoc.innerHTML = '';
+      const n = Math.min(pdf.numPages, 150); const width = Math.max(320, vdoc.clientWidth - 48); const dpr = window.devicePixelRatio || 1;
+      $('#viewer-note').textContent = 'Drag on a page to comment on a region.';
+      for (let p = 1; p <= n; p++) {
+        const page = await pdf.getPage(p); if (vpath !== path) return;
+        const vp = page.getViewport({ scale: (width / page.getViewport({ scale: 1 }).width) * dpr });
+        const stage = document.createElement('div'); stage.className = 'stage'; stage.dataset.page = String(p);
+        const canvas = document.createElement('canvas'); canvas.width = vp.width; canvas.height = vp.height;
+        stage.appendChild(canvas); stage.insertAdjacentHTML('beforeend', '<span class="page-n">' + p + '</span><div class="regions"></div>');
+        vdoc.appendChild(stage);
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+        if (p === 1 || p === n) renderComments();
+      }
+      if (pdf.numPages > n) vdoc.insertAdjacentHTML('beforeend', '<p class="muted">Showing the first ' + n + ' of ' + pdf.numPages + ' pages.</p>');
+    } catch {
+      if (vpath !== path) return;
+      vdoc.innerHTML = '<iframe class="pdf-frame" src="' + url + '" title="' + esc(path) + '"></iframe>';
+      $('#viewer-note').textContent = 'The PDF viewer (pdf.js) did not load, so region comments are off here; general comments still work.';
+      renderComments();
+    }
+  }
+  // The viewer's thread list and the regions drawn over the image or pages; called by renderComments.
+  function renderViewer() {
+    $$('a.src-view').forEach((a) => { const f = fileOfHref(a.getAttribute('href')); const n = f ? answers.comments.filter((c) => c.node === fileNode(f.path)).length : 0; a.textContent = n ? 'View · ' + n : 'View'; a.title = n ? n + ' comment' + (n === 1 ? '' : 's') + ' on this file' : 'Open in the viewer'; });
+    if (!vpath) return;
+    const node = fileNode(vpath); const mine = answers.comments.filter((c) => c.node === node);
+    const box = $('#viewer-comments');
+    const drafts = {}; $$('.reply-form[data-reply-comment]', box).forEach((f) => { const v = $('textarea', f).value; if (v) drafts[f.dataset.replyComment] = v; });
+    $('.comment-list', box).innerHTML = mine.map((c) => threadHtml(c, node)).join('');
+    Object.entries(drafts).forEach(([id, v]) => { const f = $('.reply-form[data-reply-comment="' + CSS.escape(id) + '"]', box); if (f) $('textarea', f).value = v; });
+    $('#viewer-empty').hidden = mine.length > 0;
+    $('#viewer-count').textContent = mine.length ? String(mine.length) : '';
+    $$('.regions', vdoc).forEach((r) => { r.innerHTML = ''; });
+    for (const c of mine) {
+      if (!isRegion(c)) continue; const g = regionOf(c); if (!g) continue;
+      const layer = $('.stage[data-page="' + g.page + '"] .regions', vdoc); if (!layer) continue;
+      layer.insertAdjacentHTML('beforeend', '<div class="region" data-region="' + esc(c.id) + '" title="' + esc(c.text) + '" style="left:' + g.x + '%;top:' + g.y + '%;width:' + g.w + '%;height:' + g.h + '%"></div>');
+    }
+  }
+  // Drag a box on an image or a page; the comment form opens beside it.
+  let drag = null;
+  function dragRect(e, d) { const clamp = (v) => Math.max(0, Math.min(100, v)); const x1 = clamp(((e.clientX - d.r.left) / d.r.width) * 100), y1 = clamp(((e.clientY - d.r.top) / d.r.height) * 100); return { x: Math.min(d.x0, x1), y: Math.min(d.y0, y1), w: Math.abs(x1 - d.x0), h: Math.abs(y1 - d.y0) }; }
+  vdoc.addEventListener('pointerdown', (e) => {
+    const stage = e.target.closest('.stage'); if (!stage || e.button !== 0 || e.target.closest('.region')) return;
+    e.preventDefault(); hideAnno();
+    const r = stage.getBoundingClientRect(); const box = document.createElement('div'); box.className = 'region draft'; $('.regions', stage).appendChild(box);
+    drag = { stage, r, box, x0: ((e.clientX - r.left) / r.width) * 100, y0: ((e.clientY - r.top) / r.height) * 100 };
+    stage.setPointerCapture(e.pointerId);
+  });
+  vdoc.addEventListener('pointermove', (e) => { if (!drag) return; const g = dragRect(e, drag); Object.assign(drag.box.style, { left: g.x + '%', top: g.y + '%', width: g.w + '%', height: g.h + '%' }); });
+  vdoc.addEventListener('pointerup', (e) => {
+    if (!drag) return; const d = drag; drag = null; const g = dragRect(e, d);
+    if (g.w < 1 || g.h < 1) { d.box.remove(); return; }
+    const page = Number(d.stage.dataset.page); const f = (v) => Math.round(v * 100) / 100;
+    pendingSel = { node: fileNode(vpath), selector: { type: 'FragmentSelector', conformsTo: 'http://www.w3.org/TR/media-frags/', value: (page ? 'page=' + page + '&' : '') + 'xywh=percent:' + [g.x, g.y, g.w, g.h].map(f).join(',') }, rect: d.box.getBoundingClientRect() };
+    showAnnoForm(page ? 'Region on page ' + page : 'Region');
+  });
+  // A region and its thread light each other up; a click on one goes to the other.
+  document.addEventListener('mouseover', (e) => {
+    if (!vpath) return;
+    const li = e.target.closest('#viewer li[data-comment]'); const rg = e.target.closest('.region[data-region]');
+    const id = li ? li.dataset.comment : rg ? rg.dataset.region : null;
+    $$('.region[data-region]', vdoc).forEach((r) => r.classList.toggle('hot', r.dataset.region === id));
+  });
+  vdoc.addEventListener('click', (e) => { const rg = e.target.closest('.region[data-region]'); if (rg) flashThread(rg.dataset.region); });
+  document.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-region-of]'); if (!chip) return;
+    const rg = $('.region[data-region="' + CSS.escape(chip.dataset.regionOf) + '"]', vdoc); if (!rg) return;
+    rg.scrollIntoView({ block: 'center', behavior: 'smooth' }); rg.classList.remove('flash'); void rg.offsetWidth; rg.classList.add('flash');
+  });
+  function flashThread(id) {
+    const li = $('#viewer li[data-comment="' + CSS.escape(id) + '"]'); if (!li) return;
+    li.scrollIntoView({ block: 'center', behavior: 'smooth' }); li.classList.remove('flash'); void li.offsetWidth; li.classList.add('flash');
+  }
+  $('#viewer-form').addEventListener('submit', (e) => {
+    e.preventDefault(); const ta = $('textarea', e.target); const text = ta.value.trim(); if (!text || !vpath) return;
+    const now = new Date().toISOString(); const draft = e.submitter && e.submitter.value === 'draft';
+    answers.comments.push({ id: 'c' + Date.now().toString(36), node: fileNode(vpath), text, at: now, ...(draft ? {} : { sent: now }) });
+    ta.value = ''; renderComments(); save(); if (!draft) notice('Sent to the agent');
+  });
+  $('#viewer-close').addEventListener('click', closeViewer);
+  $('#viewer-toggle').addEventListener('click', () => { if (vpath) openViewer(vpath, '', vview === 'source' ? '' : 'source'); });
+  viewer.addEventListener('click', (e) => { if (e.target === viewer) closeViewer(); });
+  // Capture, so an open comment form closes first and the viewer on the next Escape.
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !viewer.hidden && anno.hidden && lightbox.hidden && !e.target.closest('textarea')) closeViewer(); }, true);
+
+  // ---- top-bar Comment: the General notes form in the walkthrough, for a comment on the whole document
+  $('#top-comment').addEventListener('click', () => {
+    const sec = $('#node-' + CSS.escape(DATA.doc)); if (!sec) return;
+    openRight(true); select(DATA.doc, { from: 'left' });
+    const form = $('.comment-form', sec); if (form && form.hidden) $('[data-comment-on]', sec).click(); else if (form) $('textarea', form).focus();
+  });
+
+  // ---- export: the split button's main half opens a sheet with the JSON to copy or save; ↓ downloads at once
+  const exportSheet = $('#export-sheet');
+  const exportName = () => DATA.doc + '.answers.json';
+  const exportJson = () => JSON.stringify(answers, null, 2);
+  /** Some hosts block downloads; the sheet's text stays the fallback. */
+  function download() {
     try {
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = DATA.doc + '.answers.json'; a.click();
-      URL.revokeObjectURL(a.href);
+      a.href = URL.createObjectURL(new Blob([exportJson()], { type: 'application/json' })); a.download = exportName(); a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch {}
+  }
+  $('#export').addEventListener('click', () => {
+    $('#export-text').value = exportJson();
+    $('#export-note').textContent = 'Copy it, or save it as ' + exportName() + '.';
+    exportSheet.hidden = false; $('#export-text').select();
   });
+  $('#export-download').addEventListener('click', download);
+  $('#export-save').addEventListener('click', download);
+  $('#export-copy').addEventListener('click', async (e) => {
+    try { await navigator.clipboard.writeText(exportJson()); e.target.textContent = 'Copied'; setTimeout(() => (e.target.textContent = 'Copy'), 1200); } catch { $('#export-text').select(); }
+  });
+  $('#export-close').addEventListener('click', () => (exportSheet.hidden = true));
+  exportSheet.addEventListener('click', (e) => { if (e.target === exportSheet) exportSheet.hidden = true; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !exportSheet.hidden) exportSheet.hidden = true; });
 
   const AGENT_ICON = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1l1.6 4.4L14 7l-4.4 1.6L8 13l-1.6-4.4L2 7l4.4-1.6z"/></svg>';
   // ---- threads: a comment or an ask is the root; the agent's answers and the reviewer's follow-ups sit under it
@@ -1334,7 +1599,7 @@ const CLIENT = `
   function replyFormHtml(attr) { return '<form class="reply-form" ' + attr + '><span class="avatar">Y</span><textarea rows="1" placeholder="Reply…" aria-label="Reply"></textarea><button type="submit" class="primary">Reply</button></form>'; }
   function threadHtml(c, sec) {
     const st = threadState(c); const who = c.by || 'You';
-    const quote = c.selector ? '<span class="quote' + (resolveQuote(c).length ? '' : ' orphan') + '" data-jump="' + c.id + '" title="jump to the words">“' + esc(c.selector.exact.length > 120 ? c.selector.exact.slice(0, 117) + '…' : c.selector.exact) + '”</span>' : '';
+    const quote = c.selector && c.selector.type === 'FragmentSelector' ? '<span class="quote region-chip" data-region-of="' + esc(c.id) + '" title="show the region">▭ ' + regionLabel(c) + '</span>' : c.selector ? '<span class="quote' + (resolveQuote(c).length ? '' : ' orphan') + '" data-jump="' + c.id + '" title="jump to the words">“' + esc(c.selector.exact.length > 120 ? c.selector.exact.slice(0, 117) + '…' : c.selector.exact) + '”</span>' : '';
     const state = !c.sent ? '<span class="state draft">Draft</span>' : st.awaiting ? '<span class="state">Awaiting reply</span>' : '';
     const root = '<div class="msg reviewer root"><span class="avatar" title="' + esc(who) + '">' + esc(who.slice(0, 1).toUpperCase()) + '</span><div class="msg-body"><div class="meta"><span class="who">' + esc(who) + '</span><time>' + c.at.slice(0, 16).replace('T', ' ') + '</time>' + state + (c.node !== sec ? '<span class="for">on ' + esc(DATA.nodeTitles[c.node] || c.node) + '</span>' : '') + '</div>' + quote + '<div class="text">' + esc(c.text) + '</div></div></div>';
     const tail = c.sent ? replyFormHtml('data-reply-comment="' + esc(c.id) + '"') : '<div class="foot"><button type="button" class="quiet send" data-send-comment="' + esc(c.id) + '">Send to agent</button></div>';
@@ -1372,6 +1637,7 @@ const CLIENT = `
   function hideQpop() { if (qpop.hidden) return; qpop.hidden = true; qpopFor = null; body.classList.remove('over-quote'); paintQuotes(); }
   function goToThread(id) {
     const c = answers.comments.find((x) => x.id === id); if (!c) return;
+    if (c.node.startsWith('f:')) { hideQpop(); flashThread(id); return; }
     hideQpop(); openRight(true); select(c.node, { from: 'left' });
     const li = $('li[data-comment="' + CSS.escape(id) + '"]'); if (!li) return;
     li.scrollIntoView({ block: 'center', behavior: 'smooth' });
