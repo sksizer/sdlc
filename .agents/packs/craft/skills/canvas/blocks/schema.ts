@@ -2,6 +2,7 @@
 import type { BlockOut } from '../lib/doc.ts'
 import { escapeHtml, prose } from '../lib/doc.ts'
 import type { Column, Ref, Relation, SchemaBlock, Table } from './types.ts'
+import { loc, para, parts, table } from '../lib/markdown.ts'
 
 const ref = (r: Ref) => `${r.table}.${r.column}`
 const colId = (t: Table, c: Column) => c.id || `${t.id}.${c.name}`
@@ -120,4 +121,47 @@ export function nodeIds(b: SchemaBlock): string[] {
     ...(b.relations ?? []).map((r) => r.id),
     ...(b.groups ?? []).map((g) => g.id),
   ]
+}
+
+export function markdown(b: SchemaBlock): string {
+  const rels = derivedRelations(b)
+  const tables = b.tables.map((t) => {
+    const rows = t.columns.map((c) => [
+      `\`${c.name}\``,
+      c.type,
+      c.nullable ? 'null' : 'not null',
+      c.default ?? '',
+      [
+        c.pk || t.primaryKey?.includes(c.name) ? 'PK' : '',
+        c.references ? `→ ${c.references.table}.${c.references.column}` : '',
+        ...(c.flags ?? []),
+      ]
+        .filter(Boolean)
+        .join(' '),
+      c.purpose ?? '',
+    ])
+    const idx = (t.indexes ?? []).map(
+      (i) =>
+        `- \`${i.name}\` on ${i.columns.join(', ')}${i.unique ? ' (unique)' : ''}${i.where ? ` where ${i.where}` : ''}${i.purpose ? ` — ${i.purpose}` : ''}`,
+    )
+    return parts(
+      `### ${t.schema ? `${t.schema}.` : ''}${t.name}${t.rows != null ? ` _(~${t.rows} rows)_` : ''}${t.source ? ` ${loc(t.source)}` : ''}`,
+      para(t.purpose),
+      table(['Column', 'Type', 'Null', 'Default', 'Keys', 'Purpose'], rows),
+      idx.length ? `Indexes:\n\n${idx.join('\n')}` : '',
+      ...(t.notes ?? []).map((n) => `> ${n}`),
+    )
+  })
+  const relations = rels.length
+    ? parts(
+        '### Relations',
+        rels
+          .map(
+            (r) =>
+              `- ${r.from.table}.${r.from.column} → ${r.to.table}.${r.to.column} (${r.cardinality})${r.note ? ` — ${r.note}` : ''}`,
+          )
+          .join('\n'),
+      )
+    : ''
+  return parts(...tables, relations)
 }

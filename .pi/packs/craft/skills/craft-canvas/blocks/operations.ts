@@ -3,6 +3,7 @@ import type { BlockOut } from '../lib/doc.ts'
 import { escapeHtml, prose } from '../lib/doc.ts'
 import { tint } from './annotated-text.ts'
 import type { Operation, OperationsBlock } from './types.ts'
+import { fence, indent, items, loc, parts } from '../lib/markdown.ts'
 
 function opHtml(op: Operation, n: number, language?: string): string {
   const code = (s: string) => `<pre class="code">${tint(escapeHtml(s), language)}</pre>`
@@ -73,4 +74,36 @@ export function check(b: OperationsBlock): string[] {
 
 export function nodeIds(b: OperationsBlock): string[] {
   return (b.phases ?? []).map((p) => p.id)
+}
+
+function opMarkdown(op: Operation, n: number, language?: string): string {
+  const head = `${n}. **${op.title}** · ${op.kind}${op.target ? ` ${op.target}` : ''} · risk ${op.risk}${op.reversible ? '' : ' · irreversible'}${op.source ? ` ${loc(op.source)}` : ''}`
+  const body = parts(
+    fence(op.code, language ?? ''),
+    op.detail,
+    op.locks ? `Locks: ${op.locks}` : '',
+    op.rollback ? `Rollback: ${op.rollback}` : '',
+    op.before || op.after ? `Before: \`${op.before ?? '—'}\` · After: \`${op.after ?? '—'}\`` : '',
+    ...(op.warnings ?? []).map((w) => `⚠ ${w}`),
+  )
+  return parts(head, body ? indent(body) : '')
+}
+
+export function markdown(b: OperationsBlock): string {
+  const byId = new Map(b.operations.map((o, i) => [o.id, { o, n: i + 1 }]))
+  if (!b.phases?.length) return items(b.operations.map((o, i) => opMarkdown(o, i + 1, b.language)))
+  return b.phases
+    .map((p) =>
+      parts(
+        `### ${p.title}`,
+        p.detail,
+        items(
+          p.ops
+            .map((id) => byId.get(id))
+            .filter((x): x is { o: Operation; n: number } => !!x)
+            .map(({ o, n }) => opMarkdown(o, n, b.language)),
+        ),
+      ),
+    )
+    .join('\n\n')
 }

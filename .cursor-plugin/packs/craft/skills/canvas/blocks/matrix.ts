@@ -2,6 +2,7 @@
 import type { BlockOut } from '../lib/doc.ts'
 import { escapeHtml, prose } from '../lib/doc.ts'
 import type { CellState, MatrixBlock } from './types.ts'
+import { parts, table } from '../lib/markdown.ts'
 
 const STATES: CellState[] = ['valid', 'warn', 'error', 'skip']
 const GLYPH: Record<CellState, string> = { valid: '✓', warn: '!', error: '✕', skip: '–' }
@@ -75,4 +76,28 @@ export function check(b: MatrixBlock): string[] {
 
 export function nodeIds(b: MatrixBlock): string[] {
   return (b.cols ?? []).map((c) => c.id)
+}
+
+const MARK: Record<CellState, string> = { valid: '✓', warn: '⚠', error: '✗', skip: '–' }
+
+export function markdown(b: MatrixBlock): string {
+  const cells = cellMap(b)
+  const rows = b.rows.map((r) => [
+    r.label,
+    ...b.cols.map((c) => MARK[cells.get(`${r.id}\u0000${c.id}`)?.state ?? b.default ?? 'skip']),
+  ])
+  const notes = b.cells
+    .filter((c) => c.note || c.hint)
+    .map(
+      (c) =>
+        `- **${b.rows.find((r) => r.id === c.row)?.label ?? c.row} × ${b.cols.find((x) => x.id === c.col)?.label ?? c.col}** ${MARK[c.state]}${c.note ? ` ${c.note}` : ''}${c.hint ? ` _${c.hint}_` : ''}`,
+    )
+  return parts(
+    table(
+      [`${b.rowLabel ?? ''} \\ ${b.colLabel ?? ''}`.trim(), ...b.cols.map((c) => c.label)],
+      rows,
+    ),
+    '✓ valid · ⚠ warn · ✗ error · – skip',
+    notes.join('\n'),
+  )
 }

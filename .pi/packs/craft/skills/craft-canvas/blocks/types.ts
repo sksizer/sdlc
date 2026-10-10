@@ -6,7 +6,7 @@
  * Anchors are W3C Web Annotation selectors. Prefer the quote form: agents are
  * reliable at quoting a fragment and unreliable at counting characters.
  */
-import type { Node } from '../lib/doc.ts'
+import type { Node, Question } from '../lib/doc.ts'
 
 export interface BlockBase extends Node {
   type: string
@@ -276,8 +276,113 @@ export interface PlanBlock extends BlockBase {
   phases: PlanPhase[]
 }
 
+// ---------------------------------------------------------------- code-flow
+
+export interface FlowEdge {
+  /** The step this one goes to. */
+  to: string
+  /** The condition, e.g. `order is null`. */
+  when?: string
+}
+
+export interface FlowStep extends Node {
+  title: string
+  /** The function, handler or symbol this step runs in. */
+  symbol?: string
+  kind?: 'call' | 'branch' | 'loop' | 'await' | 'return' | 'emit' | 'error'
+  /** Call depth for indentation: 0 at the entry, 1 inside what it called, and so on. */
+  depth?: number
+  /** The lines that matter at this step; `source` says where they live. */
+  code?: string
+  summary: string
+  detail?: string
+  /** Where control goes next when not simply the next step. */
+  next?: FlowEdge[]
+  warnings?: string[]
+}
+
+/**
+ * One path through code, across functions and files: each step a few lines
+ * with where they live, in the order they run, with branches named. One node
+ * per step.
+ */
+export interface CodeFlowBlock extends BlockBase {
+  type: 'code-flow'
+  language?: string
+  /** What starts the flow, e.g. `POST /orders/:id/ship`. */
+  entry?: string
+  steps: FlowStep[]
+}
+
+// ---------------------------------------------------------------- workflow
+
+/** Who or what does a step: a role, a team, a system. */
+export interface Lane extends Node {
+  label: string
+  detail?: string
+}
+
+export interface WorkflowStep extends Node {
+  title: string
+  lane: string
+  kind?: 'start' | 'action' | 'decision' | 'wait' | 'handoff' | 'end'
+  summary: string
+  detail?: string
+  /** Where it goes next when not simply the next step; a decision names every branch. */
+  next?: FlowEdge[]
+  /** How long it usually takes or may take, e.g. `≤ 1 day`. */
+  duration?: string
+  /** What the step produces, e.g. a PR, a ticket, an approval. */
+  artifacts?: string[]
+  warnings?: string[]
+}
+
+/**
+ * A standard process: steps in order, each in a lane (who does it), with
+ * decisions and hand-offs named. One node per step and per lane.
+ */
+export interface WorkflowBlock extends BlockBase {
+  type: 'workflow'
+  /** What starts it, e.g. `a PR is opened`. */
+  trigger?: string
+  lanes: Lane[]
+  steps: WorkflowStep[]
+}
+
+// ---------------------------------------------------------------- figure
+
+/**
+ * One image with a caption: a mockup, a screenshot, a chart. `src` is a path
+ * relative to the document's folder (no `..`); the servlet serves it and a
+ * rendered page beside the image finds it. One node.
+ */
+export interface FigureBlock extends BlockBase {
+  type: 'figure'
+  src: string
+  alt: string
+  caption?: string
+  /** Paragraphs for the walkthrough: what to look at, why it is proposed. */
+  detail?: string
+  /** A page to open for the live version, e.g. the mockup the image was taken from. */
+  href?: string
+}
+
+// ---------------------------------------------------------------- question
+
+/**
+ * One or more questions placed in the centre column at this point in the reading, so a decision
+ * sits next to the thing it is about. Questions that belong beside one node go in the document's
+ * `questions` with `about` instead, and the walkthrough carries them under that node.
+ */
+export interface QuestionBlock extends BlockBase {
+  type: 'question'
+  questions: Question[]
+}
+
 export type Block =
   | ProseBlock
+  | QuestionBlock
+  | FigureBlock
   | AnnotatedTextBlock
   | SchemaBlock
   | OperationsBlock
@@ -285,3 +390,5 @@ export type Block =
   | TraceBlock
   | PrecedenceBlock
   | PlanBlock
+  | CodeFlowBlock
+  | WorkflowBlock

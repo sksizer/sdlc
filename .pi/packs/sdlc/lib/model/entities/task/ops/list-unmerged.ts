@@ -27,6 +27,7 @@
 
 import { z } from 'zod'
 
+import { Gh, PR_REF_FIELDS } from '@sksizer/easy-gh'
 import { Git } from '@sksizer/easy-git'
 
 import { defineOp } from '@lib/registry'
@@ -49,40 +50,29 @@ interface OpenPr {
 
 /** Open PRs against the repo, or null when gh is unavailable/failed. */
 function listOpenPrs(projectRoot: string, ctx: OpCtx, limit: number): OpenPr[] | null {
-  const res = ctx.gh.run(
-    ['pr', 'list', '--state', 'open', '--json', 'number,headRefName,url', '--limit', String(limit)],
-    { cwd: projectRoot },
-  )
-  if (res.exitCode !== 0) return null
-  try {
-    const rows = JSON.parse(res.stdout) as unknown
-    if (!Array.isArray(rows)) return null
-    return rows.flatMap((r) => {
-      const o = r as Record<string, unknown>
-      const number = typeof o['number'] === 'number' ? o['number'] : null
-      const headRefName = typeof o['headRefName'] === 'string' ? o['headRefName'] : null
-      const url = typeof o['url'] === 'string' ? o['url'] : ''
-      return number !== null && headRefName !== null ? [{ number, headRefName, url }] : []
-    })
-  } catch {
-    return null
-  }
+  const rows = new Gh(projectRoot, { runner: ctx.gh }).prList({
+    fields: PR_REF_FIELDS,
+    limit,
+  })
+  if (rows === null) return null
+  return rows
+    .filter((r) => r.headRefName !== '')
+    .map((r) => ({ number: r.number, headRefName: r.headRefName, url: r.url }))
 }
 
 /**
  * `<TASKS_DIR_REL>/*.md` paths present at `rev`, as a set. Empty when the rev
  * does not resolve.
  *
- * `try`, not the default door: this op degrades to a partial answer rather
+ * `soft`, not the default door: this op degrades to a partial answer rather
  * than failing a dedup pass. An unfetched `<remote>/<base>` is the common
  * case, and it is already visible to the caller — a missing baseline makes
  * every candidate report as unmerged, and every unresolvable head ref lands in
  * `skipped_refs`.
  */
 function taskPathsAtRev(git: Git, rev: string): Set<string> {
-  const res = git.try.lsTree(rev, { recursive: true, paths: [TASKS_DIR_REL + '/'] })
-  if (!res.ok) return new Set()
-  return new Set(res.value.map((e) => e.path).filter((p) => p.endsWith('.md')))
+  const entries = git.soft.lsTree(rev, { recursive: true, paths: [TASKS_DIR_REL + '/'] })
+  return new Set(entries.map((e) => e.path).filter((p) => p.endsWith('.md')))
 }
 
 /** The first `# ` heading in a task body, or "" when absent. */

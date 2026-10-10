@@ -2,6 +2,7 @@
 import type { BlockOut, Section } from '../lib/doc.ts'
 import { escapeHtml, prose } from '../lib/doc.ts'
 import type { PlanBlock, PlanStatus } from './types.ts'
+import { parts } from '../lib/markdown.ts'
 
 const STATUSES: PlanStatus[] = ['todo', 'doing', 'done', 'blocked']
 
@@ -23,7 +24,7 @@ export function render(b: PlanBlock): BlockOut {
         id: ph.id,
         title: ph.label,
         source: ph.source,
-        html: `<h2>${escapeHtml(ph.label)}</h2><div class="kicker">${meta(ph)}</div>${prose(ph.detail)}`,
+        html: '',
       })
       const streams = ph.workstreams
         .map((ws) => {
@@ -31,7 +32,7 @@ export function render(b: PlanBlock): BlockOut {
             id: ws.id,
             title: ws.label,
             source: ws.source,
-            html: `<h2>${escapeHtml(ws.label)}</h2><p class="muted">in ${escapeHtml(ph.label)}</p>${prose(ws.detail)}`,
+            html: ws.detail ? `<h2>${escapeHtml(ws.label)}</h2>${prose(ws.detail)}` : '',
           })
           const tasks = ws.tasks
             .map((t) => {
@@ -41,7 +42,7 @@ export function render(b: PlanBlock): BlockOut {
                 n,
                 title: t.label,
                 source: t.source,
-                html: `<h2>${n}. ${escapeHtml(t.label)}</h2><div class="kicker">${meta(t)}</div>${prose(t.detail)}`,
+                html: t.detail ? `<h2>${n}. ${escapeHtml(t.label)}</h2>${prose(t.detail)}` : '',
               })
               return `<li class="row task ${t.status ?? ''}" data-node="${escapeHtml(t.id)}"><span class="badge">${n}</span><div><div class="title">${escapeHtml(t.label)}</div><div class="sub">${meta(t)}</div></div></li>`
             })
@@ -78,4 +79,36 @@ export function check(b: PlanBlock): string[] {
     }
   }
   return errors
+}
+
+function tag(x: { status?: PlanStatus; milestone?: string; gate?: string }): string {
+  return [
+    x.status && x.status !== 'todo' ? x.status : '',
+    x.milestone ? `milestone ${x.milestone}` : '',
+    x.gate ? `gate: ${x.gate}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+export function markdown(b: PlanBlock): string {
+  return b.phases
+    .map((p) =>
+      parts(
+        `### ${p.label}${tag(p) ? ` _(${tag(p)})_` : ''}`,
+        p.detail,
+        ...p.workstreams.map((w) =>
+          parts(
+            `**${w.label}**${w.detail ? ` — ${w.detail}` : ''}`,
+            w.tasks
+              .map(
+                (t) =>
+                  `- [${t.status === 'done' ? 'x' : ' '}] ${t.label}${tag(t) ? ` _(${tag(t)})_` : ''}${t.detail ? ` — ${t.detail}` : ''}`,
+              )
+              .join('\n'),
+          ),
+        ),
+      ),
+    )
+    .join('\n\n')
 }
