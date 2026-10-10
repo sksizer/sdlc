@@ -6,6 +6,7 @@
 import type { BlockOut, Section } from '../lib/doc.ts'
 import { escapeHtml, prose } from '../lib/doc.ts'
 import type { Anchor, AnnotatedTextBlock, Ref, Step } from './types.ts'
+import { fence, indent, items, loc, parts } from '../lib/markdown.ts'
 
 const SQL_KEYWORDS =
   /\b(WITH|RECURSIVE|SELECT|DISTINCT|FROM|WHERE|GROUP BY|HAVING|ORDER BY|LIMIT|OFFSET|JOIN|LEFT|RIGHT|INNER|OUTER|FULL|CROSS|ON|AS|AND|OR|NOT|IN|IS|NULL|CASE|WHEN|THEN|ELSE|END|OVER|PARTITION BY|ROWS|BETWEEN|UNBOUNDED|PRECEDING|CURRENT ROW|UNION|ALL|EXISTS|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|TYPE|ENUM|INDEX|COLUMN|ADD|CONSTRAINT|REFERENCES|PRIMARY KEY|FOREIGN KEY|DEFAULT|CONCURRENTLY|CHECK|VALIDATE|RETURNING|ASC|DESC|NULLS|FIRST|LAST|COALESCE|COUNT|SUM|AVG|MIN|MAX|ROW_NUMBER|RANK|LAG|LEAD|DATE_TRUNC|INTERVAL|TRUE|FALSE)\b/g
@@ -68,7 +69,9 @@ export function resolveSelector(
     throw new Error(
       `${who}: exact text appears ${hits.length} times; add a prefix or suffix to pick one`,
     )
-  return { start: hits[0], end: hits[0] + sel.exact.length }
+  // hits is non-empty here: the empty case threw above.
+  const start = hits[0]!
+  return { start, end: start + sel.exact.length }
 }
 
 /** Resolve every step's anchor to a character range. */
@@ -89,8 +92,9 @@ export function anchoredText(text: string, ranges: Range[], language?: string): 
   const points = [...cuts].sort((a, b) => a - b)
   let out = ''
   for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i]
-    const b = points[i + 1]
+    // i + 1 < points.length by the loop bound.
+    const a = points[i]!
+    const b = points[i + 1]!
     const starting = ranges
       .filter((r) => r.start === a)
       .sort((x, y) => y.end - y.start - (x.end - x.start))
@@ -158,4 +162,26 @@ export function check(b: AnnotatedTextBlock): string[] {
     }
   }
   return errors
+}
+
+export function markdown(b: AnnotatedTextBlock): string {
+  const steps = b.steps.map((s, i) => {
+    const quote =
+      s.anchor.type === 'TextQuoteSelector' ? ` — \`${s.anchor.exact.replace(/\s+/g, ' ')}\`` : ''
+    const extra = [
+      s.touches?.length
+        ? `touches ${s.touches.map((t) => (typeof t === 'string' ? t : `${t.table}.${t.column}`)).join(', ')}`
+        : '',
+      s.cost?.rows != null ? `~${s.cost.rows} rows` : '',
+      s.cost?.note ?? '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
+    return parts(
+      `${i + 1}. **${s.title}**${quote}: ${s.summary}${extra ? ` _(${extra})_` : ''}${s.source ? ` ${loc(s.source)}` : ''}`,
+      s.detail ? indent(s.detail) : '',
+      ...(s.warnings ?? []).map((w) => `   - ⚠ ${w}`),
+    )
+  })
+  return parts(fence(b.text, b.language ?? ''), items(steps))
 }

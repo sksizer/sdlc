@@ -79,9 +79,6 @@ for a PR. Output: a markdown block between `<!-- sdlc-pr-stats:start -->` and
 - **Capped:** at most 150 files, 400 KB each and 20 seconds for the content passes. Anything
   skipped is named in the output, never dropped silently.
 
-sdlc users get the same through `sdlc pr stats`, and sdlc's task-work skill writes it into the PR
-it opens.
-
 ## Grading
 
 - Does the report name the PR or range it measured?

@@ -1,0 +1,160 @@
+{
+  "id": "ship-order-flow",
+  "title": "What happens when a label prints",
+  "summary": "One request, POST /orders/:id/ship, followed from the route to the event consumer across three files. Explanatory: no questions.",
+  "created": "2026-10-09",
+  "repo": {
+    "remote": "https://github.com/acme/shop",
+    "commit": "9f3c2a1d4e5b6c7d8e9f0a1b2c3d4e5f67890abc",
+    "root": "/path/to/repo"
+  },
+  "blocks": [
+    {
+      "id": "flow",
+      "type": "code-flow",
+      "title": "Ship an order",
+      "language": "ts",
+      "entry": "POST /orders/:id/ship, called by the warehouse label printer",
+      "steps": [
+        {
+          "id": "f-route",
+          "title": "The route parses the id and calls the worker",
+          "symbol": "routes/orders.ts → ship",
+          "kind": "call",
+          "depth": 0,
+          "summary": "No auth check here; the printer's token is checked by middleware one layer up.",
+          "code": "router.post('/orders/:id/ship', async (req, res) => {\n  const order = await markShipped(Number(req.params.id))\n  res.json(order)\n})",
+          "source": {
+            "uri": "services/api/routes/orders.ts",
+            "range": {
+              "start": { "line": 40, "character": 0 },
+              "end": { "line": 43, "character": 2 }
+            }
+          },
+          "detail": "`Number()` turns a bad id into `NaN`, which the worker then looks up and reports as not found. Fine, but the 404 hides a malformed request."
+        },
+        {
+          "id": "f-load",
+          "title": "Load the order",
+          "symbol": "markShipped",
+          "kind": "await",
+          "depth": 1,
+          "summary": "One primary-key read.",
+          "code": "const order = await db.orders.get(orderId)\nif (!order) throw new NotFound(orderId)",
+          "source": {
+            "uri": "services/warehouse/mark-shipped.ts",
+            "range": {
+              "start": { "line": 12, "character": 0 },
+              "end": { "line": 13, "character": 0 }
+            }
+          },
+          "next": [{ "to": "f-notfound", "when": "no row" }]
+        },
+        {
+          "id": "f-notfound",
+          "title": "Not found",
+          "symbol": "NotFound",
+          "kind": "error",
+          "depth": 1,
+          "summary": "Thrown to the route, which maps it to a 404.",
+          "source": {
+            "uri": "services/warehouse/mark-shipped.ts",
+            "range": {
+              "start": { "line": 13, "character": 0 },
+              "end": { "line": 13, "character": 0 }
+            }
+          }
+        },
+        {
+          "id": "f-guard",
+          "title": "Cancelled orders are left alone",
+          "symbol": "markShipped",
+          "kind": "branch",
+          "depth": 1,
+          "summary": "The guard runs before the write, but not atomically with it.",
+          "code": "if (order.status === 'cancelled') return order",
+          "source": {
+            "uri": "services/warehouse/mark-shipped.ts",
+            "range": {
+              "start": { "line": 14, "character": 0 },
+              "end": { "line": 14, "character": 0 }
+            }
+          },
+          "next": [{ "to": "f-return", "when": "status is cancelled" }],
+          "warnings": [
+            "A cancellation between this line and the update still gets the flag. This is the race the fulfillment review fixes."
+          ]
+        },
+        {
+          "id": "f-write",
+          "title": "Set the flag",
+          "symbol": "markShipped",
+          "kind": "await",
+          "depth": 1,
+          "summary": "Writes `shipped = true`; nothing checks that status still allows it.",
+          "code": "await db.orders.update(orderId, { shipped: true })",
+          "source": {
+            "uri": "services/warehouse/mark-shipped.ts",
+            "range": {
+              "start": { "line": 15, "character": 0 },
+              "end": { "line": 15, "character": 0 }
+            }
+          }
+        },
+        {
+          "id": "f-emit",
+          "title": "Emit order.shipped",
+          "symbol": "events.emit",
+          "kind": "emit",
+          "depth": 1,
+          "summary": "Fire and forget; consumers run out of band.",
+          "code": "await events.emit('order.shipped', { orderId })",
+          "source": {
+            "uri": "services/warehouse/mark-shipped.ts",
+            "range": {
+              "start": { "line": 16, "character": 0 },
+              "end": { "line": 16, "character": 0 }
+            }
+          },
+          "next": [{ "to": "f-consumer" }, { "to": "f-return" }]
+        },
+        {
+          "id": "f-consumer",
+          "title": "The notifier sends the email",
+          "symbol": "notify/on-shipped.ts",
+          "kind": "call",
+          "depth": 2,
+          "summary": "Reads the order again, so a cancelled order can still get a shipped email.",
+          "code": "events.on('order.shipped', async ({ orderId }) => {\n  const order = await db.orders.get(orderId)\n  await mail.send(order.customer_email, shippedTemplate(order))\n})",
+          "source": {
+            "uri": "services/notify/on-shipped.ts",
+            "range": {
+              "start": { "line": 8, "character": 0 },
+              "end": { "line": 11, "character": 2 }
+            }
+          },
+          "detail": "The consumer trusts the event. Once the status transition refuses `cancelled → shipped`, this path goes quiet for cancelled orders with no change here."
+        },
+        {
+          "id": "f-return",
+          "title": "Return the order to the route",
+          "symbol": "markShipped",
+          "kind": "return",
+          "depth": 1,
+          "summary": "The spread copies the row with the flag set, whether or not the write happened.",
+          "code": "return { ...order, shipped: true }",
+          "source": {
+            "uri": "services/warehouse/mark-shipped.ts",
+            "range": {
+              "start": { "line": 17, "character": 0 },
+              "end": { "line": 17, "character": 0 }
+            }
+          },
+          "warnings": [
+            "On the cancelled branch the function returns the row unchanged, but on the happy path it returns `shipped: true` without re-reading, so a concurrent cancel is invisible to the caller."
+          ]
+        }
+      ]
+    }
+  ]
+}

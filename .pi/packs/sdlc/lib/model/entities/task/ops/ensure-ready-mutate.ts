@@ -49,8 +49,7 @@
  * is never re-emitted whole.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync, unlinkSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { dirname, join, resolve, basename as pathBasename } from 'node:path'
 
 import { z } from 'zod'
@@ -305,33 +304,14 @@ function commitIn(io: CliIo, repo: string, path: string, subject: string, body: 
     return EXIT_WRITE_REFUSED
   }
 
-  const dir = mkdtempSync(join(tmpdir(), 'ensure_ready_commit_'))
-  const tmppath = join(dir, 'msg.txt')
-  // Definite-assignment: the only path past the `finally` assigns it — a
-  // throw from the message write propagates instead of falling through.
-  let committed!: GitOutcome<void>
-  try {
-    let msg = subject
-    if (body) {
-      msg += '\n\n' + body
-    }
-    if (!(subject + body).endsWith('\n')) {
-      msg += '\n'
-    }
-    writeFileSync(tmppath, msg, 'utf-8')
-    committed = git.try.commit({ messageFile: tmppath })
-  } finally {
-    try {
-      unlinkSync(tmppath)
-    } catch {
-      /* ignore */
-    }
-    try {
-      rmSync(dir, { recursive: true, force: true })
-    } catch {
-      /* ignore */
-    }
+  let msg = subject
+  if (body) {
+    msg += '\n\n' + body
   }
+  if (!(subject + body).endsWith('\n')) {
+    msg += '\n'
+  }
+  const committed: GitOutcome<void> = git.try.commit({ messageStdin: msg })
   if (!committed.ok) {
     io.stderr(`${committed.error.detail}\n`)
     return EXIT_WRITE_REFUSED

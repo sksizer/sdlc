@@ -2,6 +2,7 @@
 import type { BlockOut } from '../lib/doc.ts'
 import { escapeHtml, prose } from '../lib/doc.ts'
 import type { TraceBlock } from './types.ts'
+import { indent, parts } from '../lib/markdown.ts'
 
 type Tone = 'ok' | 'warn' | 'bad' | 'skip'
 
@@ -23,13 +24,12 @@ export function render(b: TraceBlock): BlockOut {
     .join('')
   const left = `<div class="trace">${b.input ? `<div class="trace-input"><span class="eyebrow">Request</span> ${escapeHtml(b.input)}</div>` : ''}<ol class="rows">${rows}</ol></div>`
   const sections = b.steps.map((s, i) => {
-    const t = tone(s.outcome, b.outcomes)
     return {
       id: s.id,
       n: i + 1,
       title: s.label,
       source: s.source,
-      html: `<h2>${i + 1}. ${escapeHtml(s.label)}</h2><div class="kicker"><span class="chip tone-${t}">${escapeHtml(s.outcome)}</span> ${escapeHtml(s.reason)}</div>${prose(s.detail)}`,
+      html: s.detail ? `<h2>${i + 1}. ${escapeHtml(s.label)}</h2>${prose(s.detail)}` : '',
     }
   })
   return { left, sections }
@@ -48,4 +48,16 @@ export function check(b: TraceBlock): string[] {
   if (ends > 1)
     errors.push(`trace ${b.id}: more than one step ends the walk (${ends} with a good outcome)`)
   return errors
+}
+
+export function markdown(b: TraceBlock): string {
+  return parts(
+    b.input ? `Input: ${b.input}` : '',
+    b.steps
+      .map(
+        (s, i) =>
+          `${i + 1}. **${s.label}** — ${s.outcome}: ${s.reason}${s.detail ? `\n${indent(s.detail)}` : ''}`,
+      )
+      .join('\n'),
+  )
 }

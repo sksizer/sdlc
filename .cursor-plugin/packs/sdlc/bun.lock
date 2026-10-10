@@ -83,25 +83,25 @@
 
     "@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.32.1", "", { "dependencies": { "@hono/node-server": "^1.19.9 || ^2.0.5", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "content-type": "^1.0.5", "cors": "^2.8.5", "cross-spawn": "^7.0.5", "eventsource": "^3.0.2", "eventsource-parser": "^3.0.0", "express": "^5.2.1", "express-rate-limit": "^8.2.1", "hono": "^4.11.4", "jose": "^6.1.3", "json-schema-typed": "^8.0.2", "pkce-challenge": "^5.0.0", "raw-body": "^3.0.0", "zod": "^3.25 || ^4.0", "zod-to-json-schema": "^3.25.1" }, "peerDependencies": { "@cfworker/json-schema": "^4.1.1" }, "optionalPeers": ["@cfworker/json-schema"] }, "sha512-2DdE+SJDtzLEEWzY1ZjY7Q+VcPhcV1KisD3zI4u0XZyktsjHum1mwbMI+JaulUBi2OZk+KJAi2uPXzxichPkdw=="],
 
-    "@sksizer/agent-call": ["@sksizer/agent-call@./vendor/sksizer-agent-call-0.1.0.tgz", {}, "sha512-qd9QDBCwUgPLCBz7R02QBLvCyc3fyT01wf4O0JMmtZ4uWG9xQ1i+kfcE5XG8Lf+yFWp2BQ8EKrgL0GTewef6hg=="],
+    "@sksizer/agent-call": ["@sksizer/agent-call@./vendor/sksizer-agent-call-0.1.0.tgz", {}, "sha512-BPRzCqDjVT/W4vu4dHiNCez9A6cpPK/T4Ef9Ws5FmRR43ou8QHIxPbWU8567Us3HFgDWOwipud33bJ5cwtHIcw=="],
 
-    "@sksizer/agent-dev": ["@sksizer/agent-dev@./vendor/sksizer-agent-dev-0.1.0.tgz", { "dependencies": { "@sksizer/agent-call": "0.1.0", "@sksizer/easy-git": "0.3.0", "@sksizer/intersect": "0.1.0" }, "bin": { "dfv": "./dist/cli.js" } }, "sha512-/d1jUHQKG7xBnuHMyN3KTInchnUwC5PJgQVPXnJuHyWBg+RCOH7Y4gfwH0RYCqDX9OIPKTc2Szlzg0U2X1ARdw=="],
+    "@sksizer/agent-dev": ["@sksizer/agent-dev@./vendor/sksizer-agent-dev-0.1.0.tgz", { "dependencies": { "@sksizer/agent-call": "0.1.0", "@sksizer/easy-git": "0.3.0", "@sksizer/intersect": "0.1.0" }, "bin": { "dfv": "./dist/cli.js" } }, "sha512-67NS1d2zhaKnJnjzxtVqTszQhL7RXW1Eyka+iCODqUXEN12+FpRCLo3f/9XgUycdzEx2RENnQR1pBisoOApk6A=="],
 
-    "@sksizer/agent-plugin": ["@sksizer/agent-plugin@./vendor/sksizer-agent-plugin-0.1.0.tgz", { "dependencies": { "@sksizer/frontmatter-lossless": "0.1.0", "markdown-contract": "0.2.1", "yaml": "^2.6.1", "zod": "4.4.3" } }, "sha512-s2z4LR3XKzvNJC74EAnAM23QeLTudw3IeZA8Mw1ZYHVlJO2Pwlsiyn+IjqugWI0kHU3g4+sPwQuYPnMVeOLftg=="],
+    "@sksizer/agent-plugin": ["@sksizer/agent-plugin@./vendor/sksizer-agent-plugin-0.1.0.tgz", { "dependencies": { "@sksizer/frontmatter-lossless": "0.1.0", "markdown-contract": "0.2.1", "yaml": "^2.6.1", "zod": "4.4.3" } }, "sha512-iVDhTDbda8lDJeIaLOXWpiyBssgJ2aYTkcAmEK1CvJVrkVM04mKYiqPPyvyNjROFr6z04an4tvUUlrBb8MNqYg=="],
 
     "@sksizer/cli-tool": ["@sksizer/cli-tool@./vendor/sksizer-cli-tool-0.1.0.tgz", { "dependencies": { "@sksizer/etag-write": "^0.1.0", "@sksizer/tiered-dirs": "^0.1.0", "commander": "^12.1.0", "yaml": "^2.6.1", "zod": "4.4.3" } }, "sha512-sCxnZY80ltwbpnIqVFMvFuUOVmI/oNGZ3upeOYbg8x8kJ0V4mr8RDP7ogR6FajXk1OuK2B3k/v/Pt85ZPaCnJA=="],
 
-    "@sksizer/code-host": ["@sksizer/code-host@./vendor/sksizer-code-host-0.1.0.tgz", { "dependencies": { "@sksizer/command-seam": "0.1.0", "@sksizer/easy-gh": "0.1.0", "@sksizer/easy-git": "0.3.0", "zod": "4.4.3" } }, "sha512-c/BQIqWz2Owcj0FskkEK7lxPcZGxc8Zb/fCLz5F+gbkKIpGNJsf1coP+3XrdtLkh19KUaHsjxfk9f+wDuEIV2w=="],
+    "@sksizer/code-host": ["@sksizer/code-host@./vendor/sksizer-code-host-0.1.0.tgz", { "dependencies": { "@sksizer/command-seam": "0.1.0", "@sksizer/easy-gh": "0.1.0", "@sksizer/easy-git": "0.3.0", "zod": "4.4.3" } }, "sha512-Rf9e9Wr8H2PC8qzuwaBEbg/q7bCPotTn32+iY/9Wxy2ycFM37XJYTMLq8lUy8Lb7mHyYDQJoBctmEvJ/kr980g=="],
 
     "@sksizer/color": ["@sksizer/color@./vendor/sksizer-color-0.1.0.tgz", {}, "sha512-pbRqouxW69zVRCkedlK5rwLge0uCLDz4N88VemAN2oJBrPyMr2y4QzvA4EUyNDHAabCGVR8JXLscplpy8zfdKg=="],
 
-    "@sksizer/command-seam": ["@sksizer/command-seam@./vendor/sksizer-command-seam-0.1.0.tgz", {}, "sha512-z6yBuu4UYberlaekkBvIyTy/Hb/qU2BhANzOykYyJ3r4DoJX6guGTj4RJDa5wha+lmbR4ywSgO9uZWLeZf0/Ew=="],
+    "@sksizer/command-seam": ["@sksizer/command-seam@./vendor/sksizer-command-seam-0.1.0.tgz", {}, "sha512-mJDUCgjXbV5twJGWU3guKE2zEyJkOW+fpluJJx2R+zuAMiFAyCp69lDRjnEtHlThNT1/fqMA09QS4kF4Trw6SQ=="],
 
     "@sksizer/detect-runners": ["@sksizer/detect-runners@./vendor/sksizer-detect-runners-0.1.0.tgz", { "dependencies": { "@sksizer/cli-tool": "^0.1.0", "@sksizer/command-seam": "^0.1.0", "@sksizer/etag-write": "^0.1.0", "@sksizer/sdlc-tool": "^0.1.0", "smol-toml": "^1.7.0" }, "bin": { "detect-runners": "./bin/detect-runners.js" } }, "sha512-dRzgLhHHPNCxG3rOhmyqpjoYheE+hnmoWAhHqm67c0DBl6wxRXvHrMidQb4+GnN8VLxSnOgR3+zkczgmsnfg7g=="],
 
-    "@sksizer/easy-gh": ["@sksizer/easy-gh@./vendor/sksizer-easy-gh-0.1.0.tgz", { "dependencies": { "@sksizer/command-seam": "^0.1.0", "@sksizer/easy-git": "^0.3.0" } }, "sha512-hd+HSgjaRtVu6DZmZS3KzyUFtaJEF7P33ZN7P9oLvkwYUoWJbX8RNd4MzpzvPjp81vzihwHdq2VGJDb68fxd4Q=="],
+    "@sksizer/easy-gh": ["@sksizer/easy-gh@./vendor/sksizer-easy-gh-0.1.0.tgz", { "dependencies": { "@sksizer/command-seam": "^0.1.0", "@sksizer/easy-git": "^0.3.0" } }, "sha512-tv8YwZjFvQP0vXM00IPnkaMzq2KpFj/VZuqcojSQKrCOebzB9BQfdCknhVCwvrzcecFAZTKPSkvkMQRPzOwFJA=="],
 
-    "@sksizer/easy-git": ["@sksizer/easy-git@./vendor/sksizer-easy-git-0.3.0.tgz", { "dependencies": { "@sksizer/command-seam": "^0.1.0", "hosted-git-info": "^10.1.1" } }, "sha512-hD8xkyw87tqWkadPPAclPwbw7DHVqpBpvZqDoR5VNt1uRUMSBius8PBC/sTCzn3+Td9QshH8+Sbys6hSYHuELw=="],
+    "@sksizer/easy-git": ["@sksizer/easy-git@./vendor/sksizer-easy-git-0.3.0.tgz", { "dependencies": { "@sksizer/command-seam": "^0.1.0", "hosted-git-info": "^10.1.1" } }, "sha512-SsdWNgfS4ep9gNKtQPTlhIOTKuXwcwYZXTAbS2iIOzxFDq/I4S1NFLJiCfaeKs1Y2AYXyG5t+5DzU0Lg0UAt5g=="],
 
     "@sksizer/etag-write": ["@sksizer/etag-write@./vendor/sksizer-etag-write-0.1.0.tgz", {}, "sha512-xfvK4q1IABMSlOxYcLtNuN1md22Gwqfn8Y/yvGEETKZbZDKA7BLvH2IA9n4V0KppeB/0BFB6WP77lYvMAChPRg=="],
 
@@ -121,9 +121,9 @@
 
     "@sksizer/pr-stats": ["@sksizer/pr-stats@./vendor/sksizer-pr-stats-0.1.0.tgz", { "dependencies": { "@sksizer/cli-tool": "^0.1.0", "@sksizer/command-seam": "^0.1.0", "@sksizer/easy-gh": "^0.1.0", "@sksizer/easy-git": "^0.3.0", "zod": "4.4.3" }, "peerDependencies": { "typescript": ">=5" }, "optionalPeers": ["typescript"], "bin": { "pr-stats": "./bin/pr-stats.js" } }, "sha512-Vf9yfgbH6RfKm/YQdEMchOm3UD1jxFtTLfHHw034gFIFSFMPIiZb8YXD7z3G9JKF+9PmNZWkqQ3V4Pjs364yww=="],
 
-    "@sksizer/pr-update": ["@sksizer/pr-update@./vendor/sksizer-pr-update-0.1.0.tgz", { "dependencies": { "@sksizer/cli-tool": "^0.1.0", "@sksizer/code-host": "^0.1.0", "@sksizer/command-seam": "^0.1.0", "@sksizer/easy-git": "^0.3.0", "@sksizer/etag-write": "^0.1.0", "ink": "^5", "react": "^18", "yaml": "^2.6.1", "zod": "4.4.3" }, "bin": { "pr-update": "./bin/pr-update.js" } }, "sha512-AFQnr/0o/Eh7YUNEf3N6UQnX8pWimCa1fy82EZp+AZlMC88ggzimLeDaQvLSkV0uGgXZdqZiDnmW4KtI1J5DUw=="],
+    "@sksizer/pr-update": ["@sksizer/pr-update@./vendor/sksizer-pr-update-0.1.0.tgz", { "dependencies": { "@sksizer/cli-tool": "^0.1.0", "@sksizer/code-host": "^0.1.0", "@sksizer/command-seam": "^0.1.0", "@sksizer/easy-git": "^0.3.0", "@sksizer/etag-write": "^0.1.0", "ink": "^5", "react": "^18", "yaml": "^2.6.1", "zod": "4.4.3" }, "bin": { "pr-update": "./bin/pr-update.js" } }, "sha512-nYvsClLZk2DGnaQWcqZlhCL/YFw5yLkwiz7DGFD2gQ7lRa3aDep7dIXmtOPQvjyjbwJs69fnIwg2qXVV3n5NiA=="],
 
-    "@sksizer/repo-cleaner": ["@sksizer/repo-cleaner@./vendor/sksizer-repo-cleaner-0.1.0.tgz", { "dependencies": { "@sksizer/cli-tool": "^0.1.0", "@sksizer/command-seam": "^0.1.0", "@sksizer/easy-gh": "^0.1.0", "@sksizer/easy-git": "^0.3.0", "zod": "4.4.3" }, "bin": { "repo-cleaner": "./bin/repo-cleaner.js" } }, "sha512-ovVV8dOyY9t/MpwniPXPH38N2W9khWUnbz1a7VvWrQBPYOHa1q+GkzkGxePlCmXR2R8gK1u7Kjn5qBMSXifWig=="],
+    "@sksizer/repo-cleaner": ["@sksizer/repo-cleaner@./vendor/sksizer-repo-cleaner-0.1.0.tgz", { "dependencies": { "@sksizer/cli-tool": "^0.1.0", "@sksizer/command-seam": "^0.1.0", "@sksizer/easy-gh": "^0.1.0", "@sksizer/easy-git": "^0.3.0", "zod": "4.4.3" }, "bin": { "repo-cleaner": "./bin/repo-cleaner.js" } }, "sha512-Y5V2KVXdBt8w3Ll8ZgEh7VB5OXuyyR+DMDkLx1NVlLOHN0xHsMla7aT7Q+vn8bYXshL17gru0hSx1aFvEasSLg=="],
 
     "@sksizer/sdlc-tool": ["@sksizer/sdlc-tool@./vendor/sksizer-sdlc-tool-0.1.0.tgz", { "dependencies": { "@sksizer/cli-tool": "^0.1.0", "@sksizer/easy-gh": "^0.1.0", "@sksizer/easy-git": "^0.3.0" } }, "sha512-SiYazqv35JH9gYOKATUW5ytDNXpneQoecCVLF+mAHac/7zHSNzBvMVhlFKpBNLi5R9/XPVoTNLSc4gAd6+FrGQ=="],
 

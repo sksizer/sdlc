@@ -20,10 +20,11 @@
  */
 import { existsSync, readdirSync, readFileSync, watch, writeFileSync } from 'node:fs'
 import { createServer, type ServerResponse } from 'node:http'
-import { join, resolve } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 
-import { emptyAnswers, escapeHtml } from './lib/doc.ts'
+import { emptyAnswers } from './lib/doc.ts'
+import { indexPage, type IndexEntry } from './lib/index-page.ts'
 import type { CanvasDoc } from './lib/compose.ts'
 import { renderDoc } from './lib/compose.ts'
 
@@ -39,6 +40,14 @@ const dir = resolve(positionals[0] ?? 'docs/canvas')
 const port = Number(values.port)
 const host = values.host
 const ID = /^[a-z0-9][a-z0-9-]*$/
+const IMAGE_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+}
 
 function docIds(): string[] {
   return readdirSync(dir)
@@ -49,6 +58,33 @@ function docIds(): string[] {
 }
 function readDoc(id: string): CanvasDoc {
   return JSON.parse(readFileSync(join(dir, `${id}.json`), 'utf8'))
+}
+/** One row of the index: the document, its kinds, its verdict and how far its questions are. */
+function readEntry(id: string): IndexEntry {
+  const doc = readDoc(id)
+  const a = existsSync(answersPath(id))
+    ? JSON.parse(readFileSync(answersPath(id), 'utf8'))
+    : emptyAnswers(id)
+  const qs = [
+    ...(doc.questions ?? []),
+    ...doc.blocks.flatMap((b) => (b.type === 'question' ? b.questions : [])),
+  ]
+  const answered = qs.filter((q) => {
+    const c = a.choices?.[q.id]
+    return !!c && !c.ask && (c.selected?.length || c.note)
+  }).length
+  return {
+    id,
+    title: doc.title,
+    summary: doc.summary,
+    kinds: [...new Set(doc.blocks.map((b) => b.type))],
+    status: a.status ?? 'reviewing',
+    questions: qs.length,
+    answered,
+    comments: (a.comments ?? []).length,
+    updated: a.updated && a.updated > doc.created ? a.updated : undefined,
+    created: doc.created,
+  }
 }
 function answersPath(id: string): string {
   return join(dir, `${id}.answers.json`)
@@ -81,21 +117,7 @@ const server = createServer((req, res) => {
     res.end(body)
   }
   try {
-    if (url.pathname === '/') {
-      const ids = docIds()
-      const rows = ids.map((d) => {
-        const doc = readDoc(d)
-        const answered = existsSync(answersPath(d))
-          ? JSON.parse(readFileSync(answersPath(d), 'utf8')).status
-          : 'draft'
-        const kinds = [...new Set((doc.blocks ?? []).map((b) => b.type))].join(' · ')
-        return `<li><a href="/d/${d}">${escapeHtml(doc.title)}</a> <small>${escapeHtml(kinds)} · ${escapeHtml(answered)}</small></li>`
-      })
-      return send(
-        200,
-        `<!doctype html><meta charset="utf-8"><title>canvas</title><body style="font:15px system-ui;padding:24px"><h1>canvas · ${escapeHtml(dir)}</h1><ul>${rows.join('')}</ul>`,
-      )
-    }
+    if (url.pathname === '/') return send(200, indexPage(dir, docIds().map(readEntry)))
     if (url.pathname === '/events') {
       res.writeHead(200, {
         'content-type': 'text/event-stream',
@@ -106,6 +128,24 @@ const server = createServer((req, res) => {
       clients.add(res)
       req.on('close', () => clients.delete(res))
       return
+    }
+    const xAt = url.pathname.startsWith('/x/') ? 3 : url.pathname.startsWith('/d/x/') ? 5 : 0
+    if (xAt && req.method === 'GET') {
+      // An image from the x/ folder beside the documents, for figure blocks; nothing outside it. The page
+      // lives at /d/<id>, so its relative `x/…` resolves to /d/x/…; a rendered page beside the folder uses x/ directly.
+      const rel = decodeURIComponent(url.pathname.slice(xAt))
+      const ext = rel.split('.').pop()?.toLowerCase() ?? ''
+      const type = IMAGE_TYPES[ext]
+      const file = resolve(dir, 'x', rel)
+      if (
+        !type ||
+        rel.split('/').includes('..') ||
+        !file.startsWith(join(dir, 'x') + sep) ||
+        !existsSync(file)
+      )
+        return send(404, 'not found', 'text/plain')
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' })
+      return res.end(readFileSync(file))
     }
     if (!id || !ID.test(id)) return send(404, 'not found', 'text/plain')
     if (area === 'd' && req.method === 'GET') {

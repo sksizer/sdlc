@@ -214,7 +214,7 @@ pr_review:                  # sdlc pr review
   refresh: update           # update | pull | off, for a reused worktree; --no-refresh skips it
 
 verify:                     # sdlc verify changes
-  engine: claude            # claude | codex | gemini | opencode
+  engine: claude            # claude | codex | antigravity | opencode
   blocking: false
 ```
 

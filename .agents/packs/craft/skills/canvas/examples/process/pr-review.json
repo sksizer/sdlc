@@ -1,0 +1,117 @@
+{
+  "id": "pr-review",
+  "title": "How a pull request gets merged",
+  "summary": "The standard review workflow: who does what from open to merge, with the two decisions and the one wait. Explanatory: no questions.",
+  "created": "2026-10-09",
+  "blocks": [
+    {
+      "id": "review",
+      "type": "workflow",
+      "title": "Pull request review",
+      "trigger": "a pull request is opened against main",
+      "lanes": [
+        { "id": "author", "label": "Author", "detail": "Whoever opened the PR, human or agent." },
+        { "id": "ci", "label": "CI", "detail": "The affected-checks workflow and the gates." },
+        {
+          "id": "reviewer",
+          "label": "Reviewer",
+          "detail": "A fresh-context reviewer; never the author's own model family."
+        },
+        {
+          "id": "merger",
+          "label": "Merger",
+          "detail": "The owner, or the auto-merge bot once enabled."
+        }
+      ],
+      "steps": [
+        {
+          "id": "w-open",
+          "title": "Open the PR with a plain-language impact line",
+          "lane": "author",
+          "kind": "start",
+          "summary": "Title, body, hyperlinked PR mentions, screenshots for UI.",
+          "artifacts": ["PR"]
+        },
+        {
+          "id": "w-ci",
+          "title": "Run affected checks",
+          "lane": "ci",
+          "kind": "action",
+          "duration": "≤ 10 min",
+          "summary": "Lint, gates, tests for the packages the diff touches.",
+          "next": [
+            { "to": "w-ci-ok", "when": "all green" },
+            { "to": "w-fix", "when": "a check fails" }
+          ]
+        },
+        {
+          "id": "w-ci-ok",
+          "title": "Green?",
+          "lane": "ci",
+          "kind": "decision",
+          "summary": "A red check blocks review; the author fixes first.",
+          "next": [
+            { "to": "w-review", "when": "yes" },
+            { "to": "w-fix", "when": "no" }
+          ]
+        },
+        {
+          "id": "w-fix",
+          "title": "Fix and push",
+          "lane": "author",
+          "kind": "action",
+          "summary": "Address the failure; CI re-runs on push.",
+          "next": [{ "to": "w-ci" }]
+        },
+        {
+          "id": "w-review",
+          "title": "Review in fresh context",
+          "lane": "reviewer",
+          "kind": "action",
+          "duration": "≤ 1 day",
+          "summary": "Code, architecture, comments, simplicity, anything else. One review with findings, each with one recommendation.",
+          "artifacts": ["review"],
+          "warnings": [
+            "Reviews are comment-only. The reviewer never pushes fixes; the author or another process does."
+          ]
+        },
+        {
+          "id": "w-verdict",
+          "title": "Approve or request changes?",
+          "lane": "reviewer",
+          "kind": "decision",
+          "summary": "Bikeshedding is declined; real issues and cheap clear nits are fixed.",
+          "next": [
+            { "to": "w-merge", "when": "approve" },
+            { "to": "w-respond", "when": "changes requested" }
+          ]
+        },
+        {
+          "id": "w-respond",
+          "title": "Respond to each finding",
+          "lane": "author",
+          "kind": "action",
+          "summary": "Fix, or decline with a reason, per finding. Push once.",
+          "next": [{ "to": "w-ci" }]
+        },
+        {
+          "id": "w-wait",
+          "title": "Wait for a second review when the change is risky",
+          "lane": "merger",
+          "kind": "wait",
+          "duration": "≤ 1 day",
+          "summary": "Two reviews before merge for anything that touches a gate or a release.",
+          "next": [{ "to": "w-merge" }]
+        },
+        {
+          "id": "w-merge",
+          "title": "Merge and pull the main checkout",
+          "lane": "merger",
+          "kind": "end",
+          "summary": "Squash or merge per the repo rule; then the installed plugin is refreshed from main.",
+          "artifacts": ["merge commit"]
+        }
+      ]
+    }
+  ]
+}

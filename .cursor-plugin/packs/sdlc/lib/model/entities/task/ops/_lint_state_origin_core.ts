@@ -23,7 +23,7 @@ import { parse as parseYaml } from '@lib/util/yaml'
 import { splitFrontmatter as utilSplitFrontmatter } from '@lib/util/frontmatter'
 import { sourceAtRev } from '@lib/model/read'
 import { Git } from '@sksizer/easy-git'
-import { CommandFailed, type CommandRunner } from '@lib/util/command'
+import { mapFailed, type CommandRunner } from '@lib/util/command'
 import { repr } from '@lib/util/diagnostics'
 
 // The exact set of frontmatter fields that count as "task-state".
@@ -51,14 +51,10 @@ export class LintError extends Error {}
  * type; the loudness comes from the client's contract.
  */
 function lintRead<T>(label: string, read: () => T): T {
-  try {
-    return read()
-  } catch (exc) {
-    if (exc instanceof CommandFailed) {
-      throw new LintError(`${label} failed (exit ${exc.result.exitCode}): ${exc.detail}`)
-    }
-    throw exc
-  }
+  return mapFailed(
+    read,
+    (exc) => new LintError(`${label} failed (exit ${exc.result.exitCode}): ${exc.detail}`),
+  )
 }
 
 /**

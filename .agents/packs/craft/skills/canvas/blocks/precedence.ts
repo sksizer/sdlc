@@ -2,6 +2,7 @@
 import type { BlockOut } from '../lib/doc.ts'
 import { escapeHtml, prose } from '../lib/doc.ts'
 import type { PrecedenceBlock } from './types.ts'
+import { parts } from '../lib/markdown.ts'
 
 export function render(b: PrecedenceBlock): BlockOut {
   const number = new Map(b.rungs.map((r, i) => [r.id, i + 1]))
@@ -27,14 +28,16 @@ export function render(b: PrecedenceBlock): BlockOut {
       n: i + 1,
       title: r.label,
       source: r.source,
-      html: `<h2>${i + 1}. ${escapeHtml(r.label)}</h2>${prose(r.detail)}`,
+      html: '',
     })),
     ...(b.examples ?? []).map((e) => {
       const rung = byId.get(e.matches)
       return {
         id: e.id,
         title: e.label,
-        html: `<h2>${escapeHtml(e.label)}</h2><p>Stops at <a href="#" data-select="${escapeHtml(e.matches)}">${number.get(e.matches) ?? '?'}. ${escapeHtml(rung?.label ?? e.matches)}</a>.</p>${prose(e.note)}`,
+        html: e.note
+          ? `<h2>${escapeHtml(e.label)}</h2><p class="muted">Stops at <a href="#" data-select="${escapeHtml(e.matches)}">${number.get(e.matches) ?? '?'}. ${escapeHtml(rung?.label ?? e.matches)}</a>.</p>${prose(e.note)}`
+          : '',
       }
     }),
   ]
@@ -55,4 +58,23 @@ export function check(b: PrecedenceBlock): string[] {
       )
   }
   return errors
+}
+
+export function markdown(b: PrecedenceBlock): string {
+  const n = new Map(b.rungs.map((r, i) => [r.id, i + 1]))
+  const rungs = b.rungs
+    .map((r, i) => `${i + 1}. **${r.label}**${r.detail ? ` — ${r.detail}` : ''}`)
+    .join('\n')
+  const examples = b.examples?.length
+    ? parts(
+        'Examples:',
+        b.examples
+          .map(
+            (e) =>
+              `- ${e.label} → ${n.get(e.matches) ?? '?'}. ${b.rungs.find((r) => r.id === e.matches)?.label ?? e.matches}${e.note ? ` — ${e.note}` : ''}`,
+          )
+          .join('\n'),
+      )
+    : ''
+  return parts('First match wins.', rungs, examples)
 }

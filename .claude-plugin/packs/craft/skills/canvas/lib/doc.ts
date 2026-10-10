@@ -84,7 +84,7 @@ export interface Section {
   /** The block this section belongs to; compose fills it in for the navigation. */
   block?: string
   /** Where the node lives in code, shown under the section heading. */
-  source?: Source | Source[]
+  source?: Source | Source[] | undefined
   /** The block id; compose fills it in so a selection inside a block can attach to it. */
   blockId?: string
 }
@@ -107,6 +107,27 @@ export interface Comment {
   resolved?: boolean
   /** When set, the comment is on these exact words within the node (a W3C TextQuoteSelector). */
   selector?: { type: 'TextQuoteSelector'; exact: string; prefix?: string; suffix?: string }
+  /** When the reviewer sent it to the agent; unsent comments are still being written. */
+  sent?: string
+  /** The conversation under it, in order: the agent's answers and the reviewer's follow-ups. */
+  replies?: Message[]
+}
+
+/**
+ * One message in the thread under a comment or an asked-back question. The agent appends with
+ * `answers.ts --reply`; the reviewer's follow-up is sent as it is added. The thread is awaiting the
+ * agent while its last reviewer message has no agent message after it.
+ */
+export interface Message {
+  from: 'agent' | 'reviewer'
+  text: string
+  at: string
+  /** Reviewer messages: when it went to the agent. */
+  sent?: string
+  /** Agent messages: what the agent did about it. */
+  action?: 'answered' | 'changed' | 'declined' | undefined
+  /** Agent messages: the model and the harness it ran in. Shown on hover. */
+  by?: { model?: string | undefined; harness?: string | undefined } | undefined
 }
 
 /** The reviewer's answer to one question. */
@@ -114,6 +135,13 @@ export interface Choice {
   selected: string[]
   note?: string
   at: string
+  /**
+   * The reviewer asked back instead of choosing: what is missing, or what they need to know.
+   * The question stays open until the agent replies and the reviewer chooses.
+   */
+  ask?: string
+  sent?: string
+  replies?: Message[]
 }
 
 /**
@@ -125,17 +153,21 @@ export interface Answers {
   doc: string
   updated: string
   /**
-   * Only meaningful when the document asks questions. `approved` requires every question
-   * answered; the page enforces it. A document with no questions is explanatory: the page shows
-   * no status control and the value stays `draft`.
+   * `reviewing` until the reviewer finishes the round; then the verdict. `approved` requires
+   * every question answered; the page enforces it. The agent's `--reopen` returns it to
+   * `reviewing` when it rewrites the document.
    */
-  status: 'draft' | 'changes-requested' | 'approved'
+  status: 'reviewing' | 'changes-requested' | 'approved'
+  /** When the verdict was given. Absent while reviewing. */
+  finished?: string
+  /** The reviewer's closing note, given with the verdict. */
+  summary?: string
   comments: Comment[]
   choices: Record<string, Choice>
 }
 
 export function emptyAnswers(doc: string): Answers {
-  return { doc, updated: new Date(0).toISOString(), status: 'draft', comments: [], choices: {} }
+  return { doc, updated: new Date(0).toISOString(), status: 'reviewing', comments: [], choices: {} }
 }
 
 export function escapeHtml(text: string): string {
@@ -171,7 +203,10 @@ export function prose(text: string | undefined): string {
 }
 
 /** Resolve a source URI to a repo-relative path and an absolute local path, where possible. */
-export function sourcePaths(src: Source, repo?: Repo): { rel?: string; abs?: string } {
+export function sourcePaths(
+  src: Source,
+  repo?: Repo,
+): { rel?: string | undefined; abs?: string | undefined } {
   let p = src.uri
   if (p.startsWith('file://')) p = decodeURIComponent(p.slice('file://'.length))
   if (p.startsWith('/')) {

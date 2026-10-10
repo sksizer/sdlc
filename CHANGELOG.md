@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-10
+
+Antigravity replaces Gemini CLI, and the `canvas` review page becomes a conversation with the
+agent. `craft` ships as 0.5.0.
+
+### Added
+
+- `canvas` gains the `figure` block (one image with a caption and an optional link to its live
+  version), the `question` block (questions placed in the centre column where the reader meets what
+  they decide), the `code-flow` block (a path through code drawn as a sequence diagram) and the
+  `workflow` block (a process drawn as a flowchart with lanes). Both diagrams are inline SVG with
+  their mermaid source under a disclosure. ([#2954](https://github.com/sksizer/dev/pull/2954))
+- `canvas render --out <doc>.md` (or `--format markdown`) writes the same document as markdown:
+  headings, lists, tables and mermaid fences, for a PR body or a README. Every block writes its own
+  markdown. ([#2954](https://github.com/sksizer/dev/pull/2954))
+- `canvas` comments reach the agent as they are added, and `answers.ts <id> --wait` blocks until the
+  reviewer sends something, prints it and exits; `--reply <id> --text "..." --model <id>` answers
+  in place, and `--notify "<command>"` keeps a watcher running that pushes every send into a
+  session, with `--timeout`. **Save draft** keeps a comment private until **Send**.
+  ([#2954](https://github.com/sksizer/dev/pull/2954))
+- `canvas` comments and asked-back questions are threads: the agent's replies and the reviewer's
+  follow-ups sit under the item in order, a follow-up wakes the watcher under the same id, and
+  quoted words show their thread on hover and go to it on click.
+  ([#2954](https://github.com/sksizer/dev/pull/2954))
+- Every `canvas` question offers "None of these, or I have a question", which keeps it open until
+  the agent replies. A progress meter in the header shows one segment per question, arrows beside it
+  and the `n` / `p` keys step through questions, and a **Verdict** control (Still reviewing, Changes
+  requested, Approved) is what the agent reads back.
+  ([#2954](https://github.com/sksizer/dev/pull/2954))
+- `canvas` figures and diagrams open full size in a lightbox, the pane heads stay put while a pane
+  scrolls, and the servlet's front page lists every document with its block kinds, verdict, answered
+  count and comment count. ([#2954](https://github.com/sksizer/dev/pull/2954))
+
+### Changed
+
+- **BREAKING:** Gemini CLI support is replaced by Google Antigravity (`agy`), a hard cutover with no
+  alias. `verify.engine` in `sdlc.yaml` now accepts `claude`, `codex`, `antigravity` or `opencode`;
+  `gemini` is rejected, so a project that sets it must change it. `sdlc harness detect` reports
+  `antigravity` (binary `agy`) in place of `gemini`; its sign-in verdict is always `unknown`, as
+  `agy` keeps its login in the OS keyring. Antigravity renders skills and MCP configuration only.
+  ([#2955](https://github.com/sksizer/dev/pull/2955))
+- `canvas` lays out one way at every width, with rails that become overlays under 1100px. The
+  walkthrough carries only what the left does not show, and a node the left shows in full gets a
+  compact row for comments. ([#2954](https://github.com/sksizer/dev/pull/2954))
+- `pr-stats` no longer refers to an `sdlc` skill, so `craft` stands alone; `task-work` documents the
+  integration on its side. ([#2954](https://github.com/sksizer/dev/pull/2954))
+- The CLI's git, GitHub and shell calls move onto the shared command seam and the `easy-git` and
+  `easy-gh` clients (`AsyncGh`, tolerant reads, shared shell quoting). No command changes its
+  interface. ([#2950](https://github.com/sksizer/dev/pull/2950))
+
+### Fixed
+
+- The `setup` skill and the lease service README named the wrong exit code for a namespace conflict;
+  the CLI exits with 15, as the code and its tests already did.
+  ([#2257](https://github.com/sksizer/dev/pull/2257))
+
 ## [0.12.0] - 2026-10-09
 
 A change-statistics command for pull requests, and the same tool as a `craft` skill. `craft` ships

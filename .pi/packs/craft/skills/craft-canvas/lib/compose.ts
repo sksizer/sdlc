@@ -7,7 +7,7 @@ import { blockModule } from '../blocks/index.ts'
 import type { Block } from '../blocks/types.ts'
 import type { DocMeta, Position, Question, Section } from './doc.ts'
 import { escapeHtml, sourceLinks } from './doc.ts'
-import type { Page } from './shell.ts'
+import type { Page, PlacedQuestion } from './shell.ts'
 import { renderPage } from './shell.ts'
 
 export interface CanvasDoc extends DocMeta {
@@ -22,13 +22,56 @@ export function compose(doc: CanvasDoc, links?: Page['links']): Page {
     const mod = blockModule(b.type)
     if (!mod) throw new Error(`block ${b.id}: unknown type "${b.type}"`)
     const out = mod.render(b)
-    lefts.push(`<section class="block" id="block-${escapeHtml(b.id)}" data-block="${escapeHtml(b.id)}">${b.title ? `<div class="block-title">${escapeHtml(b.title)}</div>` : ''}${sourceLinks(b.source, doc.repo)}${out.left}</section>`)
+    lefts.push(
+      `<section class="block" id="block-${escapeHtml(b.id)}" data-block="${escapeHtml(b.id)}">${b.title ? `<div class="block-title">${escapeHtml(b.title)}</div>` : ''}${sourceLinks(b.source, doc.repo)}${out.left}</section>`,
+    )
     const label = b.title ?? b.type
     nav.push(...out.sections.map((sec) => ({ ...sec, block: label, blockId: b.id })))
     titles = { ...titles, ...out.titles }
   }
   const kinds = [...new Set(doc.blocks.map((b) => b.type))].join(' · ')
-  return { meta: doc, kindLabel: `Canvas · ${kinds}`, left: lefts.join('\n'), nav, titles, links }
+  return {
+    meta: doc,
+    kindLabel: `Canvas · ${kinds}`,
+    left: lefts.join('\n'),
+    nav,
+    titles,
+    links,
+    questions: placeQuestions(doc, nav, titles),
+  }
+}
+
+/**
+ * Where each question sits, in reading order: a question block's questions in the centre at the
+ * block's position; a document question with `about` beside that node's walkthrough section; the
+ * rest at the end.
+ */
+export function placeQuestions(
+  doc: CanvasDoc,
+  nav: Section[],
+  titles: Record<string, string>,
+): PlacedQuestion[] {
+  const sectionIds = new Set(nav.map((s) => s.id))
+  const sectionOf = new Map<string, string>()
+  for (const s of nav) sectionOf.set(s.id, s.id)
+  // A node inside a section (a column, a matrix column) resolves to the section that lists it.
+  for (const s of nav)
+    for (const id of Object.keys(titles))
+      if (!sectionOf.has(id) && id.startsWith(s.id + '.')) sectionOf.set(id, s.id)
+  const placed: PlacedQuestion[] = []
+  for (const b of doc.blocks) {
+    const mod = blockModule(b.type)
+    for (const q of mod?.questions?.(b) ?? []) placed.push({ q, place: 'center' })
+  }
+  for (const q of doc.questions ?? []) {
+    const section = q.about
+      ? sectionIds.has(q.about)
+        ? q.about
+        : sectionOf.get(q.about)
+      : undefined
+    placed.push(section ? { q, place: 'section', section } : { q, place: 'end' })
+  }
+  return placed
 }
 
 export function renderDoc(doc: CanvasDoc, links?: Page['links']): string {
@@ -39,8 +82,10 @@ const ID = /^[a-z0-9][a-z0-9-]*$/
 
 export function checkDoc(doc: CanvasDoc, fileStem?: string): string[] {
   const errors: string[] = []
-  if (!ID.test(doc.id ?? '')) errors.push(`id "${doc.id}" must be lowercase letters, digits and hyphens`)
-  if (fileStem && doc.id !== fileStem) errors.push(`id "${doc.id}" must match the file name "${fileStem}"`)
+  if (!ID.test(doc.id ?? ''))
+    errors.push(`id "${doc.id}" must be lowercase letters, digits and hyphens`)
+  if (fileStem && doc.id !== fileStem)
+    errors.push(`id "${doc.id}" must match the file name "${fileStem}"`)
   if (!doc.title) errors.push('title is required')
   if (!doc.created) errors.push('created is required')
   if (!Array.isArray(doc.blocks) || !doc.blocks.length) {
@@ -49,7 +94,8 @@ export function checkDoc(doc: CanvasDoc, fileStem?: string): string[] {
   }
   if (doc.repo) {
     if (!/^https?:\/\//.test(doc.repo.remote ?? '')) errors.push('repo.remote must be an https URL')
-    if (!/^[0-9a-f]{7,40}$/.test(doc.repo.commit ?? '')) errors.push('repo.commit must be a commit sha')
+    if (!/^[0-9a-f]{7,40}$/.test(doc.repo.commit ?? ''))
+      errors.push('repo.commit must be a commit sha')
   }
   for (const b of doc.blocks) errors.push(...checkSources(b, `block ${b.id}`))
   const ids = new Map<string, string>()
@@ -66,6 +112,7 @@ export function checkDoc(doc: CanvasDoc, fileStem?: string): string[] {
       continue
     }
     errors.push(...mod.check(b))
+    for (const q of mod.questions?.(b) ?? []) node(q.id, `question ${q.id ?? '?'} in block ${b.id}`)
     const sections = safeSections(mod, b)
     // A one-section block (prose) may name its section after itself.
     for (const s of sections) if (s.id !== b.id) node(s.id, `${b.type} ${b.id} / ${s.title}`)
@@ -75,6 +122,8 @@ export function checkDoc(doc: CanvasDoc, fileStem?: string): string[] {
     node(q.id, `question ${q.id ?? '?'}`)
     errors.push(...checkQuestion(q, ids))
   }
+  for (const b of doc.blocks)
+    for (const q of blockModule(b.type)?.questions?.(b) ?? []) errors.push(...checkQuestion(q, ids))
   return errors
 }
 
@@ -89,11 +138,18 @@ function checkSources(value: unknown, where: string): string[] {
       const list = Array.isArray(o.source) ? o.source : [o.source]
       for (const src of list as Record<string, unknown>[]) {
         const name = typeof o.id === 'string' ? o.id : w
-        if (!src || typeof src.uri !== 'string' || !src.uri) errors.push(`${name}: source.uri is required`)
+        if (!src || typeof src.uri !== 'string' || !src.uri)
+          errors.push(`${name}: source.uri is required`)
         const r = src.range as { start?: Position; end?: Position } | undefined
         if (r) {
-          const ok = (pos?: Position) => pos && Number.isInteger(pos.line) && pos.line >= 0 && Number.isInteger(pos.character) && pos.character >= 0
-          if (!ok(r.start) || !ok(r.end)) errors.push(`${name}: source.range needs zero-based start and end {line, character}`)
+          const ok = (pos?: Position) =>
+            pos &&
+            Number.isInteger(pos.line) &&
+            pos.line >= 0 &&
+            Number.isInteger(pos.character) &&
+            pos.character >= 0
+          if (!ok(r.start) || !ok(r.end))
+            errors.push(`${name}: source.range needs zero-based start and end {line, character}`)
         }
       }
     }
@@ -108,7 +164,8 @@ function safeSections(mod: ReturnType<typeof blockModule> & object, b: Block): S
   try {
     return mod.render(b).sections
   } catch {
-    if (b.type === 'annotated-text') return b.steps.map((s) => ({ id: s.id, title: s.title, html: '' }))
+    if (b.type === 'annotated-text')
+      return b.steps.map((s) => ({ id: s.id, title: s.title, html: '' }))
     return []
   }
 }
@@ -117,10 +174,13 @@ function checkQuestion(q: Question, ids: Map<string, string>): string[] {
   const errors: string[] = []
   const where = `question ${q.id}`
   if (!q.prompt) errors.push(`${where}: prompt is required`)
-  if (!['single', 'multi', 'text'].includes(q.kind)) errors.push(`${where}: kind must be single, multi or text`)
-  if (q.kind === 'text' && q.options?.length) errors.push(`${where}: a text question has no options`)
+  if (!['single', 'multi', 'text'].includes(q.kind))
+    errors.push(`${where}: kind must be single, multi or text`)
+  if (q.kind === 'text' && q.options?.length)
+    errors.push(`${where}: a text question has no options`)
   if (q.kind !== 'text' && !q.options?.length) errors.push(`${where}: needs options`)
-  if (q.recommended && !q.options?.some((o) => o.id === q.recommended)) errors.push(`${where}: recommended "${q.recommended}" is not an option`)
+  if (q.recommended && !q.options?.some((o) => o.id === q.recommended))
+    errors.push(`${where}: recommended "${q.recommended}" is not an option`)
   if (q.about && !ids.has(q.about)) errors.push(`${where}: about "${q.about}" names no node`)
   return errors
 }

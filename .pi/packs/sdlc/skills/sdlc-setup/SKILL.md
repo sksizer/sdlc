@@ -112,7 +112,7 @@ Project context (don't re-derive every run):
 5. **Surface a lease-namespace conflict if the setup op reports one.**
    When `sdlc.yaml` declares a `lease_authority:` carrying a literal
    `refs/sdlc` ref that shadows the lease namespace, the setup op (Step 1)
-   exits with code 3 and emits a
+   exits with code 15 and emits a
    `NAMESPACE-CONFLICT ref=refs/sdlc sha=<sha>` line plus a one-line
    remediation (delete the offending ref on the authority, or pick a
    different namespace). Pass both through to the user and point them at
